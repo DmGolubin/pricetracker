@@ -258,12 +258,14 @@ async function handleCheckAllPrices() {
  * Save global settings and update API base URL.
  */
 async function handleSaveSettings(settings) {
-  const saved = await apiClient.saveSettings(settings);
+  // Update base URL FIRST so the save request goes to the new server
   if (settings.apiBaseUrl) {
     apiClient.setBaseUrl(settings.apiBaseUrl);
   }
+  const saved = await apiClient.saveSettings(settings);
   return saved;
 }
+
 
 /**
  * Mark a tracker as read: reset status from "updated" to "active".

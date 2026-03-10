@@ -11,7 +11,7 @@ var _constants = (typeof self !== 'undefined' && self.PriceTracker && self.Price
 var API_RETRY_DELAY_MS = _constants.API_RETRY_DELAY_MS;
 
 /** Module-level base URL, configurable via setBaseUrl */
-let baseUrl = 'http://localhost:3000';
+let baseUrl = 'https://pricetracker-production-ac69.up.railway.app';
 
 /**
  * Set the base URL for all API requests.
