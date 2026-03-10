@@ -184,7 +184,7 @@ describe('getPriceHistory', () => {
     const result = await getPriceHistory('t1');
 
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE}/trackers/t1/prices`,
+      `${BASE}/priceHistory?trackerId=t1`,
       expect.any(Object)
     );
     expect(result).toEqual(history);
@@ -200,10 +200,10 @@ describe('addPriceRecord', () => {
     const result = await addPriceRecord('t1', record);
 
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE}/trackers/t1/prices`,
+      `${BASE}/priceHistory`,
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify(record),
+        body: JSON.stringify({ ...record, trackerId: 't1' }),
       })
     );
     expect(result).toEqual(created);
@@ -220,7 +220,7 @@ describe('getSettings', () => {
     const result = await getSettings();
 
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE}/settings`,
+      `${BASE}/settings/global`,
       expect.any(Object)
     );
     expect(result).toEqual(settings);
@@ -235,10 +235,10 @@ describe('saveSettings', () => {
     const result = await saveSettings(settings);
 
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE}/settings`,
+      `${BASE}/settings/global`,
       expect.objectContaining({
         method: 'PUT',
-        body: JSON.stringify(settings),
+        body: JSON.stringify({ ...settings, id: 'global' }),
       })
     );
     expect(result).toEqual(settings);

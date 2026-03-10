@@ -1,0 +1,14 @@
+{
+  "trackers": [],
+  "priceHistory": [],
+  "settings": [
+    {
+      "id": "global",
+      "apiBaseUrl": "http://localhost:3000",
+      "notificationsEnabled": true,
+      "telegramBotToken": "",
+      "telegramChatId": "",
+      "persistentPinTab": false
+    }
+  ]
+}

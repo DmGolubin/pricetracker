@@ -11,7 +11,7 @@ var _constants = (typeof self !== 'undefined' && self.PriceTracker && self.Price
 var API_RETRY_DELAY_MS = _constants.API_RETRY_DELAY_MS;
 
 /** Module-level base URL, configurable via setBaseUrl */
-let baseUrl = '';
+let baseUrl = 'http://localhost:3000';
 
 /**
  * Set the base URL for all API requests.
@@ -215,7 +215,7 @@ async function deleteTracker(id) {
  */
 async function getPriceHistory(trackerId) {
   const res = await request(
-    `/trackers/${encodeURIComponent(trackerId)}/prices`
+    `/priceHistory?trackerId=${encodeURIComponent(trackerId)}`
   );
   return res.json();
 }
@@ -228,10 +228,10 @@ async function getPriceHistory(trackerId) {
  */
 async function addPriceRecord(trackerId, record) {
   const res = await request(
-    `/trackers/${encodeURIComponent(trackerId)}/prices`,
+    `/priceHistory`,
     {
       method: 'POST',
-      body: JSON.stringify(record),
+      body: JSON.stringify({ ...record, trackerId }),
     }
   );
   return res.json();
@@ -244,7 +244,7 @@ async function addPriceRecord(trackerId, record) {
  * @returns {Promise<Object>}
  */
 async function getSettings() {
-  const res = await request('/settings');
+  const res = await request('/settings/global');
   return res.json();
 }
 
@@ -254,9 +254,9 @@ async function getSettings() {
  * @returns {Promise<Object>}
  */
 async function saveSettings(settings) {
-  const res = await request('/settings', {
+  const res = await request('/settings/global', {
     method: 'PUT',
-    body: JSON.stringify(settings),
+    body: JSON.stringify({ ...settings, id: 'global' }),
   });
   return res.json();
 }

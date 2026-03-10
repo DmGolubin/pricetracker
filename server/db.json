@@ -1,0 +1,14 @@
+{
+  "trackers": [],
+  "priceHistory": [],
+  "settings": [
+    {
+      "id": "global",
+      "apiBaseUrl": "",
+      "notificationsEnabled": true,
+      "telegramBotToken": "",
+      "telegramChatId": "",
+      "persistentPinTab": false
+    }
+  ]
+}

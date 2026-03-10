@@ -88,7 +88,7 @@ var NotificationFilterType = {
 };
 
 // Currency symbols used for auto-detection
-var CURRENCY_SYMBOLS = ['\u20AC', '$', '\u20BD', '\u20B4', 'z\u0142', 'kn', '\u00A3', '\u00A5', '\u20A9', '\u20B9', '\u20BA', '\u20AB', '\u0E3F', 'R$', 'kr'];
+var CURRENCY_SYMBOLS = ['\u20AC', '\u0024', '\u20BD', '\u20B4', 'z\u0142', 'kn', '\u00A3', '\u00A5', '\u20A9', '\u20B9', '\u20BA', '\u20AB', '\u0E3F', 'R\u0024', 'kr'];
 
 // URL schemes considered as browser internal pages (track button should be hidden)
 var INTERNAL_URL_SCHEMES = ['chrome://', 'about:', 'edge://', 'chrome-extension://', 'moz-extension://', 'brave://'];
