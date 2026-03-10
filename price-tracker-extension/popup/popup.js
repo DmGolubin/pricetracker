@@ -46,16 +46,13 @@ btnTrackManual.addEventListener('click', () => {
     const tab = tabs[0];
     if (!tab) return;
 
-    // Inject selectorPicker CSS and JS directly (no service worker needed)
-    chrome.scripting.insertCSS(
-      { target: { tabId: tab.id }, files: ['content/selectorPicker.css'] },
-      () => {
-        chrome.scripting.executeScript(
-          { target: { tabId: tab.id }, files: ['content/selectorPicker.js'] },
-          () => { window.close(); }
-        );
-      }
-    );
+    // Inject selectorPicker CSS and JS using Promise API (MV3)
+    chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['content/selectorPicker.css'] })
+      .then(() => chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/selectorPicker.js'] }))
+      .then(() => { window.close(); })
+      .catch((err) => {
+        showStatus('Ошибка: ' + (err.message || 'не удалось внедрить скрипт'), true);
+      });
   });
 });
 
@@ -71,20 +68,13 @@ btnTrackAuto.addEventListener('click', () => {
       return;
     }
 
-    // Inject autoDetector to get the detection result, then send autoDetected
-    // to the service worker so it creates the tracker.
-    chrome.scripting.executeScript(
-      {
-        target: { tabId: tab.id },
-        files: ['content/autoDetector.js'],
-      },
-      () => {
-        // The autoDetector content script will send autoDetected / autoDetectFailed
-        // back to the service worker which handles tracker creation.
-        // We just close the popup — the SW takes care of the rest.
-        window.close();
-      }
-    );
+    // Inject autoDetector — it sends autoDetected/autoDetectFailed to the SW
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/autoDetector.js'] })
+      .then(() => { window.close(); })
+      .catch((err) => {
+        showStatus('Ошибка: ' + (err.message || 'не удалось внедрить скрипт'), true);
+        btnTrackAuto.disabled = false;
+      });
   });
 });
 
@@ -126,19 +116,8 @@ function init() {
  * If a price is found, show the one-click "Отслеживать цену: {price}" button.
  */
 function tryAutoDetect(tab) {
-  // Use chrome.tabs.sendMessage to ask an already-injected autoDetector,
-  // or inject it first and then listen for the response.
-  chrome.scripting.executeScript(
-    {
-      target: { tabId: tab.id },
-      files: ['content/autoDetector.js'],
-    },
-    () => {
-      if (chrome.runtime.lastError) {
-        // Cannot inject (e.g. restricted page) — keep manual button only
-        return;
-      }
-
+  chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/autoDetector.js'] })
+    .then(() => {
       // The autoDetector sends a message to the service worker.
       // We set up a temporary listener to intercept the result.
       const listener = (message) => {
@@ -159,8 +138,10 @@ function tryAutoDetect(tab) {
       setTimeout(() => {
         chrome.runtime.onMessage.removeListener(listener);
       }, 3000);
-    }
-  );
+    })
+    .catch(() => {
+      // Cannot inject (e.g. restricted page) — keep manual button only
+    });
 }
 
 /**
