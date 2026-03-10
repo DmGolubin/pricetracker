@@ -261,7 +261,9 @@ const Dashboard = (function () {
 
     try {
       const response = await sendMessage({ action: 'getAllTrackers' });
-      allTrackers = response && response.trackers ? response.trackers : (Array.isArray(response) ? response : []);
+      allTrackers = response && response.data ? response.data :
+                    (response && response.trackers ? response.trackers :
+                    (Array.isArray(response) ? response : []));
       applyFilters();
       renderGrid();
 

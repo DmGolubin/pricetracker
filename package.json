@@ -1,12 +1,14 @@
 {
   "name": "pricetracker-api",
   "version": "1.0.0",
-  "description": "JSON Server backend for Price Tracker Extension",
+  "description": "REST API backend for Price Tracker Extension (PostgreSQL)",
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js"
   },
   "dependencies": {
-    "json-server": "^0.17.4"
+    "express": "^4.18.2",
+    "pg": "^8.12.0",
+    "cors": "^2.8.5"
   }
 }

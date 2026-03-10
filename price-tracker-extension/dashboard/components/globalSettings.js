@@ -187,6 +187,11 @@ const GlobalSettings = (function () {
 
   function handleSave(overlay) {
     var settings = collectFormData(overlay);
+    var saveBtn = overlay.querySelector('.btn-primary');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Сохранение...';
+    }
 
     sendMessage({
       action: 'saveSettings',
@@ -194,9 +199,25 @@ const GlobalSettings = (function () {
     })
       .then(function () {
         close();
+        // Reload the page to apply new API URL
+        if (typeof window !== 'undefined' && window.location) {
+          window.location.reload();
+        }
       })
-      .catch(function () {
-        close();
+      .catch(function (err) {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Сохранить';
+        }
+        var errorEl = overlay.querySelector('.settings-error');
+        if (!errorEl) {
+          errorEl = document.createElement('p');
+          errorEl.className = 'settings-error';
+          errorEl.style.cssText = 'color:#F44336;text-align:center;margin-top:8px;font-size:13px;';
+          var footer = overlay.querySelector('.modal-footer');
+          if (footer) footer.insertBefore(errorEl, footer.firstChild);
+        }
+        errorEl.textContent = 'Ошибка сохранения: ' + (err.message || 'неизвестная ошибка');
       });
   }
 
@@ -207,7 +228,14 @@ const GlobalSettings = (function () {
 
     sendMessage({ action: 'getSettings' })
       .then(function (response) {
-        var settings = (response && response.settings) ? response.settings : response || {};
+        var settings = {};
+        if (response && response.data) {
+          settings = response.data;
+        } else if (response && response.settings) {
+          settings = response.settings;
+        } else if (response && typeof response === 'object') {
+          settings = response;
+        }
         var overlay = buildModal(settings);
         container.innerHTML = '';
         container.appendChild(overlay);
