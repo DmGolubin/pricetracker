@@ -185,6 +185,8 @@ const GlobalSettings = (function () {
     };
   }
 
+  var API_BASE = 'https://pricetracker-production-ac69.up.railway.app';
+
   function handleSave(overlay) {
     var settings = collectFormData(overlay);
     var saveBtn = overlay.querySelector('.btn-primary');
@@ -193,16 +195,33 @@ const GlobalSettings = (function () {
       saveBtn.textContent = 'Сохранение...';
     }
 
+    // Try service worker first, fall back to direct fetch
     sendMessage({
       action: 'saveSettings',
       settings: settings,
     })
       .then(function () {
         close();
-        // Reload the page to apply new API URL
         if (typeof window !== 'undefined' && window.location) {
           window.location.reload();
         }
+      })
+      .catch(function () {
+        // Fallback: save directly via fetch
+        return fetch(API_BASE + '/settings/global', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(Object.assign({}, settings, { id: 'global' })),
+        }).then(function (res) {
+          if (res.ok) {
+            close();
+            if (typeof window !== 'undefined' && window.location) {
+              window.location.reload();
+            }
+          } else {
+            throw new Error('HTTP ' + res.status);
+          }
+        });
       })
       .catch(function (err) {
         if (saveBtn) {
@@ -226,6 +245,7 @@ const GlobalSettings = (function () {
   function open(container) {
     currentContainer = container;
 
+    // Try service worker first, fall back to direct fetch
     sendMessage({ action: 'getSettings' })
       .then(function (response) {
         var settings = {};
@@ -236,14 +256,17 @@ const GlobalSettings = (function () {
         } else if (response && typeof response === 'object') {
           settings = response;
         }
-        var overlay = buildModal(settings);
-        container.innerHTML = '';
-        container.appendChild(overlay);
-        overlay.classList.add('active');
+        return settings;
       })
       .catch(function () {
-        // Render with empty settings on error
-        var overlay = buildModal({});
+        // Fallback: fetch directly
+        if (typeof fetch === 'undefined') return {};
+        return fetch(API_BASE + '/settings/global')
+          .then(function (res) { return res.ok ? res.json() : {}; })
+          .catch(function () { return {}; });
+      })
+      .then(function (settings) {
+        var overlay = buildModal(settings);
         container.innerHTML = '';
         container.appendChild(overlay);
         overlay.classList.add('active');

@@ -254,24 +254,46 @@ const Dashboard = (function () {
   // ─── Data loading ──────────────────────────────────────────────────
 
   /**
-   * Load all trackers from the service worker.
+   * Default API base URL (same as in apiClient.js).
+   */
+  const API_BASE = 'https://pricetracker-production-ac69.up.railway.app';
+
+  /**
+   * Load all trackers. Tries service worker first, falls back to direct fetch.
    */
   async function loadTrackers() {
     showLoading();
 
     try {
+      // Try via service worker first
       const response = await sendMessage({ action: 'getAllTrackers' });
       allTrackers = response && response.data ? response.data :
                     (response && response.trackers ? response.trackers :
                     (Array.isArray(response) ? response : []));
-      applyFilters();
-      renderGrid();
-
-      // Reset badge when dashboard opens (Requirement 17.2)
-      sendMessage({ action: 'resetBadge' }).catch(() => {});
-    } catch (err) {
-      showError(err.message || 'Не удалось загрузить трекеры');
+    } catch (swErr) {
+      // Service worker failed — try direct fetch as fallback
+      try {
+        if (typeof fetch !== 'undefined') {
+          const res = await fetch(API_BASE + '/trackers');
+          if (res.ok) {
+            allTrackers = await res.json();
+          } else {
+            throw new Error('HTTP ' + res.status);
+          }
+        } else {
+          throw swErr;
+        }
+      } catch (fetchErr) {
+        showError(fetchErr.message || 'Не удалось загрузить трекеры');
+        return;
+      }
     }
+
+    applyFilters();
+    renderGrid();
+
+    // Reset badge when dashboard opens (Requirement 17.2)
+    sendMessage({ action: 'resetBadge' }).catch(() => {});
   }
 
   // ─── Initialisation ────────────────────────────────────────────────
