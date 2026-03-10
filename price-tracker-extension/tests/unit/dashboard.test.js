@@ -45,6 +45,20 @@ function makeTracker(overrides = {}) {
   };
 }
 
+function mockFetchResponse(data, ok = true, status = 200) {
+  global.fetch = jest.fn(() =>
+    Promise.resolve({
+      ok,
+      status,
+      json: () => Promise.resolve(data),
+    })
+  );
+}
+
+function flushPromises() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 // ─── Test suite ───────────────────────────────────────────────────────
 
 describe('Dashboard', () => {
@@ -54,26 +68,25 @@ describe('Dashboard', () => {
     jest.resetModules();
     createDashboardDOM();
 
-    // Default: sendMessage resolves with empty array
+    // Default: fetch returns empty array
+    mockFetchResponse([]);
+
+    // Default sendMessage for resetBadge etc
     chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-      if (msg.action === 'getAllTrackers') {
-        cb({ trackers: [] });
-      } else if (msg.action === 'resetBadge') {
-        cb({ success: true });
-      } else {
-        cb({});
-      }
+      cb({ success: true });
     });
 
     Dashboard = require('../../dashboard/dashboard');
+  });
+
+  afterEach(() => {
+    delete global.fetch;
   });
 
   // ─── Loading & rendering ──────────────────────────────────────────
 
   describe('loadTrackers', () => {
     test('shows empty state when no trackers returned', async () => {
-      // Dashboard init already called loadTrackers with empty array
-      // Wait for async
       await flushPromises();
 
       const emptyState = document.getElementById('empty-state');
@@ -90,14 +103,8 @@ describe('Dashboard', () => {
         makeTracker({ id: 't1', productName: 'Product A' }),
         makeTracker({ id: 't2', productName: 'Product B', currentPrice: 120 }),
       ];
-
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (msg.action === 'getAllTrackers') {
-          cb({ trackers });
-        } else {
-          cb({});
-        }
-      });
+      mockFetchResponse(trackers);
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
@@ -112,14 +119,8 @@ describe('Dashboard', () => {
       createDashboardDOM();
 
       const trackers = [makeTracker({ id: 't1' })];
-
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (msg.action === 'getAllTrackers') {
-          cb(trackers); // plain array, not wrapped in { trackers }
-        } else {
-          cb({});
-        }
-      });
+      mockFetchResponse(trackers);
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
@@ -137,14 +138,8 @@ describe('Dashboard', () => {
         productName: 'My Widget',
         pageUrl: 'https://store.example.com/widget',
       });
-
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (msg.action === 'getAllTrackers') {
-          cb({ trackers: [tracker] });
-        } else {
-          cb({});
-        }
-      });
+      mockFetchResponse([tracker]);
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
@@ -184,19 +179,12 @@ describe('Dashboard', () => {
       createDashboardDOM();
 
       const tracker = makeTracker({ id: 'click-test' });
-
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (msg.action === 'getAllTrackers') {
-          cb({ trackers: [tracker] });
-        } else {
-          cb({});
-        }
-      });
+      mockFetchResponse([tracker]);
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
 
-      // Mock SettingsModal to capture the call
       const openSpy = jest.fn();
       global.SettingsModal = { open: openSpy };
 
@@ -219,14 +207,8 @@ describe('Dashboard', () => {
       createDashboardDOM();
 
       const tracker = makeTracker({ id: 'kb-test' });
-
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (msg.action === 'getAllTrackers') {
-          cb({ trackers: [tracker] });
-        } else {
-          cb({});
-        }
-      });
+      mockFetchResponse([tracker]);
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
@@ -253,13 +235,8 @@ describe('Dashboard', () => {
       jest.resetModules();
       createDashboardDOM();
 
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (msg.action === 'getAllTrackers') {
-          cb({ error: 'Server unavailable' });
-        } else {
-          cb({});
-        }
-      });
+      global.fetch = jest.fn(() => Promise.reject(new Error('Network error')));
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
@@ -267,22 +244,15 @@ describe('Dashboard', () => {
       const errorState = document.getElementById('error-state');
       const errorMsg = document.getElementById('error-message');
       expect(errorState.hidden).toBe(false);
-      expect(errorMsg.textContent).toBe('Server unavailable');
+      expect(errorMsg.textContent).toBe('Network error');
     });
 
-    test('shows error state on chrome.runtime.lastError', async () => {
+    test('shows error state on HTTP error', async () => {
       jest.resetModules();
       createDashboardDOM();
 
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (msg.action === 'getAllTrackers') {
-          chrome.runtime.lastError = { message: 'Extension context invalidated' };
-          cb(undefined);
-          chrome.runtime.lastError = null;
-        } else {
-          cb({});
-        }
-      });
+      mockFetchResponse({}, false, 500);
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
@@ -296,30 +266,27 @@ describe('Dashboard', () => {
       createDashboardDOM();
 
       let callCount = 0;
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (msg.action === 'getAllTrackers') {
-          callCount++;
-          if (callCount === 1) {
-            cb({ error: 'Temporary error' });
-          } else {
-            cb({ trackers: [makeTracker()] });
-          }
-        } else {
-          cb({});
+      global.fetch = jest.fn(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.reject(new Error('Temporary error'));
         }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([makeTracker()]),
+        });
       });
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
 
-      // Should be in error state
       expect(document.getElementById('error-state').hidden).toBe(false);
 
-      // Click retry
       document.getElementById('btn-retry').click();
       await flushPromises();
 
-      // Should now show the grid
       const grid = document.getElementById('tracker-grid');
       expect(grid.hidden).toBe(false);
       expect(grid.children.length).toBe(1);
@@ -340,14 +307,8 @@ describe('Dashboard', () => {
         makeTracker({ id: 't2', productName: 'Samsung Galaxy', currentPrice: 120, initialPrice: 100 }),
         makeTracker({ id: 't3', productName: 'iPhone Case', currentPrice: 100, initialPrice: 100 }),
       ];
-
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (msg.action === 'getAllTrackers') {
-          cb({ trackers });
-        } else {
-          cb({});
-        }
-      });
+      mockFetchResponse(trackers);
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
@@ -355,14 +316,12 @@ describe('Dashboard', () => {
 
     test('search filters by product name (case-insensitive)', () => {
       Dashboard.onSearchChange('iphone');
-
       const grid = document.getElementById('tracker-grid');
       expect(grid.children.length).toBe(2);
     });
 
     test('price filter "down" shows only trackers with decreased price', () => {
       Dashboard.onFilterChange('down');
-
       const grid = document.getElementById('tracker-grid');
       expect(grid.children.length).toBe(1);
       expect(grid.children[0].textContent).toContain('iPhone 15');
@@ -370,7 +329,6 @@ describe('Dashboard', () => {
 
     test('price filter "up" shows only trackers with increased price', () => {
       Dashboard.onFilterChange('up');
-
       const grid = document.getElementById('tracker-grid');
       expect(grid.children.length).toBe(1);
       expect(grid.children[0].textContent).toContain('Samsung Galaxy');
@@ -379,7 +337,6 @@ describe('Dashboard', () => {
     test('combined search and filter', () => {
       Dashboard.onSearchChange('iphone');
       Dashboard.onFilterChange('down');
-
       const grid = document.getElementById('tracker-grid');
       expect(grid.children.length).toBe(1);
       expect(grid.children[0].textContent).toContain('iPhone 15');
@@ -387,7 +344,6 @@ describe('Dashboard', () => {
 
     test('shows "no matches" message when filters exclude all', () => {
       Dashboard.onSearchChange('nonexistent');
-
       const grid = document.getElementById('tracker-grid');
       expect(grid.textContent).toContain('Нет трекеров, соответствующих фильтру');
     });
@@ -425,13 +381,8 @@ describe('Dashboard', () => {
       jest.resetModules();
       createDashboardDOM();
 
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (msg.action === 'getAllTrackers') {
-          cb({ trackers: [makeTracker({ id: 'u1' }), makeTracker({ id: 'u2' })] });
-        } else {
-          cb({});
-        }
-      });
+      mockFetchResponse([makeTracker({ id: 'u1' }), makeTracker({ id: 'u2' })]);
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
@@ -455,8 +406,3 @@ describe('Dashboard', () => {
     });
   });
 });
-
-// ─── Promise flush helper ─────────────────────────────────────────────
-function flushPromises() {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}

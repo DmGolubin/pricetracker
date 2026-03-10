@@ -42,8 +42,21 @@ btnShowTrackers.addEventListener('click', () => {
 });
 
 btnTrackManual.addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'startPicker' });
-  window.close();
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0];
+    if (!tab) return;
+
+    // Inject selectorPicker CSS and JS directly (no service worker needed)
+    chrome.scripting.insertCSS(
+      { target: { tabId: tab.id }, files: ['content/selectorPicker.css'] },
+      () => {
+        chrome.scripting.executeScript(
+          { target: { tabId: tab.id }, files: ['content/selectorPicker.js'] },
+          () => { window.close(); }
+        );
+      }
+    );
+  });
 });
 
 btnTrackAuto.addEventListener('click', () => {

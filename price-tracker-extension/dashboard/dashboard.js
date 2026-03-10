@@ -259,34 +259,19 @@ const Dashboard = (function () {
   const API_BASE = 'https://pricetracker-production-ac69.up.railway.app';
 
   /**
-   * Load all trackers. Tries service worker first, falls back to direct fetch.
+   * Load all trackers directly from API.
    */
   async function loadTrackers() {
     showLoading();
 
     try {
-      // Try via service worker first
-      const response = await sendMessage({ action: 'getAllTrackers' });
-      allTrackers = response && response.data ? response.data :
-                    (response && response.trackers ? response.trackers :
-                    (Array.isArray(response) ? response : []));
-    } catch (swErr) {
-      // Service worker failed — try direct fetch as fallback
-      try {
-        if (typeof fetch !== 'undefined') {
-          const res = await fetch(API_BASE + '/trackers');
-          if (res.ok) {
-            allTrackers = await res.json();
-          } else {
-            throw new Error('HTTP ' + res.status);
-          }
-        } else {
-          throw swErr;
-        }
-      } catch (fetchErr) {
-        showError(fetchErr.message || 'Не удалось загрузить трекеры');
-        return;
-      }
+      const res = await fetch(API_BASE + '/trackers');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      allTrackers = await res.json();
+      if (!Array.isArray(allTrackers)) allTrackers = [];
+    } catch (err) {
+      showError(err.message || 'Не удалось загрузить трекеры');
+      return;
     }
 
     applyFilters();
