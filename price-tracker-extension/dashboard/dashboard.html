@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Price Tracker — Dashboard</title>
+  <link rel="stylesheet" href="../shared/styles.css">
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <!-- Toolbar area (rendered by toolbar.js component) -->
+  <div id="toolbar-container" class="toolbar" role="toolbar" aria-label="Панель инструментов"></div>
+
+  <!-- Main content: tracker cards grid -->
+  <main class="dashboard-main">
+    <div id="tracker-grid" class="tracker-grid" role="list" aria-label="Список трекеров"></div>
+
+    <!-- Empty state (shown when no trackers) -->
+    <div id="empty-state" class="empty-state" hidden>
+      <span class="empty-state-icon">📊</span>
+      <p class="empty-state-text">Нет трекеров</p>
+      <p class="empty-state-hint">Откройте страницу товара и нажмите «Отслеживать цену» в popup расширения</p>
+    </div>
+
+    <!-- Error state -->
+    <div id="error-state" class="error-state" hidden>
+      <span class="error-state-icon">⚠️</span>
+      <p id="error-message" class="error-state-text"></p>
+      <button id="btn-retry" class="btn btn-primary">Повторить</button>
+    </div>
+
+    <!-- Loading indicator -->
+    <div id="loading-state" class="loading-state">
+      <span class="loading-spinner"></span>
+      <p class="loading-text">Загрузка трекеров…</p>
+    </div>
+  </main>
+
+  <!-- Modal container (used by settingsModal.js, globalSettings.js) -->
+  <div id="modal-container"></div>
+
+  <!-- Scripts: shared constants, then dashboard components, then main -->
+  <script src="../shared/constants.js"></script>
+  <script src="components/trackerCard.js"></script>
+  <script src="components/toolbar.js"></script>
+  <script src="components/settingsModal.js"></script>
+  <script src="components/globalSettings.js"></script>
+  <script src="components/priceHistory.js"></script>
+  <script src="components/contentDiff.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

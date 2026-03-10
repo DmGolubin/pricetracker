@@ -1,0 +1,112 @@
+/**
+ * Dashboard-specific styles for Price Tracker Extension.
+ * Dark theme — inherits CSS variables from shared/styles.css.
+ *
+ * Requirements: 4.1, 4.5, 12.1
+ */
+
+/* ===== Main Layout ===== */
+.dashboard-main {
+  padding: var(--spacing-lg);
+  min-height: calc(100vh - 60px);
+}
+
+/* ===== Tracker Grid ===== */
+.tracker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+/* ===== Empty State ===== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl) var(--spacing-md);
+  min-height: 300px;
+  text-align: center;
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: var(--spacing-md);
+  opacity: 0.6;
+}
+
+.empty-state-text {
+  font-size: var(--font-xl);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.empty-state-hint {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  max-width: 360px;
+}
+
+/* ===== Error State ===== */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl) var(--spacing-md);
+  min-height: 300px;
+  text-align: center;
+}
+
+.error-state-icon {
+  font-size: 48px;
+  margin-bottom: var(--spacing-md);
+}
+
+.error-state-text {
+  font-size: var(--font-md);
+  color: var(--accent-red);
+  margin-bottom: var(--spacing-md);
+  max-width: 400px;
+}
+
+/* ===== Loading State ===== */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl) var(--spacing-md);
+  min-height: 300px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-primary);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: var(--spacing-md);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 640px) {
+  .dashboard-main {
+    padding: var(--spacing-md);
+  }
+
+  .tracker-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-md);
+  }
+}

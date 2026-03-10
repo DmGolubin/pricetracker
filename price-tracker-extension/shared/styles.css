@@ -1,0 +1,515 @@
+/**
+ * Price Tracker Extension — Dark Theme Styles
+ * Shared CSS variables and base styles for all UI components
+ * (Popup, Dashboard, Settings Modal, Selector Picker)
+ */
+
+/* ===== CSS Custom Properties (Dark Theme) ===== */
+:root {
+  /* Background colors */
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-card: #1f2940;
+  --bg-card-hover: #263350;
+  --bg-modal: #1f2940;
+  --bg-modal-overlay: rgba(0, 0, 0, 0.6);
+  --bg-input: #0f1729;
+  --bg-toolbar: #16213e;
+
+  /* Text colors */
+  --text-primary: #e8e8e8;
+  --text-secondary: #a0aec0;
+  --text-muted: #6b7a90;
+  --text-inverse: #1a1a2e;
+
+  /* Accent colors */
+  --accent-primary: #4f8cff;
+  --accent-primary-hover: #3a75e6;
+  --accent-green: #4caf50;
+  --accent-green-bg: rgba(76, 175, 80, 0.15);
+  --accent-red: #f44336;
+  --accent-red-bg: rgba(244, 67, 54, 0.15);
+  --accent-yellow: #ffc107;
+  --accent-yellow-bg: rgba(255, 193, 7, 0.15);
+
+  /* Border colors */
+  --border-primary: #2d3a50;
+  --border-light: #3a4a63;
+  --border-focus: #4f8cff;
+
+  /* Status colors */
+  --status-active: #4caf50;
+  --status-updated: #4f8cff;
+  --status-error: #f44336;
+  --status-paused: #6b7a90;
+
+  /* Shadows */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-button: 0 2px 4px rgba(0, 0, 0, 0.2);
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Font sizes */
+  --font-xs: 11px;
+  --font-sm: 13px;
+  --font-md: 14px;
+  --font-lg: 16px;
+  --font-xl: 20px;
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s ease;
+}
+
+
+/* ===== Base Styles ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+  font-size: var(--font-md);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-md);
+  font-weight: 500;
+  color: var(--text-primary);
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--border-light);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  color: #fff;
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+}
+
+.btn-danger {
+  color: #fff;
+  background-color: var(--accent-red);
+  border-color: var(--accent-red);
+}
+
+.btn-danger:hover {
+  background-color: #d32f2f;
+  border-color: #d32f2f;
+}
+
+.btn-sm {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-sm);
+}
+
+.btn-icon {
+  padding: var(--spacing-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.btn-icon:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-card);
+}
+
+/* ===== Inputs ===== */
+.input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-md);
+  color: var(--text-primary);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.2);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+select.input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a0aec0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+/* ===== Cards ===== */
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition: transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  border-color: var(--border-light);
+}
+
+.card-body {
+  padding: var(--spacing-md);
+}
+
+/* ===== Modal ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: var(--bg-modal-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--transition-normal), visibility var(--transition-normal);
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal {
+  background-color: var(--bg-modal);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  width: 90%;
+  max-width: 520px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.modal-header h2 {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: var(--spacing-lg);
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--border-primary);
+}
+
+
+/* ===== Toolbar ===== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background-color: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+/* ===== Status Indicators ===== */
+.status-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-active {
+  background-color: var(--status-active);
+  box-shadow: 0 0 4px var(--status-active);
+}
+
+.status-updated {
+  background-color: var(--status-updated);
+  box-shadow: 0 0 4px var(--status-updated);
+}
+
+.status-error {
+  background-color: var(--status-error);
+  box-shadow: 0 0 4px var(--status-error);
+}
+
+.status-paused {
+  background-color: var(--status-paused);
+}
+
+/* ===== Price Direction Indicators ===== */
+.price-down {
+  color: var(--accent-green);
+}
+
+.price-down-bg {
+  background-color: var(--accent-green-bg);
+  border-color: var(--accent-green);
+}
+
+.price-up {
+  color: var(--accent-red);
+}
+
+.price-up-bg {
+  background-color: var(--accent-red-bg);
+  border-color: var(--accent-red);
+}
+
+.price-neutral {
+  color: var(--text-secondary);
+}
+
+/* ===== Content Diff ===== */
+.diff-added {
+  color: var(--accent-green);
+  background-color: var(--accent-green-bg);
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.diff-removed {
+  color: var(--accent-red);
+  background-color: var(--accent-red-bg);
+  padding: 1px 3px;
+  border-radius: 2px;
+  text-decoration: line-through;
+}
+
+/* ===== Auto-detect Badge ===== */
+.badge-auto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: var(--font-xs);
+  font-weight: 700;
+  color: var(--text-inverse);
+  background-color: var(--accent-yellow);
+  border-radius: var(--radius-sm);
+}
+
+/* ===== Form Groups ===== */
+.form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* ===== Toggle Switch ===== */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background-color: var(--border-primary);
+  border-radius: 22px;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--text-primary);
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+}
+
+.toggle input:checked + .toggle-slider {
+  background-color: var(--accent-primary);
+}
+
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+
+/* ===== Radio Buttons ===== */
+.radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.radio-option:hover {
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
+.radio-option input[type='radio'] {
+  accent-color: var(--accent-primary);
+}
+
+.radio-option.selected {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-primary);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--border-light);
+}
+
+/* ===== Utility: Text Truncation ===== */
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== Utility: Visually Hidden (accessibility) ===== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

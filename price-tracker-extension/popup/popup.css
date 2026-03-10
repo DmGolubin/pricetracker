@@ -1,0 +1,87 @@
+/**
+ * Popup-specific styles for Price Tracker Extension.
+ * Dark theme — inherits CSS variables from shared/styles.css.
+ *
+ * Requirements: 3.1, 12.1
+ */
+
+/* ===== Container ===== */
+.popup-container {
+  width: 300px;
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* ===== Header ===== */
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.popup-logo {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.popup-title {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ===== Actions ===== */
+.popup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.popup-btn {
+  width: 100%;
+  padding: 10px var(--spacing-md);
+  font-size: var(--font-md);
+  text-align: center;
+}
+
+.popup-btn-track {
+  background-color: var(--bg-card);
+  border-color: var(--border-primary);
+  color: var(--text-primary);
+}
+
+.popup-btn-track:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--border-light);
+}
+
+/* Auto-detect button uses primary style */
+#btn-track-auto {
+  background-color: var(--accent-green);
+  border-color: var(--accent-green);
+  color: #fff;
+}
+
+#btn-track-auto:hover {
+  background-color: #43a047;
+  border-color: #43a047;
+}
+
+#btn-track-auto:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ===== Status message ===== */
+.popup-status {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  text-align: center;
+  padding: var(--spacing-xs) 0;
+}
+
+.popup-status-error {
+  color: var(--accent-red);
+}
