@@ -329,13 +329,17 @@
     btnContent.textContent = 'Контент';
     btnContent.dataset.type = 'content';
 
-    var currentType = 'price';
+    // Auto-detect type: if price is null, default to 'content'
+    var currentType = data.price != null ? 'price' : 'content';
 
     function setType(type) {
       currentType = type;
       btnPrice.className = 'pt-picker-type-btn' + (type === 'price' ? ' active' : '');
       btnContent.className = 'pt-picker-type-btn' + (type === 'content' ? ' active' : '');
     }
+
+    // Apply auto-detected type
+    setType(currentType);
 
     btnPrice.addEventListener('click', function () { setType('price'); });
     btnContent.addEventListener('click', function () { setType('content'); });

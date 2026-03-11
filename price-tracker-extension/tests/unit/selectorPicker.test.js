@@ -167,6 +167,26 @@ describe('SelectorPicker', () => {
       expect(typeBtns[1].textContent).toBe('Контент');
       expect(typeBtns[0].classList.contains('active')).toBe(true);
     });
+
+    test('auto-selects content type when price cannot be parsed', () => {
+      document.body.innerHTML = '<span id="no-price-el">Some text without price</span>';
+      injectPicker();
+
+      const el = document.getElementById('no-price-el');
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      const nav = document.querySelector('.pt-picker-nav');
+      const confirmBtn = Array.from(nav.querySelectorAll('button')).find(
+        b => b.textContent.includes('Подтвердить')
+      );
+      confirmBtn.click();
+
+      const typeBtns = document.querySelectorAll('.pt-picker-type-btn');
+      // Content button should be active since price couldn't be parsed
+      expect(typeBtns[1].textContent).toBe('Контент');
+      expect(typeBtns[1].classList.contains('active')).toBe(true);
+      expect(typeBtns[0].classList.contains('active')).toBe(false);
+    });
   });
 
   describe('Sending messages', () => {

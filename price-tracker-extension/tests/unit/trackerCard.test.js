@@ -62,11 +62,21 @@ describe('TrackerCard', () => {
     });
 
     test('card contains min-max price range', () => {
-      const card = TrackerCard.create(makeTracker({ minPrice: 50, maxPrice: 200 }));
+      const card = TrackerCard.create(makeTracker({ minPrice: 50, maxPrice: 200, currentPrice: 100 }));
+      // When min !== max, renders range bar with labels
+      const rangeBar = card.querySelector('.tracker-card-range-bar');
+      expect(rangeBar).not.toBeNull();
+      const labels = card.querySelectorAll('.tracker-card-range-label');
+      expect(labels.length).toBe(2);
+      expect(labels[0].textContent).toContain('50');
+      expect(labels[1].textContent).toContain('200');
+    });
+
+    test('card shows text range when min equals max', () => {
+      const card = TrackerCard.create(makeTracker({ minPrice: 100, maxPrice: 100, currentPrice: 100 }));
       const rangeEl = card.querySelector('.tracker-card-range');
       expect(rangeEl).not.toBeNull();
-      expect(rangeEl.textContent).toContain('50');
-      expect(rangeEl.textContent).toContain('200');
+      expect(rangeEl.textContent).toContain('100');
     });
   });
 
@@ -192,7 +202,9 @@ describe('TrackerCard', () => {
         currentContent: 'Available',
       }));
       const range = card.querySelector('.tracker-card-range');
+      const rangeBar = card.querySelector('.tracker-card-range-bar');
       expect(range).toBeNull();
+      expect(rangeBar).toBeNull();
     });
 
     test('handles empty content gracefully', () => {

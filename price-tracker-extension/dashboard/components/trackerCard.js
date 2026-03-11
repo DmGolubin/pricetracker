@@ -187,12 +187,31 @@ const TrackerCard = (function () {
             + getDirectionSymbol(direction) + '</span>';
       html += '</div>';
 
-      // Min–max range
-      html += '<p class="tracker-card-range">'
-            + escapeHtml(formatPrice(tracker.minPrice))
-            + ' – '
-            + escapeHtml(formatPrice(tracker.maxPrice))
-            + '</p>';
+      // Price range bar (visual min–max indicator)
+      var min = tracker.minPrice;
+      var max = tracker.maxPrice;
+      var cur = tracker.currentPrice;
+      if (typeof min === 'number' && typeof max === 'number' && typeof cur === 'number' && max > min) {
+        var pct = Math.round(((cur - min) / (max - min)) * 100);
+        pct = Math.max(0, Math.min(100, pct));
+        var barColor = direction === 'down' ? 'var(--accent-green)' : direction === 'up' ? 'var(--accent-red)' : 'var(--accent-primary)';
+        html += '<div class="tracker-card-range-bar" aria-label="Price range">';
+        html += '<span class="tracker-card-range-label">' + escapeHtml(formatPrice(min)) + '</span>';
+        html += '<div class="tracker-card-range-track">';
+        html += '<div class="tracker-card-range-fill" style="width:' + pct + '%;background:' + barColor + '"></div>';
+        html += '<div class="tracker-card-range-marker ' + getDirectionClass(direction) + '" style="left:' + pct + '%">'
+              + getDirectionSymbol(direction) + '</div>';
+        html += '</div>';
+        html += '<span class="tracker-card-range-label">' + escapeHtml(formatPrice(max)) + '</span>';
+        html += '</div>';
+      } else {
+        // Fallback: simple text range
+        html += '<p class="tracker-card-range">'
+              + escapeHtml(formatPrice(min))
+              + ' – '
+              + escapeHtml(formatPrice(max))
+              + '</p>';
+      }
     }
 
     html += '</div>'; // end card-body
