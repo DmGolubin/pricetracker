@@ -297,7 +297,7 @@ describe('handleContentResult', () => {
     await handleContentResult(tracker, 'Out of stock', deps);
 
     expect(deps.apiClient.addPriceRecord).toHaveBeenCalledWith('tracker-1', expect.objectContaining({
-      content: 'Out of stock',
+      contentValue: 'Out of stock',
     }));
 
     expect(deps.apiClient.updateTracker).toHaveBeenCalledWith('tracker-1', expect.objectContaining({
@@ -542,7 +542,7 @@ describe('checkPrice', () => {
     await promise;
 
     expect(deps.apiClient.addPriceRecord).toHaveBeenCalledWith('tracker-1', expect.objectContaining({
-      content: 'Sold out',
+      contentValue: 'Sold out',
     }));
 
     expect(deps.apiClient.updateTracker).toHaveBeenCalledWith('tracker-1', expect.objectContaining({

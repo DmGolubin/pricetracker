@@ -144,10 +144,15 @@ const PriceHistory = (function () {
 
     // ContentDiff integration for content trackers
     if (isContentTracker && typeof ContentDiff !== 'undefined' && ContentDiff.render) {
+      // Map price_history fields to what ContentDiff expects
+      var diffRecord = {
+        content: record.contentValue || record.content || '',
+        previousContent: record.previousContent || ''
+      };
       var diffContainer = document.createElement('div');
       diffContainer.className = 'price-history-diff';
       diffContainer.setAttribute('data-testid', 'price-history-diff');
-      ContentDiff.render(record, diffContainer);
+      ContentDiff.render(diffRecord, diffContainer);
       item.appendChild(diffContainer);
     }
 

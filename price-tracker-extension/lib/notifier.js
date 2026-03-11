@@ -83,7 +83,16 @@ function sendChromeNotification(tracker, oldPrice, newPrice) {
 
   var message;
   if (tracker.trackingType === 'content') {
-    message = `Контент изменился`;
+    var oldContent = String(oldPrice || '');
+    var newContent = String(newPrice || '');
+    if (oldContent && newContent && oldContent !== newContent) {
+      // Show a brief snippet of old → new (truncated to fit notification)
+      var oldSnippet = oldContent.length > 60 ? oldContent.substring(0, 60) + '…' : oldContent;
+      var newSnippet = newContent.length > 60 ? newContent.substring(0, 60) + '…' : newContent;
+      message = `Было: ${oldSnippet}\nСтало: ${newSnippet}`;
+    } else {
+      message = `Контент изменился`;
+    }
   } else {
     message = `Цена изменилась: ${oldPrice} \u2192 ${newPrice}`;
   }
@@ -114,7 +123,15 @@ async function sendTelegramNotification(tracker, oldPrice, newPrice, settings) {
 
   var priceText;
   if (tracker.trackingType === 'content') {
-    priceText = `Контент изменился`;
+    var oldContent = String(oldPrice || '');
+    var newContent = String(newPrice || '');
+    if (oldContent && newContent && oldContent !== newContent) {
+      var oldSnippet = oldContent.length > 100 ? oldContent.substring(0, 100) + '…' : oldContent;
+      var newSnippet = newContent.length > 100 ? newContent.substring(0, 100) + '…' : newContent;
+      priceText = `Было: ${oldSnippet}\nСтало: ${newSnippet}`;
+    } else {
+      priceText = `Контент изменился`;
+    }
   } else {
     priceText = `Цена: ${oldPrice} \u2192 ${newPrice}`;
   }

@@ -224,13 +224,23 @@ async function handleContentResult(tracker, newContent, deps) {
   const { apiClient, badgeManager, notifier } = deps;
   const now = new Date().toISOString();
 
-  // Save content record
+  // Normalize whitespace for comparison to avoid false positives
+  // from HTML rendering differences (extra spaces, non-breaking spaces, etc.)
+  function normalizeForComparison(text) {
+    return String(text || '').replace(/[\s\u00A0\u202F]+/g, ' ').trim();
+  }
+
+  const normalizedNew = normalizeForComparison(newContent);
+  const normalizedOld = normalizeForComparison(tracker.currentContent);
+  const contentChanged = normalizedNew !== normalizedOld;
+
+  // Save content record to history with the contentValue field (server expects "contentValue")
+  // Include previousContent so ContentDiff can render the diff in history view
   await apiClient.addPriceRecord(tracker.id, {
-    content: newContent,
+    contentValue: newContent,
+    previousContent: tracker.currentContent || '',
     checkedAt: now,
   });
-
-  const contentChanged = String(newContent) !== String(tracker.currentContent || '');
 
   const updateData = {
     currentContent: newContent,

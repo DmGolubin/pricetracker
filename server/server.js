@@ -70,6 +70,7 @@ async function initDB() {
       "trackerId" INTEGER REFERENCES trackers(id) ON DELETE CASCADE,
       price NUMERIC,
       "contentValue" TEXT DEFAULT '',
+      "previousContent" TEXT DEFAULT '',
       "checkedAt" TIMESTAMP DEFAULT NOW()
     );
 
@@ -217,9 +218,9 @@ app.post('/priceHistory', async (req, res) => {
   try {
     const d = req.body;
     const { rows } = await pool.query(
-      `INSERT INTO price_history ("trackerId", price, "contentValue", "checkedAt")
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [d.trackerId, d.price || 0, d.contentValue || '', d.checkedAt || new Date().toISOString()]
+      `INSERT INTO price_history ("trackerId", price, "contentValue", "previousContent", "checkedAt")
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [d.trackerId, d.price || 0, d.contentValue || '', d.previousContent || '', d.checkedAt || new Date().toISOString()]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
