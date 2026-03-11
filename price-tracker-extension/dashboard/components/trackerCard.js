@@ -185,7 +185,7 @@ const TrackerCard = (function () {
     html += '</div>';
 
     // Product name
-    html += '<p class="tracker-card-name text-truncate" title="' + escapeHtml(tracker.productName) + '">'
+    html += '<p class="tracker-card-name" title="' + escapeHtml(tracker.productName) + '">'
           + escapeHtml(tracker.productName) + '</p>';
 
     // Price or content value

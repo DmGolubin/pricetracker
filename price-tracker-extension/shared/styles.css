@@ -310,7 +310,7 @@ select.input {
 }
 
 .modal-body {
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
 }
 
 .modal-footer {

@@ -3,6 +3,17 @@
  * Overlay, confirmation form, DOM navigation panel, error messages
  */
 
+/* ===== Box-sizing reset for picker elements ===== */
+.pt-picker-overlay,
+.pt-picker-error,
+.pt-picker-nav,
+.pt-picker-nav *,
+.pt-picker-form-overlay,
+.pt-picker-form,
+.pt-picker-form * {
+  box-sizing: border-box;
+}
+
 /* ===== Overlay highlight ===== */
 .pt-picker-overlay {
   position: absolute;
@@ -154,6 +165,7 @@
   max-height: 85vh;
   overflow-y: auto;
   color: #e8e8e8;
+  box-sizing: border-box;
   animation: pt-form-appear 200ms ease-out;
 }
 
@@ -187,14 +199,17 @@
   background: none;
   border: none;
   color: #a0aec0;
-  font-size: 20px;
+  font-size: 22px;
   cursor: pointer;
-  padding: 4px;
+  padding: 4px 8px;
   line-height: 1;
+  border-radius: 4px;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .pt-picker-form-close:hover {
   color: #e8e8e8;
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .pt-picker-form-body {
@@ -223,6 +238,7 @@
   border: 1px solid #2d3a50;
   border-radius: 6px;
   outline: none;
+  box-sizing: border-box;
   transition: border-color 0.15s ease;
 }
 
@@ -272,19 +288,21 @@
 .pt-picker-form-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   padding: 14px 20px;
   border-top: 1px solid #2d3a50;
 }
 
 .pt-picker-form-footer button {
-  padding: 8px 20px;
+  padding: 10px 24px;
   font-size: 14px;
   font-weight: 500;
   border-radius: 6px;
   cursor: pointer;
   border: 1px solid #2d3a50;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .pt-picker-btn-cancel {

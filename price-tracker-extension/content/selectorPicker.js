@@ -297,8 +297,15 @@
 
   function navigateDown() {
     if (!selectedElement) return;
-    isSelectingChild = true;
-    showError('Кликните на дочерний элемент внутри выделенного блока');
+    // Try to auto-select the first child element
+    var firstChild = selectedElement.querySelector('*');
+    if (firstChild) {
+      selectedElement = firstChild;
+      excludedSelectors = [];
+      positionOverlay(selectedElement);
+    } else {
+      showError('Нет дочерних элементов');
+    }
   }
 
   function startExclude() {

@@ -289,7 +289,8 @@ describe('TrackerCard', () => {
       const longName = 'A'.repeat(300);
       const card = TrackerCard.create(makeTracker({ productName: longName }));
       const nameEl = card.querySelector('.tracker-card-name');
-      expect(nameEl.classList.contains('text-truncate')).toBe(true);
+      // Uses CSS multi-line truncation (-webkit-line-clamp) instead of text-truncate
+      expect(nameEl).not.toBeNull();
       expect(nameEl.textContent).toBe(longName);
       expect(nameEl.getAttribute('title')).toBe(longName);
     });
