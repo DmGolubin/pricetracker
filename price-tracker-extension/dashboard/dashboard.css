@@ -193,6 +193,39 @@
   overflow: hidden;
 }
 
+.tracker-card-refresh {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.tracker-card:hover .tracker-card-refresh {
+  opacity: 1;
+}
+
+.tracker-card-refresh:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.tracker-card-refresh svg {
+  width: 14px;
+  height: 14px;
+}
+
 .tracker-card-img {
   width: 100%;
   height: 100%;
@@ -621,21 +654,69 @@
 /* ===== Bulk Action Bar ===== */
 .bulk-bar {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
+  flex-direction: column;
+  gap: var(--spacing-xs);
   padding: var(--spacing-sm) var(--spacing-lg);
   background: var(--bg-card);
   border-bottom: 1px solid var(--border-primary);
   animation: fadeIn 200ms ease;
 }
 
+.bulk-bar-top {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
 .bulk-bar-count {
   font-size: var(--font-sm);
   color: var(--text-secondary);
-  margin-right: auto;
 }
 
-.bulk-bar .btn {
+.bulk-bar-toggle-all {
+  font-size: var(--font-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  margin-left: auto;
+}
+
+.bulk-bar-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bulk-bar-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.bulk-bar-chip:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.bulk-bar-chip.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.bulk-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.bulk-bar .btn,
+.bulk-bar-actions .btn {
   font-size: var(--font-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
 }
+

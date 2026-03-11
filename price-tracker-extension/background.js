@@ -131,10 +131,6 @@ function getMessageHandler(message, sender) {
     case MessageFromCS.AUTO_DETECT_FAILED:
       return Promise.resolve();
 
-    // autoDetectResult is for popup only — SW ignores it
-    case 'autoDetectResult':
-      return Promise.resolve();
-
     // Extraction results are handled by waitForExtractionMessage listener in priceChecker
     case MessageFromCS.PRICE_EXTRACTED:
     case MessageFromCS.CONTENT_EXTRACTED:
@@ -192,9 +188,11 @@ async function handleElementSelected(message) {
     productName: message.title,
     imageUrl: message.imageUrl || '',
     initialPrice: message.price || 0,
-    checkIntervalHours: DEFAULT_CHECK_INTERVAL,
+    checkIntervalHours: message.checkIntervalHours || DEFAULT_CHECK_INTERVAL,
     trackingType: message.trackingType || 'price',
     isAutoDetected: false,
+    checkMode: message.checkMode || 'auto',
+    productGroup: message.productGroup || '',
     ...(message.contentValue ? { initialContent: message.contentValue, currentContent: message.contentValue } : {}),
     ...(message.excludedSelectors ? { excludedSelectors: message.excludedSelectors } : {}),
   };

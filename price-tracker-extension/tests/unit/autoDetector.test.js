@@ -2,7 +2,7 @@
  * Unit tests for Auto Detector content script.
  *
  * Since autoDetector.js is a self-contained IIFE, we test it by
- * evaluating the script in jsdom and checking chrome.runtime.sendMessage calls.
+ * evaluating the script in jsdom and checking window.__ptAutoDetect.
  *
  * Requirements: 13.1, 13.2
  */
@@ -75,6 +75,7 @@ describe('AutoDetector', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     document.head.innerHTML = '';
+    delete window.__ptAutoDetect;
     jest.clearAllMocks();
   });
 
@@ -86,15 +87,11 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 29.99
-        })
-      );
-      var call = chrome.runtime.sendMessage.mock.calls[0][0];
-      expect(call.selector).toBeTruthy();
-      expect(call.pageUrl).toBeDefined();
+      expect(window.__ptAutoDetect).toBeDefined();
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(29.99);
+      expect(window.__ptAutoDetect.selector).toBeTruthy();
+      expect(window.__ptAutoDetect.pageUrl).toBeDefined();
     });
 
     test('detects price from product:price:amount meta tag', () => {
@@ -104,12 +101,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 149
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(149);
     });
   });
 
@@ -131,12 +124,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 59.99
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(59.99);
     });
 
     test('detects price from JSON-LD with @graph array', () => {
@@ -157,12 +146,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 25
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(25);
     });
 
     test('detects price from JSON-LD AggregateOffer with lowPrice', () => {
@@ -180,12 +165,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 10
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(10);
     });
 
     test('handles invalid JSON-LD gracefully', () => {
@@ -196,12 +177,8 @@ describe('AutoDetector', () => {
       restore();
 
       // Should still detect via DOM search
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 15
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(15);
     });
 
     test('detects price from JSON-LD array of offers', () => {
@@ -218,12 +195,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 30
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(30);
     });
   });
 
@@ -234,12 +207,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 199.99
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(199.99);
     });
 
     test('detects price from element with € symbol', () => {
@@ -248,12 +217,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 49.99
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(49.99);
     });
 
     test('detects price from element with ₽ symbol', () => {
@@ -262,48 +227,39 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 1500
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(1500);
     });
 
     test('detects price from element with £ symbol', () => {
-      var restore = setupPriceElement('<span id="price">£29.99</span>');
+      var restore = setupPriceElement('<span id="price">£29.99</span>')
+;
 
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 29.99
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(29.99);
     });
   });
 
   describe('Failure cases', () => {
-    test('sends autoDetectFailed when no price found on page', () => {
+    test('sets found=false when no price found on page', () => {
       document.body.innerHTML = '<div>No prices here</div>';
 
       runDetector();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
-        action: 'autoDetectFailed'
-      });
+      expect(window.__ptAutoDetect).toBeDefined();
+      expect(window.__ptAutoDetect.found).toBe(false);
     });
 
-    test('sends autoDetectFailed on empty page', () => {
+    test('sets found=false on empty page', () => {
       document.body.innerHTML = '';
 
       runDetector();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
-        action: 'autoDetectFailed'
-      });
+      expect(window.__ptAutoDetect).toBeDefined();
+      expect(window.__ptAutoDetect.found).toBe(false);
     });
   });
 
@@ -315,12 +271,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          title: 'Test Product Page'
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.title).toBe('Test Product Page');
     });
 
     test('includes pageUrl from location.href', () => {
@@ -329,9 +281,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      var call = chrome.runtime.sendMessage.mock.calls[0][0];
-      expect(call.pageUrl).toBeDefined();
-      expect(typeof call.pageUrl).toBe('string');
+      expect(window.__ptAutoDetect.pageUrl).toBeDefined();
+      expect(typeof window.__ptAutoDetect.pageUrl).toBe('string');
     });
 
     test('includes imageUrl from og:image meta tag', () => {
@@ -341,12 +292,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          imageUrl: 'https://example.com/product.jpg'
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.imageUrl).toBe('https://example.com/product.jpg');
     });
 
     test('includes a valid CSS selector', () => {
@@ -355,10 +302,9 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      var call = chrome.runtime.sendMessage.mock.calls[0][0];
-      expect(call.selector).toBeTruthy();
+      expect(window.__ptAutoDetect.selector).toBeTruthy();
       // Verify the selector actually finds an element
-      var found = document.querySelector(call.selector);
+      var found = document.querySelector(window.__ptAutoDetect.selector);
       expect(found).not.toBeNull();
     });
   });
@@ -377,12 +323,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 99.99
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(99.99);
     });
 
     test('falls back to DOM detection when no structured data', () => {
@@ -391,12 +333,8 @@ describe('AutoDetector', () => {
       runDetector();
       restore();
 
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'autoDetectResult',
-          price: 75.5
-        })
-      );
+      expect(window.__ptAutoDetect.found).toBe(true);
+      expect(window.__ptAutoDetect.price).toBe(75.5);
     });
   });
 });

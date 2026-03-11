@@ -161,7 +161,8 @@ describe('SelectorPicker', () => {
       );
       confirmBtn.click();
 
-      const typeBtns = document.querySelectorAll('.pt-picker-type-btn');
+      const typeToggle = document.querySelector('.pt-picker-type-toggle');
+      const typeBtns = typeToggle.querySelectorAll('.pt-picker-type-btn');
       expect(typeBtns.length).toBe(2);
       expect(typeBtns[0].textContent).toBe('Цена');
       expect(typeBtns[1].textContent).toBe('Контент');
@@ -181,7 +182,8 @@ describe('SelectorPicker', () => {
       );
       confirmBtn.click();
 
-      const typeBtns = document.querySelectorAll('.pt-picker-type-btn');
+      const typeToggle2 = document.querySelector('.pt-picker-type-toggle');
+      const typeBtns = typeToggle2.querySelectorAll('.pt-picker-type-btn');
       // Content button should be active since price couldn't be parsed
       expect(typeBtns[1].textContent).toBe('Контент');
       expect(typeBtns[1].classList.contains('active')).toBe(true);

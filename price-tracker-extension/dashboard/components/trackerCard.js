@@ -161,6 +161,9 @@ const TrackerCard = (function () {
 
     // Image section
     html += '<div class="tracker-card-image">';
+    // Refresh button (per-card)
+    html += '<button class="tracker-card-refresh" title="Обновить" aria-label="Обновить трекер">'
+          + (_Icons ? _Icons.el('refresh', 14) : '↻') + '</button>';
     // Selection checkbox
     if (opts.selectable) {
       html += '<label class="tracker-card-checkbox">'

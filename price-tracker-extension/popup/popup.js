@@ -143,41 +143,33 @@ function init() {
 }
 
 /**
- * Inject autoDetector.js into the tab and listen for the result.
+ * Inject autoDetector.js into the tab and read the result from window.__ptAutoDetect.
  * If a price is found, show the one-click "Отслеживать цену: {price}" button.
  */
 function tryAutoDetect(tab) {
   chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/autoDetector.js'] })
     .then(() => {
-      // autoDetector sends autoDetectResult (not autoDetected) — just price info, no tracker creation
-      const listener = (message) => {
-        if (!message || !message.action) return;
+      // Read the result stored by autoDetector on the page's window object
+      return chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => window.__ptAutoDetect
+      });
+    })
+    .then((results) => {
+      var data = results && results[0] && results[0].result;
+      if (!data || !data.found) return;
 
-        if (message.action === 'autoDetectResult') {
-          chrome.runtime.onMessage.removeListener(listener);
-          // Store data for one-click tracking button
-          autoDetectData = {
-            selector: message.selector,
-            price: message.price,
-            title: message.title,
-            imageUrl: message.imageUrl,
-            pageUrl: message.pageUrl,
-          };
-          showAutoButton(message.price);
-        } else if (message.action === 'autoDetectFailed') {
-          chrome.runtime.onMessage.removeListener(listener);
-        }
+      autoDetectData = {
+        selector: data.selector,
+        price: data.price,
+        title: data.title,
+        imageUrl: data.imageUrl,
+        pageUrl: data.pageUrl,
       };
-
-      chrome.runtime.onMessage.addListener(listener);
-
-      // Timeout: if no response within 3 seconds, give up on auto-detect
-      setTimeout(() => {
-        chrome.runtime.onMessage.removeListener(listener);
-      }, 3000);
+      showAutoButton(data.price);
     })
     .catch(() => {
-      // Cannot inject (e.g. restricted page) — keep manual button only
+      // Injection failed — ignore
     });
 }
 
@@ -185,12 +177,12 @@ function tryAutoDetect(tab) {
  * Show the auto-detect button with the found price.
  */
 function showAutoButton(price) {
-  if (price == null || price === 0) {
-    btnTrackAuto.textContent = 'Отслеживать цену (авто)';
-  } else {
-    const formatted = typeof price === 'number' ? price.toLocaleString() : price;
-    btnTrackAuto.textContent = 'Отслеживать цену: ' + formatted;
+  var text = 'Отслеживать цену (авто)';
+  if (price != null && price !== 0 && price !== '') {
+    var formatted = typeof price === 'number' ? price.toLocaleString() : String(price);
+    if (formatted) text = 'Отслеживать цену: ' + formatted;
   }
+  btnTrackAuto.textContent = text;
   btnTrackAuto.hidden = false;
 }
 

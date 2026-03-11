@@ -370,7 +370,6 @@
     btnContent.textContent = 'Контент';
     btnContent.dataset.type = 'content';
 
-    // Auto-detect type: if price is null, default to 'content'
     var currentType = data.price != null ? 'price' : 'content';
 
     function setType(type) {
@@ -379,7 +378,6 @@
       btnContent.className = 'pt-picker-type-btn' + (type === 'content' ? ' active' : '');
     }
 
-    // Apply auto-detected type
     setType(currentType);
 
     btnPrice.addEventListener('click', function () { setType('price'); });
@@ -390,11 +388,86 @@
     typeField.appendChild(typeLabel);
     typeField.appendChild(typeToggle);
 
+    // ─── Check interval (radio-like toggle) ─────────────────────
+    var intervalField = document.createElement('div');
+    intervalField.className = 'pt-picker-field';
+    var intervalLabel = document.createElement('label');
+    intervalLabel.textContent = 'Интервал проверки';
+    var intervalToggle = document.createElement('div');
+    intervalToggle.className = 'pt-picker-type-toggle pt-picker-interval-toggle';
+
+    var intervals = [
+      { value: 3, label: '3ч' },
+      { value: 6, label: '6ч' },
+      { value: 12, label: '12ч' },
+      { value: 24, label: '24ч' },
+    ];
+    var currentInterval = 3;
+    var intervalBtns = [];
+
+    intervals.forEach(function (opt) {
+      var btn = document.createElement('button');
+      btn.className = 'pt-picker-type-btn' + (opt.value === currentInterval ? ' active' : '');
+      btn.textContent = opt.label;
+      btn.dataset.interval = opt.value;
+      btn.addEventListener('click', function () {
+        currentInterval = opt.value;
+        intervalBtns.forEach(function (b) {
+          b.className = 'pt-picker-type-btn' + (Number(b.dataset.interval) === currentInterval ? ' active' : '');
+        });
+      });
+      intervalBtns.push(btn);
+      intervalToggle.appendChild(btn);
+    });
+
+    intervalField.appendChild(intervalLabel);
+    intervalField.appendChild(intervalToggle);
+
+    // ─── Check mode (auto / pinTab) ─────────────────────────────
+    var modeField = document.createElement('div');
+    modeField.className = 'pt-picker-field';
+    var modeLabel = document.createElement('label');
+    modeLabel.textContent = 'Режим проверки';
+    var modeToggle = document.createElement('div');
+    modeToggle.className = 'pt-picker-type-toggle';
+
+    var btnAuto = document.createElement('button');
+    btnAuto.className = 'pt-picker-type-btn active';
+    btnAuto.textContent = 'Авто';
+    btnAuto.dataset.mode = 'auto';
+
+    var btnPin = document.createElement('button');
+    btnPin.className = 'pt-picker-type-btn';
+    btnPin.textContent = 'Pin Tab';
+    btnPin.dataset.mode = 'pinTab';
+
+    var currentMode = 'auto';
+
+    function setMode(mode) {
+      currentMode = mode;
+      btnAuto.className = 'pt-picker-type-btn' + (mode === 'auto' ? ' active' : '');
+      btnPin.className = 'pt-picker-type-btn' + (mode === 'pinTab' ? ' active' : '');
+    }
+
+    btnAuto.addEventListener('click', function () { setMode('auto'); });
+    btnPin.addEventListener('click', function () { setMode('pinTab'); });
+
+    modeToggle.appendChild(btnAuto);
+    modeToggle.appendChild(btnPin);
+    modeField.appendChild(modeLabel);
+    modeField.appendChild(modeToggle);
+
+    // ─── Product group (text input) ─────────────────────────────
+    var groupField = createField('Группа товаров', 'text', '', 'pt-field-group');
+
     body.appendChild(nameField);
     body.appendChild(urlField);
     body.appendChild(priceField);
     body.appendChild(imgField);
     body.appendChild(typeField);
+    body.appendChild(intervalField);
+    body.appendChild(modeField);
+    body.appendChild(groupField);
 
     // Footer
     var footer = document.createElement('div');
@@ -412,6 +485,7 @@
       var nameInput = document.getElementById('pt-field-name');
       var priceInput = document.getElementById('pt-field-price');
       var imgInput = document.getElementById('pt-field-image');
+      var groupInput = document.getElementById('pt-field-group');
 
       var payload = {
         action: 'elementSelected',
@@ -421,6 +495,9 @@
         imageUrl: imgInput.value,
         pageUrl: data.pageUrl,
         trackingType: currentType,
+        checkIntervalHours: currentInterval,
+        checkMode: currentMode,
+        productGroup: groupInput ? groupInput.value : '',
         contentValue: currentType === 'content' ? data.contentValue : undefined,
         excludedSelectors: data.excludedSelectors
       };

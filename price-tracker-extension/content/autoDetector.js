@@ -409,23 +409,22 @@
     return { found: false, confidence: 0 };
   }
 
-  // ─── Execute and send result ───────────────────────────────────────
+  // ─── Execute and store result on window ─────────────────────────────
+  // Popup reads this via chrome.scripting.executeScript return value.
 
   var result = autoDetectPrice();
 
   if (result.found) {
-    chrome.runtime.sendMessage({
-      action: 'autoDetectResult',
+    window.__ptAutoDetect = {
+      found: true,
       selector: result.selector,
       price: result.price,
       title: document.title || '',
       imageUrl: getProductImage(),
       pageUrl: location.href
-    });
+    };
   } else {
-    chrome.runtime.sendMessage({
-      action: 'autoDetectFailed'
-    });
+    window.__ptAutoDetect = { found: false };
   }
 
 })();

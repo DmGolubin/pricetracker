@@ -306,8 +306,30 @@ const Dashboard = (function () {
       const card = TrackerCard.create(tracker, { selectable: selectMode });
       card.addEventListener('click', function (e) {
         if (e.target.closest('.tracker-card-checkbox')) return;
+        if (e.target.closest('.tracker-card-refresh')) return;
         onCardClick(tracker);
       });
+      // Wire per-card refresh button
+      var refreshBtn = card.querySelector('.tracker-card-refresh');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          refreshBtn.classList.add('toolbar-refresh-spin');
+          sendMessage({ action: 'checkPrice', trackerId: tracker.id })
+            .then(function () {
+              // Reload this tracker's data after check
+              return fetch(API_BASE + '/trackers/' + encodeURIComponent(tracker.id));
+            })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (updated) {
+              refreshBtn.classList.remove('toolbar-refresh-spin');
+              if (updated) onTrackerUpdated(updated);
+            })
+            .catch(function () {
+              refreshBtn.classList.remove('toolbar-refresh-spin');
+            });
+        });
+      }
       // Wire checkbox change for multiselect
       var cb = card.querySelector('.tracker-card-select');
       if (cb) {
@@ -490,7 +512,7 @@ const Dashboard = (function () {
 
   function updateBulkBar() {
     var existing = document.getElementById('bulk-bar');
-    if (selectedIds.size === 0) {
+    if (!selectMode) {
       if (existing) existing.remove();
       return;
     }
@@ -503,28 +525,92 @@ const Dashboard = (function () {
     }
     existing.innerHTML = '';
 
+    // ─── Top row: count + domain chips ──────────────────────────
+    var topRow = document.createElement('div');
+    topRow.className = 'bulk-bar-top';
+
     var countSpan = document.createElement('span');
     countSpan.className = 'bulk-bar-count';
     countSpan.textContent = 'Выбрано: ' + selectedIds.size;
-    existing.appendChild(countSpan);
+    topRow.appendChild(countSpan);
+
+    // Select all / deselect all toggle
+    var allSelected = selectedIds.size === filteredTrackers.length && filteredTrackers.length > 0;
+    var toggleAllBtn = document.createElement('button');
+    toggleAllBtn.className = 'btn bulk-bar-toggle-all';
+    toggleAllBtn.textContent = allSelected ? 'Снять все' : 'Выбрать все';
+    toggleAllBtn.addEventListener('click', function () {
+      if (allSelected) {
+        selectedIds.clear();
+      } else {
+        filteredTrackers.forEach(function (t) { selectedIds.add(t.id); });
+      }
+      applyFilters();
+      renderGrid();
+      updateBulkBar();
+    });
+    topRow.appendChild(toggleAllBtn);
+
+    existing.appendChild(topRow);
+
+    // ─── Domain chips row ───────────────────────────────────────
+    var domains = {};
+    allTrackers.forEach(function (t) {
+      var d = extractDomain(t.pageUrl);
+      if (!domains[d]) domains[d] = [];
+      domains[d].push(t.id);
+    });
+
+    var domainNames = Object.keys(domains).sort();
+    if (domainNames.length > 1) {
+      var chipRow = document.createElement('div');
+      chipRow.className = 'bulk-bar-chips';
+
+      domainNames.forEach(function (domain) {
+        var ids = domains[domain];
+        var chip = document.createElement('button');
+        chip.className = 'bulk-bar-chip';
+        // Check if all trackers of this domain are selected
+        var domainAllSelected = ids.every(function (id) { return selectedIds.has(id); });
+        if (domainAllSelected) chip.classList.add('active');
+        chip.textContent = domain + ' (' + ids.length + ')';
+        chip.addEventListener('click', function () {
+          if (domainAllSelected) {
+            ids.forEach(function (id) { selectedIds.delete(id); });
+          } else {
+            ids.forEach(function (id) { selectedIds.add(id); });
+          }
+          applyFilters();
+          renderGrid();
+          updateBulkBar();
+        });
+        chipRow.appendChild(chip);
+      });
+
+      existing.appendChild(chipRow);
+    }
+
+    // ─── Action buttons row ─────────────────────────────────────
+    var actionsRow = document.createElement('div');
+    actionsRow.className = 'bulk-bar-actions';
 
     var pauseBtn = document.createElement('button');
     pauseBtn.className = 'btn';
     pauseBtn.textContent = 'Приостановить';
     pauseBtn.addEventListener('click', function () { bulkAction('pause'); });
-    existing.appendChild(pauseBtn);
+    actionsRow.appendChild(pauseBtn);
 
     var resumeBtn = document.createElement('button');
     resumeBtn.className = 'btn';
     resumeBtn.textContent = 'Возобновить';
     resumeBtn.addEventListener('click', function () { bulkAction('resume'); });
-    existing.appendChild(resumeBtn);
+    actionsRow.appendChild(resumeBtn);
 
     var deleteBtn = document.createElement('button');
     deleteBtn.className = 'btn btn-danger';
     deleteBtn.textContent = 'Удалить';
     deleteBtn.addEventListener('click', function () { bulkAction('delete'); });
-    existing.appendChild(deleteBtn);
+    actionsRow.appendChild(deleteBtn);
 
     var cancelBtn = document.createElement('button');
     cancelBtn.className = 'btn';
@@ -536,7 +622,9 @@ const Dashboard = (function () {
       renderGrid();
       updateBulkBar();
     });
-    existing.appendChild(cancelBtn);
+    actionsRow.appendChild(cancelBtn);
+
+    existing.appendChild(actionsRow);
   }
 
   async function bulkAction(action) {
