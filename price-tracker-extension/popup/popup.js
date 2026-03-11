@@ -185,8 +185,12 @@ function tryAutoDetect(tab) {
  * Show the auto-detect button with the found price.
  */
 function showAutoButton(price) {
-  const formatted = typeof price === 'number' ? price.toLocaleString() : price;
-  btnTrackAuto.textContent = `Отслеживать цену: ${formatted}`;
+  if (price == null || price === 0) {
+    btnTrackAuto.textContent = 'Отслеживать цену (авто)';
+  } else {
+    const formatted = typeof price === 'number' ? price.toLocaleString() : price;
+    btnTrackAuto.textContent = 'Отслеживать цену: ' + formatted;
+  }
   btnTrackAuto.hidden = false;
 }
 
