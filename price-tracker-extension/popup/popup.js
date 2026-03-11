@@ -149,10 +149,14 @@ function init() {
 function tryAutoDetect(tab) {
   chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/autoDetector.js'] })
     .then(() => {
-      // Read the result stored by autoDetector on the page's window object
+      // Read the result stored by autoDetector on the page's documentElement
       return chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: () => window.__ptAutoDetect
+        func: () => {
+          var raw = document.documentElement.getAttribute('data-pt-auto-detect');
+          if (!raw) return null;
+          try { return JSON.parse(raw); } catch (_) { return null; }
+        }
       });
     })
     .then((results) => {

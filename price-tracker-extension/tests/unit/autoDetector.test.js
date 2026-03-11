@@ -2,7 +2,8 @@
  * Unit tests for Auto Detector content script.
  *
  * Since autoDetector.js is a self-contained IIFE, we test it by
- * evaluating the script in jsdom and checking window.__ptAutoDetect.
+ * evaluating the script in jsdom and checking the data-pt-auto-detect
+ * attribute on document.documentElement.
  *
  * Requirements: 13.1, 13.2
  */
@@ -18,9 +19,14 @@ function runDetector() {
   eval(DETECTOR_SCRIPT);
 }
 
+function getResult() {
+  var raw = document.documentElement.getAttribute('data-pt-auto-detect');
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (_) { return null; }
+}
+
 /**
  * Helper: set up a minimal product page with a visible price element.
- * jsdom doesn't compute layout, so we mock getComputedStyle and getBoundingClientRect.
  */
 function setupPriceElement(html, opts) {
   document.body.innerHTML = html;
@@ -28,7 +34,6 @@ function setupPriceElement(html, opts) {
   var fontSize = opts.fontSize || '24px';
   var top = opts.top || 100;
 
-  // jsdom doesn't compute styles — override getComputedStyle
   var origGetComputedStyle = window.getComputedStyle;
   window.getComputedStyle = function (el) {
     var base = origGetComputedStyle.call(window, el);
@@ -43,27 +48,14 @@ function setupPriceElement(html, opts) {
     });
   };
 
-  // Mock offsetParent for visibility check
-  var priceEls = document.querySelectorAll('[data-price], .price, #price, .product-price');
-  priceEls.forEach(function (el) {
-    Object.defineProperty(el, 'offsetParent', { get: function () { return document.body; }, configurable: true });
-    el.getBoundingClientRect = function () {
-      return { top: top, left: 0, right: 200, bottom: top + 30, width: 200, height: 30 };
-    };
-  });
-
-  // Also handle generic elements that contain currency
   var allEls = document.body.querySelectorAll('*');
   allEls.forEach(function (el) {
     if (!el.offsetParent && el !== document.body && el !== document.documentElement) {
       Object.defineProperty(el, 'offsetParent', { get: function () { return document.body; }, configurable: true });
     }
-    if (!el.getBoundingClientRect.__mocked) {
-      el.getBoundingClientRect = function () {
-        return { top: top, left: 0, right: 200, bottom: top + 30, width: 200, height: 30 };
-      };
-      el.getBoundingClientRect.__mocked = true;
-    }
+    el.getBoundingClientRect = function () {
+      return { top: top, left: 0, right: 200, bottom: top + 30, width: 200, height: 30 };
+    };
   });
 
   return function restore() {
@@ -75,7 +67,7 @@ describe('AutoDetector', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     document.head.innerHTML = '';
-    delete window.__ptAutoDetect;
+    document.documentElement.removeAttribute('data-pt-auto-detect');
     jest.clearAllMocks();
   });
 
@@ -83,183 +75,108 @@ describe('AutoDetector', () => {
     test('detects price from og:price:amount meta tag', () => {
       document.head.innerHTML = '<meta property="og:price:amount" content="29.99">';
       var restore = setupPriceElement('<span class="price">$29.99</span>');
-
       runDetector();
       restore();
-
-      expect(window.__ptAutoDetect).toBeDefined();
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(29.99);
-      expect(window.__ptAutoDetect.selector).toBeTruthy();
-      expect(window.__ptAutoDetect.pageUrl).toBeDefined();
+      var r = getResult();
+      expect(r).toBeDefined();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(29.99);
+      expect(r.selector).toBeTruthy();
+      expect(r.pageUrl).toBeDefined();
     });
 
     test('detects price from product:price:amount meta tag', () => {
       document.head.innerHTML = '<meta property="product:price:amount" content="149.00">';
       var restore = setupPriceElement('<span class="price">$149.00</span>');
-
       runDetector();
       restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(149);
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(149);
     });
   });
 
   describe('JSON-LD detection', () => {
     test('detects price from JSON-LD Product with offers', () => {
-      var jsonLd = {
-        '@context': 'https://schema.org',
-        '@type': 'Product',
-        name: 'Test Product',
-        offers: {
-          '@type': 'Offer',
-          price: 59.99,
-          priceCurrency: 'USD'
-        }
-      };
+      var jsonLd = { '@context': 'https://schema.org', '@type': 'Product', name: 'Test', offers: { '@type': 'Offer', price: 59.99, priceCurrency: 'USD' } };
       document.head.innerHTML = '<script type="application/ld+json">' + JSON.stringify(jsonLd) + '</script>';
       var restore = setupPriceElement('<span class="price">$59.99</span>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(59.99);
+      runDetector(); restore();
+      expect(getResult().price).toBe(59.99);
     });
 
     test('detects price from JSON-LD with @graph array', () => {
-      var jsonLd = {
-        '@context': 'https://schema.org',
-        '@graph': [
-          { '@type': 'WebPage', name: 'Page' },
-          {
-            '@type': 'Product',
-            name: 'Widget',
-            offers: { '@type': 'Offer', price: '25.00' }
-          }
-        ]
-      };
+      var jsonLd = { '@context': 'https://schema.org', '@graph': [{ '@type': 'WebPage' }, { '@type': 'Product', offers: { '@type': 'Offer', price: '25.00' } }] };
       document.head.innerHTML = '<script type="application/ld+json">' + JSON.stringify(jsonLd) + '</script>';
       var restore = setupPriceElement('<span class="price">$25.00</span>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(25);
+      runDetector(); restore();
+      expect(getResult().price).toBe(25);
     });
 
     test('detects price from JSON-LD AggregateOffer with lowPrice', () => {
-      var jsonLd = {
-        '@type': 'Product',
-        offers: {
-          '@type': 'AggregateOffer',
-          lowPrice: 10.00,
-          highPrice: 50.00
-        }
-      };
+      var jsonLd = { '@type': 'Product', offers: { '@type': 'AggregateOffer', lowPrice: 10.00, highPrice: 50.00 } };
       document.head.innerHTML = '<script type="application/ld+json">' + JSON.stringify(jsonLd) + '</script>';
       var restore = setupPriceElement('<span class="price">$10.00</span>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(10);
+      runDetector(); restore();
+      expect(getResult().price).toBe(10);
     });
 
     test('handles invalid JSON-LD gracefully', () => {
       document.head.innerHTML = '<script type="application/ld+json">{ invalid json }</script>';
       var restore = setupPriceElement('<span class="price">$15.00</span>');
-
-      runDetector();
-      restore();
-
-      // Should still detect via DOM search
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(15);
+      runDetector(); restore();
+      expect(getResult().found).toBe(true);
+      expect(getResult().price).toBe(15);
     });
 
     test('detects price from JSON-LD array of offers', () => {
-      var jsonLd = {
-        '@type': 'Product',
-        offers: [
-          { '@type': 'Offer', price: 30.00 },
-          { '@type': 'Offer', price: 35.00 }
-        ]
-      };
+      var jsonLd = { '@type': 'Product', offers: [{ '@type': 'Offer', price: 30.00 }, { '@type': 'Offer', price: 35.00 }] };
       document.head.innerHTML = '<script type="application/ld+json">' + JSON.stringify(jsonLd) + '</script>';
       var restore = setupPriceElement('<span class="price">$30.00</span>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(30);
+      runDetector(); restore();
+      expect(getResult().price).toBe(30);
     });
   });
 
   describe('DOM element detection with currency symbols', () => {
     test('detects price from element with $ symbol', () => {
       var restore = setupPriceElement('<div id="price">$199.99</div>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(199.99);
+      runDetector(); restore();
+      expect(getResult().price).toBe(199.99);
     });
 
     test('detects price from element with € symbol', () => {
       var restore = setupPriceElement('<span id="price">€49,99</span>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(49.99);
+      runDetector(); restore();
+      expect(getResult().price).toBe(49.99);
     });
 
     test('detects price from element with ₽ symbol', () => {
       var restore = setupPriceElement('<span id="price">1 500 ₽</span>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(1500);
+      runDetector(); restore();
+      expect(getResult().price).toBe(1500);
     });
 
     test('detects price from element with £ symbol', () => {
-      var restore = setupPriceElement('<span id="price">£29.99</span>')
-;
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(29.99);
+      var restore = setupPriceElement('<span id="price">£29.99</span>');
+      runDetector(); restore();
+      expect(getResult().price).toBe(29.99);
     });
   });
 
   describe('Failure cases', () => {
     test('sets found=false when no price found on page', () => {
       document.body.innerHTML = '<div>No prices here</div>';
-
       runDetector();
-
-      expect(window.__ptAutoDetect).toBeDefined();
-      expect(window.__ptAutoDetect.found).toBe(false);
+      var r = getResult();
+      expect(r).toBeDefined();
+      expect(r.found).toBe(false);
     });
 
     test('sets found=false on empty page', () => {
       document.body.innerHTML = '';
-
       runDetector();
-
-      expect(window.__ptAutoDetect).toBeDefined();
-      expect(window.__ptAutoDetect.found).toBe(false);
+      expect(getResult().found).toBe(false);
     });
   });
 
@@ -267,74 +184,45 @@ describe('AutoDetector', () => {
     test('includes title from document.title', () => {
       document.title = 'Test Product Page';
       var restore = setupPriceElement('<span id="price">$50.00</span>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.title).toBe('Test Product Page');
+      runDetector(); restore();
+      expect(getResult().title).toBe('Test Product Page');
     });
 
     test('includes pageUrl from location.href', () => {
       var restore = setupPriceElement('<span id="price">$50.00</span>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.pageUrl).toBeDefined();
-      expect(typeof window.__ptAutoDetect.pageUrl).toBe('string');
+      runDetector(); restore();
+      expect(typeof getResult().pageUrl).toBe('string');
     });
 
     test('includes imageUrl from og:image meta tag', () => {
       document.head.innerHTML = '<meta property="og:image" content="https://example.com/product.jpg">';
       var restore = setupPriceElement('<span id="price">$50.00</span>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.imageUrl).toBe('https://example.com/product.jpg');
+      runDetector(); restore();
+      expect(getResult().imageUrl).toBe('https://example.com/product.jpg');
     });
 
     test('includes a valid CSS selector', () => {
       var restore = setupPriceElement('<span id="price">$50.00</span>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.selector).toBeTruthy();
-      // Verify the selector actually finds an element
-      var found = document.querySelector(window.__ptAutoDetect.selector);
-      expect(found).not.toBeNull();
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.selector).toBeTruthy();
+      expect(document.querySelector(r.selector)).not.toBeNull();
     });
   });
 
   describe('Scoring and candidate selection', () => {
     test('prefers structured data price when DOM element matches', () => {
-      var jsonLd = {
-        '@type': 'Product',
-        offers: { '@type': 'Offer', price: 99.99 }
-      };
+      var jsonLd = { '@type': 'Product', offers: { '@type': 'Offer', price: 99.99 } };
       document.head.innerHTML = '<script type="application/ld+json">' + JSON.stringify(jsonLd) + '</script>';
-      var restore = setupPriceElement(
-        '<div><span id="old-price">$120.00</span><span id="price">$99.99</span></div>'
-      );
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(99.99);
+      var restore = setupPriceElement('<div><span id="old-price">$120.00</span><span id="price">$99.99</span></div>');
+      runDetector(); restore();
+      expect(getResult().price).toBe(99.99);
     });
 
     test('falls back to DOM detection when no structured data', () => {
       var restore = setupPriceElement('<div id="price">$75.50</div>');
-
-      runDetector();
-      restore();
-
-      expect(window.__ptAutoDetect.found).toBe(true);
-      expect(window.__ptAutoDetect.price).toBe(75.5);
+      runDetector(); restore();
+      expect(getResult().price).toBe(75.5);
     });
   });
 });
