@@ -71,11 +71,11 @@ const PriceHistory = (function () {
     var flags = [];
     for (var i = 0; i < sortedRecords.length; i++) {
       if (i < sortedRecords.length - 1) {
-        var current = sortedRecords[i].price;
-        var previous = sortedRecords[i + 1].price;
+        var current = Number(sortedRecords[i].price);
+        var previous = Number(sortedRecords[i + 1].price);
         flags.push(
-          typeof current === 'number' &&
-          typeof previous === 'number' &&
+          !isNaN(current) &&
+          !isNaN(previous) &&
           current < previous
         );
       } else {
@@ -131,10 +131,12 @@ const PriceHistory = (function () {
     valueEl.className = 'price-history-value';
     valueEl.setAttribute('data-testid', 'price-history-value');
 
-    if (isContentTracker && record.content != null) {
-      valueEl.textContent = record.content;
+    var contentText = record.content != null ? record.content : record.contentValue;
+    if (isContentTracker && contentText != null && contentText !== '') {
+      valueEl.textContent = contentText;
     } else {
-      valueEl.textContent = typeof record.price === 'number' ? record.price.toFixed(2) : String(record.price);
+      var p = typeof record.price === 'number' ? record.price : parseFloat(record.price);
+      valueEl.textContent = !isNaN(p) ? p.toFixed(2) : String(record.price);
     }
 
     item.appendChild(dateEl);
@@ -177,8 +179,8 @@ const PriceHistory = (function () {
       return new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime();
     });
 
-    var prices = chronological.map(function (r) { return r.price; });
-    var validPrices = prices.filter(function (p) { return typeof p === 'number' && isFinite(p); });
+    var prices = chronological.map(function (r) { return typeof r.price === 'number' ? r.price : parseFloat(r.price); });
+    var validPrices = prices.filter(function (p) { return !isNaN(p) && isFinite(p); });
     if (validPrices.length < 2) return;
 
     var minP = Math.min.apply(null, validPrices);
@@ -201,8 +203,8 @@ const PriceHistory = (function () {
     // Build points
     var points = [];
     for (var i = 0; i < chronological.length; i++) {
-      var p = chronological[i].price;
-      if (typeof p !== 'number' || !isFinite(p)) continue;
+      var p = typeof chronological[i].price === 'number' ? chronological[i].price : parseFloat(chronological[i].price);
+      if (isNaN(p) || !isFinite(p)) continue;
       var x = padLeft + (i / (chronological.length - 1)) * chartW;
       var y = padTop + chartH - ((p - minP) / range) * chartH;
       points.push({ x: x, y: y, price: p, date: chronological[i].checkedAt });
@@ -380,6 +382,7 @@ const PriceHistory = (function () {
       .then(function (response) {
         container.innerHTML = '';
         var records = Array.isArray(response) ? response :
+          (response && Array.isArray(response.data)) ? response.data :
           (response && Array.isArray(response.records)) ? response.records : [];
 
         if (records.length === 0) {
