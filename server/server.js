@@ -14,6 +14,26 @@ const pool = new Pool({
 app.use(cors());
 app.use(express.json());
 
+// ─── Request logging middleware ─────────────────────────────────────
+app.use((req, res, next) => {
+  const start = Date.now();
+  const { method, url } = req;
+
+  // Log request body for mutations
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    console.log(`→ ${method} ${url}`, JSON.stringify(req.body).slice(0, 500));
+  }
+
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const status = res.statusCode;
+    const level = status >= 500 ? 'ERROR' : status >= 400 ? 'WARN' : 'INFO';
+    console.log(`[${level}] ${method} ${url} → ${status} (${duration}ms)`);
+  });
+
+  next();
+});
+
 // ─── Initialize DB tables ───────────────────────────────────────────
 async function initDB() {
   await pool.query(`
@@ -80,6 +100,7 @@ app.get('/trackers', async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM trackers ORDER BY id DESC');
     res.json(rows);
   } catch (err) {
+    console.error('GET /trackers error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -90,6 +111,7 @@ app.get('/trackers/:id', async (req, res) => {
     if (rows.length === 0) return res.status(404).json({ error: 'Tracker not found' });
     res.json(rows[0]);
   } catch (err) {
+    console.error(`GET /trackers/${req.params.id} error:`, err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -113,6 +135,7 @@ app.post('/trackers', async (req, res) => {
     );
     res.status(201).json(rows[0]);
   } catch (err) {
+    console.error('POST /trackers error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -159,6 +182,7 @@ app.put('/trackers/:id', async (req, res) => {
     if (rows.length === 0) return res.status(404).json({ error: 'Tracker not found' });
     res.json(rows[0]);
   } catch (err) {
+    console.error(`PUT /trackers/${req.params.id} error:`, err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -168,6 +192,7 @@ app.delete('/trackers/:id', async (req, res) => {
     await pool.query('DELETE FROM trackers WHERE id = $1', [req.params.id]);
     res.status(204).end();
   } catch (err) {
+    console.error(`DELETE /trackers/${req.params.id} error:`, err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -183,6 +208,7 @@ app.get('/priceHistory', async (req, res) => {
     );
     res.json(rows);
   } catch (err) {
+    console.error('GET /priceHistory error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -197,6 +223,7 @@ app.post('/priceHistory', async (req, res) => {
     );
     res.status(201).json(rows[0]);
   } catch (err) {
+    console.error('POST /priceHistory error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -208,6 +235,7 @@ app.get('/settings/global', async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM settings WHERE id = $1', ['global']);
     res.json(rows[0] || {});
   } catch (err) {
+    console.error('GET /settings/global error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -233,6 +261,7 @@ app.put('/settings/global', async (req, res) => {
     );
     res.json(rows[0]);
   } catch (err) {
+    console.error('PUT /settings/global error:', err);
     res.status(500).json({ error: err.message });
   }
 });

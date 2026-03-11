@@ -96,55 +96,66 @@
     return (clone.textContent || '').trim();
   }
 
-  // ─── Extraction ────────────────────────────────────────────────────
+  // ─── Extraction with retry for dynamic pages ───────────────────────
 
-  var element;
-  try {
-    element = document.querySelector(cssSelector);
-  } catch (e) {
+  var MAX_RETRIES = 5;
+  var RETRY_DELAY = 1000; // ms
+
+  function tryExtract(attempt) {
+    var element;
+    try {
+      element = document.querySelector(cssSelector);
+    } catch (e) {
+      chrome.runtime.sendMessage({
+        action: 'extractionFailed',
+        trackerId: trackerId,
+        error: 'Invalid CSS selector: ' + cssSelector
+      });
+      return;
+    }
+
+    if (!element) {
+      if (attempt < MAX_RETRIES) {
+        setTimeout(function () { tryExtract(attempt + 1); }, RETRY_DELAY);
+        return;
+      }
+      chrome.runtime.sendMessage({
+        action: 'extractionFailed',
+        trackerId: trackerId,
+        error: 'Element not found for selector: ' + cssSelector
+      });
+      return;
+    }
+
+    var text = getTextContent(element, excludedSelectors);
+
+    if (trackingType === 'content') {
+      chrome.runtime.sendMessage({
+        action: 'contentExtracted',
+        trackerId: trackerId,
+        content: text
+      });
+      return;
+    }
+
+    // Price tracking
+    var price = parsePrice(text);
+
+    if (price === null) {
+      chrome.runtime.sendMessage({
+        action: 'extractionFailed',
+        trackerId: trackerId,
+        error: 'Could not parse price from text: ' + text
+      });
+      return;
+    }
+
     chrome.runtime.sendMessage({
-      action: 'extractionFailed',
+      action: 'priceExtracted',
       trackerId: trackerId,
-      error: 'Invalid CSS selector: ' + cssSelector
+      price: price
     });
-    return;
   }
 
-  if (!element) {
-    chrome.runtime.sendMessage({
-      action: 'extractionFailed',
-      trackerId: trackerId,
-      error: 'Element not found for selector: ' + cssSelector
-    });
-    return;
-  }
-
-  var text = getTextContent(element, excludedSelectors);
-
-  if (trackingType === 'content') {
-    chrome.runtime.sendMessage({
-      action: 'contentExtracted',
-      trackerId: trackerId,
-      content: text
-    });
-    return;
-  }
-
-  // Price tracking
-  var price = parsePrice(text);
-
-  if (price === null) {
-    chrome.runtime.sendMessage({
-      action: 'extractionFailed',
-      trackerId: trackerId,
-      error: 'Could not parse price from text: ' + text
-    });
-    return;
-  }
-
-  chrome.runtime.sendMessage({
-    action: 'priceExtracted',
-    trackerId: trackerId,
-    price: price
-  });
+  tryExtract(0);
 })();

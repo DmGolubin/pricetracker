@@ -118,6 +118,9 @@ async function performExtraction(tracker, pinned) {
     // Wait for page to load
     await waitForTabLoad(tabId, PAGE_LOAD_TIMEOUT_MS);
 
+    // Give SPA/dynamic pages time to render content after 'complete'
+    await new Promise(function (r) { setTimeout(r, 2000); });
+
     // Register the message listener BEFORE injecting the extractor
     // to avoid a race condition where the content script sends the
     // message before the listener is ready.

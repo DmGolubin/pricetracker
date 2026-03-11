@@ -392,7 +392,7 @@ describe('checkPrice', () => {
     });
 
     const promise = checkPrice('tracker-1', deps);
-    await jest.advanceTimersByTimeAsync(100);
+    await jest.advanceTimersByTimeAsync(3000);
     await promise;
 
     expect(deps.apiClient.addPriceRecord).toHaveBeenCalled();
@@ -434,7 +434,7 @@ describe('checkPrice', () => {
     });
 
     const promise = checkPrice('tracker-1', deps);
-    await jest.advanceTimersByTimeAsync(100);
+    await jest.advanceTimersByTimeAsync(3000);
     await promise;
 
     expect(chrome.tabs.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -455,7 +455,7 @@ describe('checkPrice', () => {
     });
 
     const promise = checkPrice('tracker-1', deps);
-    await jest.advanceTimersByTimeAsync(100);
+    await jest.advanceTimersByTimeAsync(3000);
     await promise;
 
     expect(deps.apiClient.updateTracker).toHaveBeenCalledWith('tracker-1', expect.objectContaining({
@@ -506,10 +506,9 @@ describe('checkPrice', () => {
     chrome.tabs.remove.mockResolvedValue(undefined);
 
     const promise = checkPrice('tracker-1', deps);
-    // Advance timers multiple times to handle both extraction attempts
-    await jest.advanceTimersByTimeAsync(50);
-    await jest.advanceTimersByTimeAsync(50);
-    await jest.advanceTimersByTimeAsync(50);
+    // Advance timers multiple times to handle both extraction attempts (2s delay each)
+    await jest.advanceTimersByTimeAsync(3000);
+    await jest.advanceTimersByTimeAsync(3000);
     await promise;
 
     // Should have created two tabs (first normal, then pinned)
@@ -539,7 +538,7 @@ describe('checkPrice', () => {
     });
 
     const promise = checkPrice('tracker-1', deps);
-    await jest.advanceTimersByTimeAsync(100);
+    await jest.advanceTimersByTimeAsync(3000);
     await promise;
 
     expect(deps.apiClient.addPriceRecord).toHaveBeenCalledWith('tracker-1', expect.objectContaining({
@@ -597,9 +596,9 @@ describe('checkAllPrices', () => {
     chrome.tabs.remove.mockResolvedValue(undefined);
 
     const promise = checkAllPrices(deps);
-    // Advance timers enough for both sequential checks
+    // Advance timers enough for both sequential checks (2s delay each)
     for (let i = 0; i < 20; i++) {
-      await jest.advanceTimersByTimeAsync(50);
+      await jest.advanceTimersByTimeAsync(500);
     }
     await promise;
 

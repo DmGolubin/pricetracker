@@ -52,6 +52,7 @@ describe('PriceExtractor', () => {
 
   describe('Element not found', () => {
     test('sends extractionFailed when element not found', () => {
+      jest.useFakeTimers();
       document.body.innerHTML = '<div>Hello</div>';
       runExtractor({
         trackerId: 'tracker-1',
@@ -59,11 +60,17 @@ describe('PriceExtractor', () => {
         trackingType: 'price'
       });
 
+      // Advance through all 5 retries (MAX_RETRIES=5, RETRY_DELAY=1000)
+      for (let i = 0; i < 5; i++) {
+        jest.advanceTimersByTime(1000);
+      }
+
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
         action: 'extractionFailed',
         trackerId: 'tracker-1',
         error: 'Element not found for selector: #nonexistent'
       });
+      jest.useRealTimers();
     });
 
     test('sends extractionFailed for invalid CSS selector', () => {
