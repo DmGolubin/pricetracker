@@ -279,4 +279,106 @@ describe('PriceExtractor', () => {
       });
     });
   });
+
+  describe('Fallback selectors (Google Translate font tags)', () => {
+    test('falls back to parent selector when font tags are in selector but not in DOM', () => {
+      jest.useFakeTimers();
+      // DOM has span > span with price, but no <font> tags
+      document.body.innerHTML =
+        '<div class="price-wrap">' +
+          '<span><span>5 490</span></span>' +
+        '</div>';
+
+      runExtractor({
+        trackerId: 'tracker-fb-1',
+        // Selector includes font tags from Google Translate
+        cssSelector: 'span:nth-child(1) > span:nth-child(1) > font:nth-child(1) > font:nth-child(1)',
+        trackingType: 'price'
+      });
+
+      // Advance through all 5 retries
+      for (let i = 0; i < 5; i++) {
+        jest.advanceTimersByTime(1000);
+      }
+
+      // Should fall back to "span:nth-child(1) > span:nth-child(1)" and extract price
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        action: 'priceExtracted',
+        trackerId: 'tracker-fb-1',
+        price: 5490
+      });
+      jest.useRealTimers();
+    });
+
+    test('falls back to cleaned selector (font tags stripped)', () => {
+      jest.useFakeTimers();
+      document.body.innerHTML =
+        '<div class="product">' +
+          '<span class="price"><span class="value">€29,99</span></span>' +
+        '</div>';
+
+      runExtractor({
+        trackerId: 'tracker-fb-2',
+        cssSelector: '.price > .value > font:nth-child(1)',
+        trackingType: 'price'
+      });
+
+      for (let i = 0; i < 5; i++) {
+        jest.advanceTimersByTime(1000);
+      }
+
+      // Should strip font part and find .price > .value
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        action: 'priceExtracted',
+        trackerId: 'tracker-fb-2',
+        price: 29.99
+      });
+      jest.useRealTimers();
+    });
+
+    test('still fails when no fallback matches either', () => {
+      jest.useFakeTimers();
+      document.body.innerHTML = '<div>No price here</div>';
+
+      runExtractor({
+        trackerId: 'tracker-fb-3',
+        cssSelector: '.nonexistent > font:nth-child(1)',
+        trackingType: 'price'
+      });
+
+      for (let i = 0; i < 5; i++) {
+        jest.advanceTimersByTime(1000);
+      }
+
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        action: 'extractionFailed',
+        trackerId: 'tracker-fb-3',
+        error: expect.stringContaining('Element not found')
+      });
+      jest.useRealTimers();
+    });
+
+    test('fallback works for content tracking too', () => {
+      jest.useFakeTimers();
+      document.body.innerHTML =
+        '<div class="status"><span>In Stock</span></div>';
+
+      runExtractor({
+        trackerId: 'tracker-fb-4',
+        cssSelector: '.status > span > font:nth-child(1)',
+        trackingType: 'content'
+      });
+
+      for (let i = 0; i < 5; i++) {
+        jest.advanceTimersByTime(1000);
+      }
+
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        action: 'contentExtracted',
+        trackerId: 'tracker-fb-4',
+        content: 'In Stock'
+      });
+      jest.useRealTimers();
+    });
+  });
 });

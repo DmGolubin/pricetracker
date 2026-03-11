@@ -96,10 +96,50 @@
     return (clone.textContent || '').trim();
   }
 
+  // ─── Selector fallback: strip <font> tags (Google Translate artifacts) ──
+
+  /**
+   * Generate fallback selectors by removing font/i/b tag segments
+   * that are commonly injected by Google Translate or browser extensions.
+   * Also tries progressively shorter parent selectors.
+   *
+   * Example: "span > span > font > font" → ["span > span > font", "span > span"]
+   */
+  function generateFallbackSelectors(selector) {
+    var fallbacks = [];
+    // Split by combinators (>, space) and rebuild without font/i/b tags
+    var parts = selector.split(/\s*>\s*/);
+    var translationTags = /^(font|i|b)(:nth-child\(\d+\))?$/i;
+
+    // First: try the selector with all font/i/b parts stripped
+    var cleaned = parts.filter(function (p) { return !translationTags.test(p.trim()); });
+    if (cleaned.length > 0 && cleaned.length < parts.length) {
+      fallbacks.push(cleaned.join(' > '));
+    }
+
+    // Then: try progressively shorter parent selectors
+    for (var i = parts.length - 1; i >= 1; i--) {
+      var shorter = parts.slice(0, i).join(' > ');
+      if (fallbacks.indexOf(shorter) === -1) {
+        fallbacks.push(shorter);
+      }
+    }
+
+    return fallbacks;
+  }
+
   // ─── Extraction with retry for dynamic pages ───────────────────────
 
   var MAX_RETRIES = 5;
   var RETRY_DELAY = 1000; // ms
+
+  function findElement(selector) {
+    try {
+      return document.querySelector(selector);
+    } catch (e) {
+      return null;
+    }
+  }
 
   function tryExtract(attempt) {
     var element;
@@ -119,12 +159,22 @@
         setTimeout(function () { tryExtract(attempt + 1); }, RETRY_DELAY);
         return;
       }
-      chrome.runtime.sendMessage({
-        action: 'extractionFailed',
-        trackerId: trackerId,
-        error: 'Element not found for selector: ' + cssSelector
-      });
-      return;
+
+      // Primary selector failed — try fallback selectors
+      var fallbacks = generateFallbackSelectors(cssSelector);
+      for (var i = 0; i < fallbacks.length; i++) {
+        element = findElement(fallbacks[i]);
+        if (element) break;
+      }
+
+      if (!element) {
+        chrome.runtime.sendMessage({
+          action: 'extractionFailed',
+          trackerId: trackerId,
+          error: 'Element not found for selector: ' + cssSelector
+        });
+        return;
+      }
     }
 
     var text = getTextContent(element, excludedSelectors);
