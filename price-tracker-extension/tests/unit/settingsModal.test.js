@@ -100,8 +100,8 @@ describe('SettingsModal', () => {
       SettingsModal.open(makeTracker(), container, {});
 
       const radios = container.querySelectorAll('input[name="checkInterval"]');
-      expect(radios.length).toBe(4);
-      expect(Array.from(radios).map(r => r.value)).toEqual(['6', '12', '24', '0']);
+      expect(radios.length).toBe(6);
+      expect(Array.from(radios).map(r => r.value)).toEqual(['3', '6', '12', '24', '0', '-1']);
     });
 
     test('modal has product name input', () => {

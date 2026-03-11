@@ -110,28 +110,57 @@ const SettingsModal = (function () {
     radioGroup.setAttribute('aria-label', 'Интервал проверки');
 
     var intervals = [
+      { value: 3, label: '3 часа' },
       { value: 6, label: '6 часов' },
       { value: 12, label: '12 часов' },
       { value: 24, label: '1 день' },
       { value: 0, label: 'Не обновлять' },
+      { value: -1, label: 'Свой' },
     ];
+
+    var presetValues = [3, 6, 12, 24, 0];
+    var isCustom = presetValues.indexOf(tracker.checkIntervalHours) === -1 && tracker.checkIntervalHours > 0;
+
+    // Custom interval input (hidden by default)
+    var customInput = document.createElement('input');
+    customInput.type = 'number';
+    customInput.className = 'input';
+    customInput.min = '1';
+    customInput.max = '720';
+    customInput.placeholder = 'Часы';
+    customInput.setAttribute('data-field', 'customInterval');
+    customInput.setAttribute('aria-label', 'Свой интервал в часах');
+    customInput.style.width = '80px';
+    customInput.style.marginTop = 'var(--spacing-xs)';
+    customInput.style.display = isCustom ? '' : 'none';
+    if (isCustom) {
+      customInput.value = String(tracker.checkIntervalHours);
+    }
 
     intervals.forEach(function (opt) {
       var optLabel = document.createElement('label');
       optLabel.className = 'radio-option';
-      if (tracker.checkIntervalHours === opt.value) {
+      var isSelected = opt.value === -1 ? isCustom : tracker.checkIntervalHours === opt.value;
+      if (isSelected) {
         optLabel.classList.add('selected');
       }
       var radio = document.createElement('input');
       radio.type = 'radio';
       radio.name = 'checkInterval';
       radio.value = String(opt.value);
-      radio.checked = tracker.checkIntervalHours === opt.value;
+      radio.checked = isSelected;
       radio.addEventListener('change', function () {
         radioGroup.querySelectorAll('.radio-option').forEach(function (el) {
           el.classList.remove('selected');
         });
         optLabel.classList.add('selected');
+        // Show/hide custom input
+        if (opt.value === -1) {
+          customInput.style.display = '';
+          customInput.focus();
+        } else {
+          customInput.style.display = 'none';
+        }
       });
       var span = document.createElement('span');
       span.textContent = opt.label;
@@ -141,6 +170,7 @@ const SettingsModal = (function () {
     });
 
     intervalGroup.appendChild(radioGroup);
+    intervalGroup.appendChild(customInput);
     body.appendChild(intervalGroup);
 
     // Divider after interval
@@ -350,6 +380,13 @@ const SettingsModal = (function () {
 
     var intervalRadio = modal.querySelector('input[name="checkInterval"]:checked');
     var checkIntervalHours = intervalRadio ? parseInt(intervalRadio.value, 10) : 12;
+    // Handle custom interval
+    if (checkIntervalHours === -1) {
+      var customInput = modal.querySelector('[data-field="customInterval"]');
+      checkIntervalHours = customInput ? (parseInt(customInput.value, 10) || 12) : 12;
+      if (checkIntervalHours < 1) checkIntervalHours = 1;
+      if (checkIntervalHours > 720) checkIntervalHours = 720;
+    }
 
     var nameInput = modal.querySelector('[data-field="productName"]');
     var productName = nameInput ? nameInput.value : '';
