@@ -195,7 +195,7 @@ async function handleElementSelected(message) {
     checkIntervalHours: DEFAULT_CHECK_INTERVAL,
     trackingType: message.trackingType || 'price',
     isAutoDetected: false,
-    ...(message.contentValue ? { initialContent: message.contentValue } : {}),
+    ...(message.contentValue ? { initialContent: message.contentValue, currentContent: message.contentValue } : {}),
     ...(message.excludedSelectors ? { excludedSelectors: message.excludedSelectors } : {}),
   };
 

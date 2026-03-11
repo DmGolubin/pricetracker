@@ -124,8 +124,8 @@ app.post('/trackers', async (req, res) => {
         "pageUrl", "cssSelector", "productName", "imageUrl",
         "initialPrice", "currentPrice", "minPrice", "maxPrice",
         "checkIntervalHours", "trackingType", "isAutoDetected",
-        "initialContent", "excludedSelectors"
-      ) VALUES ($1,$2,$3,$4,$5,$5,$5,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        "initialContent", "currentContent", "excludedSelectors"
+      ) VALUES ($1,$2,$3,$4,$5,$5,$5,$5,$6,$7,$8,$9,$9,$10) RETURNING *`,
       [
         d.pageUrl, d.cssSelector, d.productName || '', d.imageUrl || '',
         d.initialPrice || 0, d.checkIntervalHours || 12,

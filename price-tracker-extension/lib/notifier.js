@@ -81,11 +81,18 @@ function shouldNotify(tracker, newPrice, previousPrice, settings) {
 function sendChromeNotification(tracker, oldPrice, newPrice) {
   const notificationId = `price-tracker-${tracker.id}`;
 
+  var message;
+  if (tracker.trackingType === 'content') {
+    message = `Контент изменился`;
+  } else {
+    message = `Цена изменилась: ${oldPrice} \u2192 ${newPrice}`;
+  }
+
   chrome.notifications.create(notificationId, {
     type: 'basic',
     iconUrl: tracker.imageUrl || chrome.runtime.getURL('icons/icon128.png'),
     title: tracker.productName,
-    message: `Цена изменилась: ${oldPrice} → ${newPrice}`,
+    message: message,
   });
 }
 
@@ -104,9 +111,17 @@ async function sendTelegramNotification(tracker, oldPrice, newPrice, settings) {
   }
 
   const url = `https://api.telegram.org/bot${settings.telegramBotToken}/sendMessage`;
+
+  var priceText;
+  if (tracker.trackingType === 'content') {
+    priceText = `Контент изменился`;
+  } else {
+    priceText = `Цена: ${oldPrice} \u2192 ${newPrice}`;
+  }
+
   const text =
     `<b>${tracker.productName}</b>\n` +
-    `Цена: ${oldPrice} → ${newPrice}\n` +
+    priceText + `\n` +
     `<a href="${tracker.pageUrl}">Открыть страницу</a>`;
 
   try {

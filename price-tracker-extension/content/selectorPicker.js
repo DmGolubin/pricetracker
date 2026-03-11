@@ -441,10 +441,6 @@
     var text = getTextContent(selectedElement, excludedSelectors);
     var price = parsePrice(text);
 
-    if (price === null) {
-      showError('Не удалось распознать цену. Выберите другой элемент или используйте тип "Контент".');
-    }
-
     showConfirmForm({
       selector: selector,
       price: price,

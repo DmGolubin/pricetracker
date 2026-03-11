@@ -178,7 +178,7 @@ async function handlePriceResult(tracker, newPrice, deps) {
   // Compute updated stats
   const updatedMin = Math.min(tracker.minPrice, newPrice);
   const updatedMax = Math.max(tracker.maxPrice, newPrice);
-  const priceChanged = newPrice !== tracker.currentPrice;
+  const priceChanged = Number(newPrice) !== Number(tracker.currentPrice);
 
   const updateData = {
     currentPrice: newPrice,
@@ -230,7 +230,7 @@ async function handleContentResult(tracker, newContent, deps) {
     checkedAt: now,
   });
 
-  const contentChanged = newContent !== (tracker.currentContent || '');
+  const contentChanged = String(newContent) !== String(tracker.currentContent || '');
 
   const updateData = {
     currentContent: newContent,

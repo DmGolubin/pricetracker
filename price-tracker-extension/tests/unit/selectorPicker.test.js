@@ -231,7 +231,7 @@ describe('SelectorPicker', () => {
   });
 
   describe('Error handling', () => {
-    test('shows error when price cannot be parsed but still shows form', () => {
+    test('shows form even when price cannot be parsed (auto-selects content type)', () => {
       document.body.innerHTML = '<span id="no-price-el">No price here</span>';
       injectPicker();
 
@@ -244,14 +244,16 @@ describe('SelectorPicker', () => {
       );
       confirmBtn.click();
 
-      // Error should be shown
+      // No error toast should appear (auto-switches to content type)
       const error = document.querySelector('.pt-picker-error');
-      expect(error).not.toBeNull();
-      expect(error.textContent).toContain('Не удалось распознать цену');
+      expect(error).toBeNull();
 
-      // Form should still appear (user can switch to Content type)
+      // Form should appear with content type auto-selected
       const formOverlay = document.querySelector('.pt-picker-form-overlay');
       expect(formOverlay).not.toBeNull();
+
+      const typeBtns = document.querySelectorAll('.pt-picker-type-btn');
+      expect(typeBtns[1].classList.contains('active')).toBe(true);
     });
   });
 
