@@ -163,7 +163,7 @@ const TrackerCard = (function () {
     html += '<div class="tracker-card-image">';
     // Selection checkbox
     if (opts.selectable) {
-      html += '<label class="tracker-card-checkbox" onclick="event.stopPropagation()">'
+      html += '<label class="tracker-card-checkbox">'
             + '<input type="checkbox" class="tracker-card-select" data-tracker-id="' + escapeHtml(String(tracker.id)) + '">'
             + '<span class="tracker-card-checkmark"></span>'
             + '</label>';
@@ -245,6 +245,14 @@ const TrackerCard = (function () {
     html += '</div>'; // end card-body
 
     card.innerHTML = html;
+
+    // Prevent checkbox clicks from bubbling to card (CSP-safe, no inline handlers)
+    var checkboxLabel = card.querySelector('.tracker-card-checkbox');
+    if (checkboxLabel) {
+      checkboxLabel.addEventListener('click', function (e) {
+        e.stopPropagation();
+      });
+    }
 
     // Keyboard accessibility
     card.addEventListener('keydown', function (e) {

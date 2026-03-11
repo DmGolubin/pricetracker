@@ -304,7 +304,10 @@ const Dashboard = (function () {
     // Use TrackerCard component if loaded
     if (typeof TrackerCard !== 'undefined' && TrackerCard.create) {
       const card = TrackerCard.create(tracker, { selectable: selectMode });
-      card.addEventListener('click', () => onCardClick(tracker));
+      card.addEventListener('click', function (e) {
+        if (e.target.closest('.tracker-card-checkbox')) return;
+        onCardClick(tracker);
+      });
       // Wire checkbox change for multiselect
       var cb = card.querySelector('.tracker-card-select');
       if (cb) {
@@ -466,8 +469,8 @@ const Dashboard = (function () {
     applyFilters();
     renderGrid();
 
-    // Load sparklines for price trackers
-    loadSparklines();
+    // Load sparklines after a short delay to ensure DOM is ready
+    setTimeout(function () { loadSparklines(); }, 300);
 
     // Reset badge when dashboard opens (Requirement 17.2)
     sendMessage({ action: 'resetBadge' }).catch(() => {});

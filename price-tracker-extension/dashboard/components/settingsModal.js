@@ -110,7 +110,6 @@ const SettingsModal = (function () {
     radioGroup.setAttribute('aria-label', 'Интервал проверки');
 
     var intervals = [
-      { value: 0.003, label: '10 сек (тест)' },
       { value: 3, label: '3 часа' },
       { value: 6, label: '6 часов' },
       { value: 12, label: '12 часов' },
@@ -119,7 +118,7 @@ const SettingsModal = (function () {
       { value: -1, label: 'Свой' },
     ];
 
-    var presetValues = [0.003, 3, 6, 12, 24, 0];
+    var presetValues = [3, 6, 12, 24, 0];
     var isCustom = presetValues.indexOf(tracker.checkIntervalHours) === -1 && tracker.checkIntervalHours > 0;
 
     // Custom interval input (hidden by default)
@@ -205,16 +204,178 @@ const SettingsModal = (function () {
     // Divider after image URL
     body.appendChild(createSectionDivider());
 
-    // Product group input
+    // Product group dropdown (tag-like: select existing or create new)
     var groupGroup = createFormGroup('Группа товара');
-    var groupInput = document.createElement('input');
-    groupInput.type = 'text';
-    groupInput.className = 'input';
-    groupInput.value = tracker.productGroup || '';
-    groupInput.placeholder = 'Например: iPhone 15 Pro';
-    groupInput.setAttribute('data-field', 'productGroup');
-    groupInput.setAttribute('aria-label', 'Группа товара для сравнения цен');
-    groupGroup.appendChild(groupInput);
+    var groupWrapper = document.createElement('div');
+    groupWrapper.className = 'group-dropdown-wrapper';
+    groupWrapper.style.position = 'relative';
+
+    var groupDisplay = document.createElement('button');
+    groupDisplay.type = 'button';
+    groupDisplay.className = 'input group-dropdown-btn';
+    groupDisplay.setAttribute('data-field', 'productGroup');
+    groupDisplay.setAttribute('aria-label', 'Группа товара для сравнения цен');
+    groupDisplay.setAttribute('aria-haspopup', 'listbox');
+    groupDisplay.style.textAlign = 'left';
+    groupDisplay.style.cursor = 'pointer';
+    groupDisplay.style.width = '100%';
+    groupDisplay.textContent = tracker.productGroup || 'Выбрать группу...';
+    if (!tracker.productGroup) {
+      groupDisplay.style.color = 'var(--text-muted)';
+    }
+
+    // Hidden input to store value for collectFormData
+    var groupHidden = document.createElement('input');
+    groupHidden.type = 'hidden';
+    groupHidden.setAttribute('data-field', 'productGroup');
+    groupHidden.value = tracker.productGroup || '';
+
+    var groupDropdown = document.createElement('div');
+    groupDropdown.className = 'group-dropdown-list';
+    groupDropdown.setAttribute('role', 'listbox');
+    groupDropdown.style.cssText = 'display:none;position:absolute;top:100%;left:0;right:0;z-index:10;'
+      + 'background:var(--bg-card);border:1px solid var(--border-primary);border-radius:var(--radius-md);'
+      + 'max-height:180px;overflow-y:auto;margin-top:4px;box-shadow:0 4px 12px rgba(0,0,0,0.3)';
+
+    function setGroupValue(val) {
+      groupHidden.value = val;
+      groupDisplay.textContent = val || 'Выбрать группу...';
+      groupDisplay.style.color = val ? '' : 'var(--text-muted)';
+      groupDropdown.style.display = 'none';
+    }
+
+    function populateGroupDropdown() {
+      groupDropdown.innerHTML = '';
+
+      // "Нет группы" option to clear
+      var noneItem = document.createElement('div');
+      noneItem.className = 'group-dropdown-item';
+      noneItem.setAttribute('role', 'option');
+      noneItem.textContent = '— Нет группы —';
+      noneItem.style.cssText = 'padding:8px 12px;cursor:pointer;color:var(--text-muted);font-style:italic';
+      noneItem.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setGroupValue('');
+      });
+      noneItem.addEventListener('mouseenter', function () { noneItem.style.background = 'var(--bg-input)'; });
+      noneItem.addEventListener('mouseleave', function () { noneItem.style.background = ''; });
+      groupDropdown.appendChild(noneItem);
+
+      // Fetch existing groups from API
+      sendMessage({ action: 'getAllTrackers' }).then(function (response) {
+        var trackers = response && response.trackers ? response.trackers : (Array.isArray(response) ? response : []);
+        var groups = {};
+        trackers.forEach(function (t) {
+          if (t.productGroup && t.status !== 'paused' && t.checkIntervalHours > 0) {
+            groups[t.productGroup] = true;
+          }
+        });
+        var groupNames = Object.keys(groups).sort();
+
+        groupNames.forEach(function (name) {
+          var item = document.createElement('div');
+          item.className = 'group-dropdown-item';
+          item.setAttribute('role', 'option');
+          item.textContent = name;
+          item.style.cssText = 'padding:8px 12px;cursor:pointer;color:var(--text-primary)';
+          if (name === groupHidden.value) {
+            item.style.background = 'var(--bg-input)';
+            item.style.fontWeight = '600';
+          }
+          item.addEventListener('click', function (e) {
+            e.stopPropagation();
+            setGroupValue(name);
+          });
+          item.addEventListener('mouseenter', function () { item.style.background = 'var(--bg-input)'; });
+          item.addEventListener('mouseleave', function () {
+            item.style.background = name === groupHidden.value ? 'var(--bg-input)' : '';
+          });
+          groupDropdown.appendChild(item);
+        });
+
+        // "Создать новую" option
+        var createItem = document.createElement('div');
+        createItem.className = 'group-dropdown-item group-dropdown-create';
+        createItem.setAttribute('role', 'option');
+        createItem.textContent = '+ Создать новую...';
+        createItem.style.cssText = 'padding:8px 12px;cursor:pointer;color:var(--accent-primary);font-weight:500;border-top:1px solid var(--border-primary)';
+        createItem.addEventListener('click', function (e) {
+          e.stopPropagation();
+          // Replace dropdown with text input for new group name
+          groupDropdown.style.display = 'none';
+          var newInput = document.createElement('input');
+          newInput.type = 'text';
+          newInput.className = 'input';
+          newInput.placeholder = 'Название новой группы';
+          newInput.setAttribute('aria-label', 'Название новой группы');
+          newInput.style.marginTop = '4px';
+          groupWrapper.appendChild(newInput);
+          newInput.focus();
+          newInput.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter') {
+              ev.preventDefault();
+              var val = newInput.value.trim();
+              if (val) setGroupValue(val);
+              newInput.remove();
+            } else if (ev.key === 'Escape') {
+              newInput.remove();
+            }
+          });
+          newInput.addEventListener('blur', function () {
+            var val = newInput.value.trim();
+            if (val) setGroupValue(val);
+            newInput.remove();
+          });
+        });
+        createItem.addEventListener('mouseenter', function () { createItem.style.background = 'var(--bg-input)'; });
+        createItem.addEventListener('mouseleave', function () { createItem.style.background = ''; });
+        groupDropdown.appendChild(createItem);
+      }).catch(function () {
+        // On error, just show create option
+        var createItem = document.createElement('div');
+        createItem.className = 'group-dropdown-item group-dropdown-create';
+        createItem.textContent = '+ Создать новую...';
+        createItem.style.cssText = 'padding:8px 12px;cursor:pointer;color:var(--accent-primary)';
+        createItem.addEventListener('click', function (e) {
+          e.stopPropagation();
+          groupDropdown.style.display = 'none';
+          var newInput = document.createElement('input');
+          newInput.type = 'text';
+          newInput.className = 'input';
+          newInput.placeholder = 'Название новой группы';
+          newInput.style.marginTop = '4px';
+          groupWrapper.appendChild(newInput);
+          newInput.focus();
+          newInput.addEventListener('blur', function () {
+            var val = newInput.value.trim();
+            if (val) setGroupValue(val);
+            newInput.remove();
+          });
+        });
+        groupDropdown.appendChild(createItem);
+      });
+    }
+
+    groupDisplay.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var isOpen = groupDropdown.style.display !== 'none';
+      if (isOpen) {
+        groupDropdown.style.display = 'none';
+      } else {
+        populateGroupDropdown();
+        groupDropdown.style.display = '';
+      }
+    });
+
+    // Close dropdown on outside click
+    overlay.addEventListener('click', function () {
+      groupDropdown.style.display = 'none';
+    });
+
+    groupWrapper.appendChild(groupDisplay);
+    groupWrapper.appendChild(groupHidden);
+    groupWrapper.appendChild(groupDropdown);
+    groupGroup.appendChild(groupWrapper);
     body.appendChild(groupGroup);
 
     // Divider after product group
@@ -424,7 +585,7 @@ const SettingsModal = (function () {
     var modeRadio = modal.querySelector('input[name="checkMode"]:checked');
     var checkMode = modeRadio ? modeRadio.value : 'auto';
 
-    var groupInput = modal.querySelector('[data-field="productGroup"]');
+    var groupInput = modal.querySelector('input[data-field="productGroup"]');
     var productGroup = groupInput ? groupInput.value : '';
 
     var filterTypeSelect = modal.querySelector('[data-field="filterType"]');
