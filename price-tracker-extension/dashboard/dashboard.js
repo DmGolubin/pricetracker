@@ -610,7 +610,7 @@ const Dashboard = (function () {
                   productName: t.productName || '',
                   imageUrl: t.imageUrl || '',
                   initialPrice: t.initialPrice || t.currentPrice || 0,
-                  checkIntervalHours: t.checkIntervalHours || 12,
+                  checkIntervalHours: t.checkIntervalHours || 3,
                   trackingType: t.trackingType || 'price',
                   isAutoDetected: t.isAutoDetected || false,
                   initialContent: t.initialContent || t.currentContent || '',

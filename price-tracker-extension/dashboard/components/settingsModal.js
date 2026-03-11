@@ -567,11 +567,11 @@ const SettingsModal = (function () {
     var notificationsEnabled = notifCheckbox ? notifCheckbox.checked : true;
 
     var intervalRadio = modal.querySelector('input[name="checkInterval"]:checked');
-    var checkIntervalHours = intervalRadio ? parseFloat(intervalRadio.value) : 12;
+    var checkIntervalHours = intervalRadio ? parseFloat(intervalRadio.value) : 3;
     // Handle custom interval
     if (checkIntervalHours === -1) {
       var customInput = modal.querySelector('[data-field="customInterval"]');
-      checkIntervalHours = customInput ? (parseInt(customInput.value, 10) || 12) : 12;
+      checkIntervalHours = customInput ? (parseInt(customInput.value, 10) || 3) : 3;
       if (checkIntervalHours < 1) checkIntervalHours = 1;
       if (checkIntervalHours > 720) checkIntervalHours = 720;
     }
@@ -665,7 +665,7 @@ const SettingsModal = (function () {
   function handleTogglePause(overlay, tracker) {
     var isPaused = tracker.status === 'paused';
     var newStatus = isPaused ? 'active' : 'paused';
-    var newInterval = isPaused ? (tracker.checkIntervalHours || 12) : 0;
+    var newInterval = isPaused ? (tracker.checkIntervalHours || 3) : 0;
 
     sendMessage({
       action: 'updateTracker',

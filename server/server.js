@@ -48,7 +48,7 @@ async function initDB() {
       "minPrice" NUMERIC DEFAULT 0,
       "maxPrice" NUMERIC DEFAULT 0,
       "previousPrice" NUMERIC DEFAULT 0,
-      "checkIntervalHours" NUMERIC DEFAULT 12,
+      "checkIntervalHours" NUMERIC DEFAULT 3,
       "trackingType" TEXT DEFAULT 'price',
       "isAutoDetected" BOOLEAN DEFAULT false,
       status TEXT DEFAULT 'active',
@@ -146,7 +146,7 @@ app.post('/trackers', async (req, res) => {
       ) VALUES ($1,$2,$3,$4,$5,$5,$5,$5,$6,$7,$8,$9,$9,$10) RETURNING *`,
       [
         d.pageUrl, d.cssSelector, d.productName || '', d.imageUrl || '',
-        d.initialPrice || 0, d.checkIntervalHours || 12,
+        d.initialPrice || 0, d.checkIntervalHours || 3,
         d.trackingType || 'price', d.isAutoDetected || false,
         d.initialContent || '', JSON.stringify(d.excludedSelectors || []),
       ]

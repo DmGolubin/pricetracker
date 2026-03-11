@@ -33,6 +33,7 @@ var MessageFromCS = {
 
 // Check intervals in hours
 var CHECK_INTERVALS = {
+  THREE_HOURS: 3,
   SIX_HOURS: 6,
   TWELVE_HOURS: 12,
   TWENTY_FOUR_HOURS: 24,
@@ -40,7 +41,7 @@ var CHECK_INTERVALS = {
 };
 
 // Default check interval
-var DEFAULT_CHECK_INTERVAL = CHECK_INTERVALS.TWELVE_HOURS;
+var DEFAULT_CHECK_INTERVAL = CHECK_INTERVALS.THREE_HOURS;
 
 // Page load timeout in milliseconds
 var PAGE_LOAD_TIMEOUT_MS = 30000;
