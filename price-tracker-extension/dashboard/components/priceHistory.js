@@ -152,11 +152,207 @@ const PriceHistory = (function () {
     return item;
   }
 
+  // ─── SVG Chart ─────────────────────────────────────────────────────
+
+  function formatShortDate(isoString) {
+    try {
+      var d = new Date(isoString);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /**
+   * Render an SVG line chart for price history.
+   * Records should be sorted oldest-first for left-to-right display.
+   */
+  function renderChart(container, records) {
+    // Need at least 2 points for a line
+    if (!records || records.length < 2) return;
+
+    // Sort oldest first (chronological)
+    var chronological = records.slice().sort(function (a, b) {
+      return new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime();
+    });
+
+    var prices = chronological.map(function (r) { return r.price; });
+    var validPrices = prices.filter(function (p) { return typeof p === 'number' && isFinite(p); });
+    if (validPrices.length < 2) return;
+
+    var minP = Math.min.apply(null, validPrices);
+    var maxP = Math.max.apply(null, validPrices);
+
+    // Chart dimensions
+    var W = 440;
+    var H = 180;
+    var padTop = 24;
+    var padBottom = 32;
+    var padLeft = 52;
+    var padRight = 16;
+    var chartW = W - padLeft - padRight;
+    var chartH = H - padTop - padBottom;
+
+    // Price range with padding
+    var range = maxP - minP;
+    if (range === 0) range = 1; // flat line case
+
+    // Build points
+    var points = [];
+    for (var i = 0; i < chronological.length; i++) {
+      var p = chronological[i].price;
+      if (typeof p !== 'number' || !isFinite(p)) continue;
+      var x = padLeft + (i / (chronological.length - 1)) * chartW;
+      var y = padTop + chartH - ((p - minP) / range) * chartH;
+      points.push({ x: x, y: y, price: p, date: chronological[i].checkedAt });
+    }
+
+    if (points.length < 2) return;
+
+    // Determine color: compare last vs first
+    var firstPrice = points[0].price;
+    var lastPrice = points[points.length - 1].price;
+    var lineColor = lastPrice < firstPrice ? 'var(--accent-green)' : lastPrice > firstPrice ? 'var(--accent-red)' : 'var(--accent-primary)';
+
+    // Build SVG
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var wrapper = document.createElement('div');
+    wrapper.className = 'price-history-chart';
+    wrapper.setAttribute('data-testid', 'price-history-chart');
+
+    var svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', H);
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'График цен');
+    svg.style.display = 'block';
+
+    // Grid lines (horizontal)
+    var gridSteps = 4;
+    for (var g = 0; g <= gridSteps; g++) {
+      var gy = padTop + (g / gridSteps) * chartH;
+      var gridLine = document.createElementNS(svgNS, 'line');
+      gridLine.setAttribute('x1', padLeft);
+      gridLine.setAttribute('y1', gy);
+      gridLine.setAttribute('x2', W - padRight);
+      gridLine.setAttribute('y2', gy);
+      gridLine.setAttribute('stroke', 'var(--border-primary)');
+      gridLine.setAttribute('stroke-width', '1');
+      gridLine.setAttribute('stroke-dasharray', '4,4');
+      svg.appendChild(gridLine);
+
+      // Y-axis label
+      var yVal = maxP - (g / gridSteps) * (maxP - minP);
+      var yLabel = document.createElementNS(svgNS, 'text');
+      yLabel.setAttribute('x', padLeft - 6);
+      yLabel.setAttribute('y', gy + 4);
+      yLabel.setAttribute('text-anchor', 'end');
+      yLabel.setAttribute('fill', 'var(--text-muted)');
+      yLabel.setAttribute('font-size', '10');
+      yLabel.textContent = Math.round(yVal).toLocaleString();
+      svg.appendChild(yLabel);
+    }
+
+    // Gradient fill under line
+    var defs = document.createElementNS(svgNS, 'defs');
+    var grad = document.createElementNS(svgNS, 'linearGradient');
+    grad.setAttribute('id', 'ph-fill-grad');
+    grad.setAttribute('x1', '0');
+    grad.setAttribute('y1', '0');
+    grad.setAttribute('x2', '0');
+    grad.setAttribute('y2', '1');
+    var stop1 = document.createElementNS(svgNS, 'stop');
+    stop1.setAttribute('offset', '0%');
+    stop1.setAttribute('stop-color', lineColor);
+    stop1.setAttribute('stop-opacity', '0.3');
+    var stop2 = document.createElementNS(svgNS, 'stop');
+    stop2.setAttribute('offset', '100%');
+    stop2.setAttribute('stop-color', lineColor);
+    stop2.setAttribute('stop-opacity', '0.02');
+    grad.appendChild(stop1);
+    grad.appendChild(stop2);
+    defs.appendChild(grad);
+    svg.appendChild(defs);
+
+    // Area fill
+    var areaPath = points.map(function (pt, idx) {
+      return (idx === 0 ? 'M' : 'L') + pt.x.toFixed(1) + ',' + pt.y.toFixed(1);
+    }).join(' ');
+    areaPath += ' L' + points[points.length - 1].x.toFixed(1) + ',' + (padTop + chartH);
+    areaPath += ' L' + points[0].x.toFixed(1) + ',' + (padTop + chartH) + ' Z';
+    var area = document.createElementNS(svgNS, 'path');
+    area.setAttribute('d', areaPath);
+    area.setAttribute('fill', 'url(#ph-fill-grad)');
+    svg.appendChild(area);
+
+    // Line
+    var linePath = points.map(function (pt, idx) {
+      return (idx === 0 ? 'M' : 'L') + pt.x.toFixed(1) + ',' + pt.y.toFixed(1);
+    }).join(' ');
+    var line = document.createElementNS(svgNS, 'path');
+    line.setAttribute('d', linePath);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', lineColor);
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(line);
+
+    // Dots
+    for (var d = 0; d < points.length; d++) {
+      var circle = document.createElementNS(svgNS, 'circle');
+      circle.setAttribute('cx', points[d].x.toFixed(1));
+      circle.setAttribute('cy', points[d].y.toFixed(1));
+      circle.setAttribute('r', '3.5');
+      circle.setAttribute('fill', lineColor);
+      circle.setAttribute('stroke', 'var(--bg-card)');
+      circle.setAttribute('stroke-width', '1.5');
+      svg.appendChild(circle);
+    }
+
+    // X-axis date labels (show first, last, and a few in between)
+    var labelCount = Math.min(points.length, 5);
+    var labelStep = points.length <= labelCount ? 1 : Math.floor((points.length - 1) / (labelCount - 1));
+    for (var li = 0; li < points.length; li += labelStep) {
+      var xLabel = document.createElementNS(svgNS, 'text');
+      xLabel.setAttribute('x', points[li].x.toFixed(1));
+      xLabel.setAttribute('y', H - 6);
+      xLabel.setAttribute('text-anchor', 'middle');
+      xLabel.setAttribute('fill', 'var(--text-muted)');
+      xLabel.setAttribute('font-size', '10');
+      xLabel.textContent = formatShortDate(points[li].date);
+      svg.appendChild(xLabel);
+    }
+    // Always show last label if not already shown
+    var lastIdx = points.length - 1;
+    if (lastIdx % labelStep !== 0) {
+      var lastLabel = document.createElementNS(svgNS, 'text');
+      lastLabel.setAttribute('x', points[lastIdx].x.toFixed(1));
+      lastLabel.setAttribute('y', H - 6);
+      lastLabel.setAttribute('text-anchor', 'middle');
+      lastLabel.setAttribute('fill', 'var(--text-muted)');
+      lastLabel.setAttribute('font-size', '10');
+      lastLabel.textContent = formatShortDate(points[lastIdx].date);
+      svg.appendChild(lastLabel);
+    }
+
+    wrapper.appendChild(svg);
+    container.appendChild(wrapper);
+  }
+
+  // ─── List rendering ───────────────────────────────────────────────
+
   function renderList(container, records, isContentTracker) {
     var title = document.createElement('h3');
     title.className = 'price-history-title';
     title.textContent = 'История цен';
     container.appendChild(title);
+
+    // Render chart for price trackers with 2+ records
+    if (!isContentTracker) {
+      renderChart(container, records);
+    }
 
     var sorted = sortNewestFirst(records);
     var decreaseFlags = markDecreases(sorted);

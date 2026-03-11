@@ -344,6 +344,78 @@ describe('PriceHistory', () => {
     });
   });
 
+  // ─── Price chart (SVG) ────────────────────────────────────────────
+
+  describe('price chart', () => {
+    test('renders SVG chart when 2+ price records exist', async () => {
+      const records = [
+        makeRecord({ id: 'r1', price: 100, checkedAt: '2024-01-01T10:00:00Z' }),
+        makeRecord({ id: 'r2', price: 90, checkedAt: '2024-02-01T10:00:00Z' }),
+      ];
+
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (cb) cb(records);
+      });
+
+      PriceHistory.render(makeTracker(), container);
+      await flushPromises();
+
+      const chart = container.querySelector('[data-testid="price-history-chart"]');
+      expect(chart).not.toBeNull();
+      const svg = chart.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg.getAttribute('aria-label')).toBe('График цен');
+    });
+
+    test('does not render chart with only 1 record', async () => {
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (cb) cb([makeRecord({ price: 100 })]);
+      });
+
+      PriceHistory.render(makeTracker(), container);
+      await flushPromises();
+
+      const chart = container.querySelector('[data-testid="price-history-chart"]');
+      expect(chart).toBeNull();
+    });
+
+    test('does not render chart for content trackers', async () => {
+      const records = [
+        makeRecord({ id: 'r1', price: 0, content: 'A', checkedAt: '2024-01-01T10:00:00Z' }),
+        makeRecord({ id: 'r2', price: 0, content: 'B', checkedAt: '2024-02-01T10:00:00Z' }),
+      ];
+
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (cb) cb(records);
+      });
+
+      PriceHistory.render(makeTracker({ trackingType: 'content' }), container);
+      await flushPromises();
+
+      const chart = container.querySelector('[data-testid="price-history-chart"]');
+      expect(chart).toBeNull();
+    });
+
+    test('chart contains circle dots for each data point', async () => {
+      const records = [
+        makeRecord({ id: 'r1', price: 100, checkedAt: '2024-01-01T10:00:00Z' }),
+        makeRecord({ id: 'r2', price: 90, checkedAt: '2024-02-01T10:00:00Z' }),
+        makeRecord({ id: 'r3', price: 80, checkedAt: '2024-03-01T10:00:00Z' }),
+      ];
+
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (cb) cb(records);
+      });
+
+      PriceHistory.render(makeTracker(), container);
+      await flushPromises();
+
+      const chart = container.querySelector('[data-testid="price-history-chart"]');
+      const circles = chart.querySelectorAll('circle');
+      expect(circles.length).toBe(3);
+    });
+  });
+
   // ─── Error handling ─────────────────────────────────────────────
 
   describe('error handling', () => {

@@ -277,3 +277,18 @@
   color: var(--text-muted);
   font-size: var(--font-sm);
 }
+
+/* ===== Price History Chart ===== */
+.price-history-chart {
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.price-history-chart svg {
+  width: 100%;
+  height: auto;
+}
