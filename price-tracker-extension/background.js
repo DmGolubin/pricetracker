@@ -41,9 +41,6 @@ var DEFAULT_CHECK_INTERVAL = _c.DEFAULT_CHECK_INTERVAL;
 // Dependencies object passed to priceChecker
 const deps = { apiClient, badgeManager, notifier };
 
-// Map notification IDs to tracker page URLs for click handling
-const notificationUrlMap = {};
-
 /**
  * Initialize API base URL from saved settings.
  */
@@ -137,6 +134,12 @@ function getMessageHandler(message, sender) {
     // autoDetectResult is for popup only — SW ignores it
     case 'autoDetectResult':
       return Promise.resolve();
+
+    // Extraction results are handled by waitForExtractionMessage listener in priceChecker
+    case MessageFromCS.PRICE_EXTRACTED:
+    case MessageFromCS.CONTENT_EXTRACTED:
+    case MessageFromCS.EXTRACTION_FAILED:
+      return null;
 
     default:
       return null;

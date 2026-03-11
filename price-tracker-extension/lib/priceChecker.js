@@ -78,7 +78,7 @@ function waitForExtractionMessage(trackerId, timeoutMs) {
     }, timeoutMs);
 
     function listener(message, _sender, _sendResponse) {
-      if (!message || message.trackerId !== trackerId) return;
+      if (!message || String(message.trackerId) !== String(trackerId)) return;
 
       const validActions = [
         MessageFromCS.PRICE_EXTRACTED,
@@ -118,6 +118,11 @@ async function performExtraction(tracker, pinned) {
     // Wait for page to load
     await waitForTabLoad(tabId, PAGE_LOAD_TIMEOUT_MS);
 
+    // Register the message listener BEFORE injecting the extractor
+    // to avoid a race condition where the content script sends the
+    // message before the listener is ready.
+    const extractionPromise = waitForExtractionMessage(tracker.id, PAGE_LOAD_TIMEOUT_MS);
+
     // Set extraction data on the tab, then inject the extractor script
     await chrome.scripting.executeScript({
       target: { tabId },
@@ -136,7 +141,7 @@ async function performExtraction(tracker, pinned) {
     });
 
     // Wait for the extraction result message
-    const message = await waitForExtractionMessage(tracker.id, PAGE_LOAD_TIMEOUT_MS);
+    const message = await extractionPromise;
     return message;
   } finally {
     // Always close the tab
