@@ -61,6 +61,7 @@ async function initDB() {
       "previousContent" TEXT DEFAULT '',
       "excludedSelectors" JSONB DEFAULT '[]',
       "notificationsEnabled" BOOLEAN DEFAULT true,
+      "productGroup" TEXT DEFAULT '',
       "createdAt" TIMESTAMP DEFAULT NOW(),
       "updatedAt" TIMESTAMP DEFAULT NOW()
     );
@@ -71,6 +72,7 @@ async function initDB() {
       price NUMERIC,
       "contentValue" TEXT DEFAULT '',
       "previousContent" TEXT DEFAULT '',
+      "screenshotUrl" TEXT DEFAULT '',
       "checkedAt" TIMESTAMP DEFAULT NOW()
     );
 
@@ -89,6 +91,16 @@ async function initDB() {
   // Migration: add notificationsEnabled column if missing
   await pool.query(`
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "notificationsEnabled" BOOLEAN DEFAULT true;
+  `);
+
+  // Migration: add productGroup column if missing
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "productGroup" TEXT DEFAULT '';
+  `);
+
+  // Migration: add screenshotUrl column to price_history if missing
+  await pool.query(`
+    ALTER TABLE price_history ADD COLUMN IF NOT EXISTS "screenshotUrl" TEXT DEFAULT '';
   `);
 
   // Migration: change checkIntervalHours from INTEGER to NUMERIC for sub-hour intervals
@@ -161,6 +173,7 @@ app.put('/trackers/:id', async (req, res) => {
       'errorMessage', 'checkMode', 'notificationFilter',
       'initialContent', 'currentContent', 'previousContent', 'excludedSelectors',
       'notificationsEnabled',
+      'productGroup',
     ];
 
     for (const key of allowed) {
@@ -223,9 +236,9 @@ app.post('/priceHistory', async (req, res) => {
   try {
     const d = req.body;
     const { rows } = await pool.query(
-      `INSERT INTO price_history ("trackerId", price, "contentValue", "previousContent", "checkedAt")
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [d.trackerId, d.price || 0, d.contentValue || '', d.previousContent || '', d.checkedAt || new Date().toISOString()]
+      `INSERT INTO price_history ("trackerId", price, "contentValue", "previousContent", "screenshotUrl", "checkedAt")
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [d.trackerId, d.price || 0, d.contentValue || '', d.previousContent || '', d.screenshotUrl || '', d.checkedAt || new Date().toISOString()]
     );
     res.status(201).json(rows[0]);
   } catch (err) {

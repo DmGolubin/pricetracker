@@ -104,14 +104,15 @@ describe('Toolbar', () => {
       expect(rightGroup.querySelector('.btn-icon')).not.toBeNull();
     });
 
-    test('has right group with export, import, and settings buttons', () => {
+    test('has right group with export, import, select, and settings buttons', () => {
       Toolbar.init(container, {});
       const rightGroup = container.querySelector('.toolbar-group-right');
       const btns = rightGroup.querySelectorAll('.btn-icon');
-      expect(btns.length).toBe(3);
+      expect(btns.length).toBe(4);
       expect(btns[0].getAttribute('aria-label')).toBe('Экспорт трекеров');
       expect(btns[1].getAttribute('aria-label')).toBe('Импорт трекеров');
-      expect(btns[2].getAttribute('aria-label')).toBe('Открыть настройки');
+      expect(btns[2].getAttribute('aria-label')).toBe('Выбрать трекеры');
+      expect(btns[3].getAttribute('aria-label')).toBe('Открыть настройки');
     });
 
     test('has dividers between groups', () => {
@@ -165,18 +166,20 @@ describe('Toolbar', () => {
   // ─── Filter select ─────────────────────────────────────────────
 
   describe('filter select', () => {
-    test('has three options: all, down, up', () => {
+    test('has four options: all, down, up, groups', () => {
       Toolbar.init(container, {});
       const select = container.querySelector('select.input');
       const options = select.querySelectorAll('option');
 
-      expect(options).toHaveLength(3);
+      expect(options).toHaveLength(4);
       expect(options[0].value).toBe('all');
       expect(options[0].textContent).toBe('Все');
       expect(options[1].value).toBe('down');
       expect(options[1].textContent).toBe('Цена снизилась');
       expect(options[2].value).toBe('up');
       expect(options[2].textContent).toBe('Цена выросла');
+      expect(options[3].value).toBe('groups');
+      expect(options[3].textContent).toBe('Группы товаров');
     });
 
     test('triggers onFilter callback on change event', () => {

@@ -147,15 +147,59 @@ async function handleHttpError(response) {
   }
 }
 
+// ─── Offline Cache ──────────────────────────────────────────────
+
+/**
+ * Save data to chrome.storage.local for offline access.
+ * @param {string} key
+ * @param {*} data
+ */
+function cacheSet(key, data) {
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    var obj = {};
+    obj[key] = { data: data, cachedAt: new Date().toISOString() };
+    chrome.storage.local.set(obj);
+  }
+}
+
+/**
+ * Get cached data from chrome.storage.local.
+ * @param {string} key
+ * @returns {Promise<{data: *, cachedAt: string}|null>}
+ */
+function cacheGet(key) {
+  return new Promise(function (resolve) {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(key, function (result) {
+        resolve(result[key] || null);
+      });
+    } else {
+      resolve(null);
+    }
+  });
+}
+
 // ─── Tracker Methods ────────────────────────────────────────────────
 
 /**
- * Get all trackers.
+ * Get all trackers. Caches result; returns cache on failure.
  * @returns {Promise<Object[]>}
  */
 async function getTrackers() {
-  const res = await request('/trackers');
-  return res.json();
+  try {
+    const res = await request('/trackers');
+    const data = await res.json();
+    cacheSet('cache_trackers', data);
+    return data;
+  } catch (err) {
+    var cached = await cacheGet('cache_trackers');
+    if (cached && cached.data) {
+      cached.data._fromCache = true;
+      cached.data._cachedAt = cached.cachedAt;
+      return cached.data;
+    }
+    throw err;
+  }
 }
 
 /**
@@ -240,12 +284,20 @@ async function addPriceRecord(trackerId, record) {
 // ─── Settings Methods ───────────────────────────────────────────────
 
 /**
- * Get global settings.
+ * Get global settings. Caches result; returns cache on failure.
  * @returns {Promise<Object>}
  */
 async function getSettings() {
-  const res = await request('/settings/global');
-  return res.json();
+  try {
+    const res = await request('/settings/global');
+    const data = await res.json();
+    cacheSet('cache_settings', data);
+    return data;
+  } catch (err) {
+    var cached = await cacheGet('cache_settings');
+    if (cached && cached.data) return cached.data;
+    throw err;
+  }
 }
 
 /**
@@ -280,6 +332,8 @@ const _apiClient = {
   _request: request,
   _isNetworkError: isNetworkError,
   _sleep: sleep,
+  _cacheSet: cacheSet,
+  _cacheGet: cacheGet,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

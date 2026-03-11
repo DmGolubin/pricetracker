@@ -102,6 +102,7 @@ const Toolbar = (function () {
       { value: 'all', text: 'Все' },
       { value: 'down', text: 'Цена снизилась' },
       { value: 'up', text: 'Цена выросла' },
+      { value: 'groups', text: 'Группы товаров' },
     ];
 
     options.forEach(function (opt) {
@@ -144,6 +145,16 @@ const Toolbar = (function () {
       if (typeof cb.onImport === 'function') cb.onImport();
     });
 
+    var selectBtn = document.createElement('button');
+    selectBtn.className = 'btn-icon';
+    selectBtn.type = 'button';
+    selectBtn.setAttribute('aria-label', 'Выбрать трекеры');
+    selectBtn.innerHTML = _Icons ? _Icons.el('check', 18) : '☑';
+    selectBtn.title = 'Выбрать';
+    selectBtn.addEventListener('click', function () {
+      if (typeof cb.onSelectMode === 'function') cb.onSelectMode();
+    });
+
     var settingsBtn = document.createElement('button');
     settingsBtn.className = 'btn-icon';
     settingsBtn.type = 'button';
@@ -157,6 +168,7 @@ const Toolbar = (function () {
 
     rightGroup.appendChild(exportBtn);
     rightGroup.appendChild(importBtn);
+    rightGroup.appendChild(selectBtn);
     rightGroup.appendChild(settingsBtn);
 
     // ─── Assemble toolbar with dividers ─────────────────────────

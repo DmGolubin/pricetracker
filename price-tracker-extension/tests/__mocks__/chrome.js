@@ -20,6 +20,7 @@ const chrome = {
     update: jest.fn(),
     query: jest.fn(),
     sendMessage: jest.fn(),
+    captureVisibleTab: jest.fn().mockResolvedValue('data:image/jpeg;base64,mock'),
     onUpdated: {
       addListener: jest.fn(),
       removeListener: jest.fn()
@@ -50,6 +51,13 @@ const chrome = {
   action: {
     setBadgeText: jest.fn(),
     setBadgeBackgroundColor: jest.fn()
+  },
+
+  storage: {
+    local: {
+      get: jest.fn((key, cb) => { if (cb) cb({}); }),
+      set: jest.fn((obj, cb) => { if (cb) cb(); }),
+    }
   }
 };
 

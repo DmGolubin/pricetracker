@@ -14,6 +14,8 @@ const Dashboard = (function () {
   let filteredTrackers = [];
   let searchQuery = '';
   let priceFilter = 'all'; // 'all' | 'down' | 'up'
+  let selectedIds = new Set();
+  let selectMode = false;
 
   // ─── DOM references ─────────────────────────────────────────────────
   const trackerGrid = document.getElementById('tracker-grid');
@@ -198,16 +200,76 @@ const Dashboard = (function () {
 
     showGrid();
 
+    // Group view
+    if (priceFilter === 'groups') {
+      renderGroupedView();
+      return;
+    }
+
     filteredTrackers.forEach((tracker, index) => {
       const cardEl = renderTrackerCard(tracker);
       cardEl.classList.add('tracker-card-enter');
       trackerGrid.appendChild(cardEl);
 
-      // Stagger animation: requestAnimationFrame + 50ms × index delay
       requestAnimationFrame(function () {
         setTimeout(function () {
           cardEl.classList.add('visible');
         }, 50 * index);
+      });
+    });
+  }
+
+  /**
+   * Render trackers grouped by productGroup field.
+   * Shows comparison table for each group.
+   */
+  function renderGroupedView() {
+    var groups = {};
+    var ungrouped = [];
+
+    filteredTrackers.forEach(function (t) {
+      if (t.productGroup) {
+        if (!groups[t.productGroup]) groups[t.productGroup] = [];
+        groups[t.productGroup].push(t);
+      } else {
+        ungrouped.push(t);
+      }
+    });
+
+    var groupNames = Object.keys(groups).sort();
+
+    groupNames.forEach(function (name) {
+      var section = document.createElement('div');
+      section.className = 'product-group-section';
+      section.style.cssText = 'grid-column:1/-1;margin-bottom:var(--spacing-lg)';
+
+      var header = document.createElement('h3');
+      header.className = 'product-group-title';
+      header.textContent = name;
+      header.style.cssText = 'color:var(--text-primary);margin-bottom:var(--spacing-sm);font-size:var(--font-lg)';
+      section.appendChild(header);
+
+      var table = document.createElement('div');
+      table.className = 'product-group-table';
+      table.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:var(--spacing-sm)';
+
+      groups[name].forEach(function (tracker) {
+        var cardEl = renderTrackerCard(tracker);
+        cardEl.classList.add('tracker-card-enter', 'visible');
+        table.appendChild(cardEl);
+      });
+
+      section.appendChild(table);
+      trackerGrid.appendChild(section);
+    });
+
+    // Ungrouped trackers
+    ungrouped.forEach(function (tracker, index) {
+      var cardEl = renderTrackerCard(tracker);
+      cardEl.classList.add('tracker-card-enter');
+      trackerGrid.appendChild(cardEl);
+      requestAnimationFrame(function () {
+        setTimeout(function () { cardEl.classList.add('visible'); }, 50 * index);
       });
     });
   }
@@ -241,8 +303,26 @@ const Dashboard = (function () {
   function renderTrackerCard(tracker) {
     // Use TrackerCard component if loaded
     if (typeof TrackerCard !== 'undefined' && TrackerCard.create) {
-      const card = TrackerCard.create(tracker);
+      const card = TrackerCard.create(tracker, { selectable: selectMode });
       card.addEventListener('click', () => onCardClick(tracker));
+      // Wire checkbox change for multiselect
+      var cb = card.querySelector('.tracker-card-select');
+      if (cb) {
+        cb.addEventListener('change', function () {
+          if (cb.checked) {
+            selectedIds.add(tracker.id);
+            card.classList.add('selected');
+          } else {
+            selectedIds.delete(tracker.id);
+            card.classList.remove('selected');
+          }
+          updateBulkBar();
+        });
+        if (selectedIds.has(tracker.id)) {
+          cb.checked = true;
+          card.classList.add('selected');
+        }
+      }
       return card;
     }
 
@@ -391,6 +471,101 @@ const Dashboard = (function () {
 
     // Reset badge when dashboard opens (Requirement 17.2)
     sendMessage({ action: 'resetBadge' }).catch(() => {});
+  }
+
+  // ─── Multiselect / Bulk Operations ─────────────────────────────
+
+  function toggleSelectMode() {
+    selectMode = !selectMode;
+    if (!selectMode) {
+      selectedIds.clear();
+    }
+    applyFilters();
+    renderGrid();
+    updateBulkBar();
+  }
+
+  function updateBulkBar() {
+    var existing = document.getElementById('bulk-bar');
+    if (selectedIds.size === 0) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (!existing) {
+      existing = document.createElement('div');
+      existing.id = 'bulk-bar';
+      existing.className = 'bulk-bar';
+      var main = document.querySelector('.dashboard-main');
+      if (main) main.parentNode.insertBefore(existing, main);
+    }
+    existing.innerHTML = '';
+
+    var countSpan = document.createElement('span');
+    countSpan.className = 'bulk-bar-count';
+    countSpan.textContent = 'Выбрано: ' + selectedIds.size;
+    existing.appendChild(countSpan);
+
+    var pauseBtn = document.createElement('button');
+    pauseBtn.className = 'btn';
+    pauseBtn.textContent = 'Приостановить';
+    pauseBtn.addEventListener('click', function () { bulkAction('pause'); });
+    existing.appendChild(pauseBtn);
+
+    var resumeBtn = document.createElement('button');
+    resumeBtn.className = 'btn';
+    resumeBtn.textContent = 'Возобновить';
+    resumeBtn.addEventListener('click', function () { bulkAction('resume'); });
+    existing.appendChild(resumeBtn);
+
+    var deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn btn-danger';
+    deleteBtn.textContent = 'Удалить';
+    deleteBtn.addEventListener('click', function () { bulkAction('delete'); });
+    existing.appendChild(deleteBtn);
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = 'Отмена';
+    cancelBtn.addEventListener('click', function () {
+      selectMode = false;
+      selectedIds.clear();
+      applyFilters();
+      renderGrid();
+      updateBulkBar();
+    });
+    existing.appendChild(cancelBtn);
+  }
+
+  async function bulkAction(action) {
+    var ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    if (action === 'delete') {
+      if (!confirm('Удалить ' + ids.length + ' трекеров?')) return;
+    }
+
+    for (var i = 0; i < ids.length; i++) {
+      try {
+        if (action === 'delete') {
+          await sendMessage({ action: 'deleteTracker', trackerId: ids[i] });
+          allTrackers = allTrackers.filter(function (t) { return t.id !== ids[i]; });
+        } else if (action === 'pause') {
+          await sendMessage({ action: 'updateTracker', trackerId: ids[i], data: { status: 'paused' } });
+          var t = allTrackers.find(function (t) { return t.id === ids[i]; });
+          if (t) t.status = 'paused';
+        } else if (action === 'resume') {
+          await sendMessage({ action: 'updateTracker', trackerId: ids[i], data: { status: 'active' } });
+          var t2 = allTrackers.find(function (t) { return t.id === ids[i]; });
+          if (t2) t2.status = 'active';
+        }
+      } catch (_) {}
+    }
+
+    selectedIds.clear();
+    selectMode = false;
+    applyFilters();
+    renderGrid();
+    updateBulkBar();
   }
 
   // ─── Import / Export ─────────────────────────────────────────────
@@ -549,6 +724,7 @@ const Dashboard = (function () {
         },
         onExport: handleExport,
         onImport: handleImport,
+        onSelectMode: toggleSelectMode,
       });
     }
 
@@ -592,6 +768,8 @@ const Dashboard = (function () {
     _setTrackers: (trackers) => { allTrackers = trackers; },
     _setSearchQuery: (q) => { searchQuery = q; },
     _setPriceFilter: (f) => { priceFilter = f; },
+    toggleSelectMode,
+    bulkAction,
   };
 })();
 

@@ -205,6 +205,21 @@ const SettingsModal = (function () {
     // Divider after image URL
     body.appendChild(createSectionDivider());
 
+    // Product group input
+    var groupGroup = createFormGroup('Группа товара');
+    var groupInput = document.createElement('input');
+    groupInput.type = 'text';
+    groupInput.className = 'input';
+    groupInput.value = tracker.productGroup || '';
+    groupInput.placeholder = 'Например: iPhone 15 Pro';
+    groupInput.setAttribute('data-field', 'productGroup');
+    groupInput.setAttribute('aria-label', 'Группа товара для сравнения цен');
+    groupGroup.appendChild(groupInput);
+    body.appendChild(groupGroup);
+
+    // Divider after product group
+    body.appendChild(createSectionDivider());
+
     // Check mode radio buttons
     var modeGroup = createFormGroup('Режим проверки');
     var modeRadioGroup = document.createElement('div');
@@ -409,6 +424,9 @@ const SettingsModal = (function () {
     var modeRadio = modal.querySelector('input[name="checkMode"]:checked');
     var checkMode = modeRadio ? modeRadio.value : 'auto';
 
+    var groupInput = modal.querySelector('[data-field="productGroup"]');
+    var productGroup = groupInput ? groupInput.value : '';
+
     var filterTypeSelect = modal.querySelector('[data-field="filterType"]');
     var filterType = filterTypeSelect ? filterTypeSelect.value : 'none';
 
@@ -430,6 +448,7 @@ const SettingsModal = (function () {
       productName: productName,
       imageUrl: imageUrl,
       checkMode: checkMode,
+      productGroup: productGroup,
       notificationFilter: notificationFilter,
     };
   }

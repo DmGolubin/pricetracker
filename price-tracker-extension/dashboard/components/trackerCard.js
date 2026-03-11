@@ -129,9 +129,11 @@ const TrackerCard = (function () {
   /**
    * Create a tracker card DOM element.
    * @param {Object} tracker - Tracker data object
+   * @param {Object} [options] - Options (e.g. { selectable: false })
    * @returns {HTMLElement} The card element
    */
-  function create(tracker) {
+  function create(tracker, options) {
+    var opts = options || {};
     var card = document.createElement('div');
     card.className = 'card tracker-card';
     if (tracker.status === 'paused') {
@@ -159,6 +161,13 @@ const TrackerCard = (function () {
 
     // Image section
     html += '<div class="tracker-card-image">';
+    // Selection checkbox
+    if (opts.selectable) {
+      html += '<label class="tracker-card-checkbox" onclick="event.stopPropagation()">'
+            + '<input type="checkbox" class="tracker-card-select" data-tracker-id="' + escapeHtml(String(tracker.id)) + '">'
+            + '<span class="tracker-card-checkmark"></span>'
+            + '</label>';
+    }
     if (tracker.imageUrl) {
       html += '<img src="' + escapeHtml(tracker.imageUrl) + '"'
             + ' alt="' + escapeHtml(tracker.productName) + '"'

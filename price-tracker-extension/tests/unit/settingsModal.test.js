@@ -492,7 +492,7 @@ describe('SettingsModal', () => {
     test('modal body contains section dividers between form groups', () => {
       SettingsModal.open(makeTracker(), container, {});
       const dividers = container.querySelectorAll('.modal-section-divider');
-      expect(dividers.length).toBeGreaterThanOrEqual(3);
+      expect(dividers.length).toBeGreaterThanOrEqual(4);
     });
 
     test('section dividers are <hr> elements', () => {

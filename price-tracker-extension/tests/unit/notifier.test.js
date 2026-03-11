@@ -295,6 +295,10 @@ describe('sendTelegramNotification', () => {
     expect(body.text).toContain('100');
     expect(body.text).toContain('80');
     expect(body.text).toContain('https://shop.com/gadget');
+    // Inline keyboard with URL button
+    expect(body.reply_markup).toBeDefined();
+    expect(body.reply_markup.inline_keyboard[0][0].text).toBe('Открыть страницу');
+    expect(body.reply_markup.inline_keyboard[0][0].url).toBe('https://shop.com/gadget');
   });
 
   test('skips sending when botToken is missing', async () => {

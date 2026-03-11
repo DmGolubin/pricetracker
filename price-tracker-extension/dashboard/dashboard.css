@@ -593,3 +593,49 @@
 .diff-removed {
   animation: diff-highlight-removed 500ms ease-out forwards;
 }
+
+/* ===== Multiselect Checkbox ===== */
+.tracker-card-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tracker-card-checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.tracker-card.selected {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+/* ===== Bulk Action Bar ===== */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-primary);
+  animation: fadeIn 200ms ease;
+}
+
+.bulk-bar-count {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  margin-right: auto;
+}
+
+.bulk-bar .btn {
+  font-size: var(--font-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+}

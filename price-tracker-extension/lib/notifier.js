@@ -229,6 +229,13 @@ async function sendTelegramNotification(tracker, oldPrice, newPrice, settings) {
     priceText + `\n` +
     `<a href="${tracker.pageUrl}">Открыть страницу</a>`;
 
+  // Inline keyboard: "Открыть страницу" URL button
+  var replyMarkup = {
+    inline_keyboard: [
+      [{ text: 'Открыть страницу', url: tracker.pageUrl }]
+    ]
+  };
+
   try {
     await fetch(url, {
       method: 'POST',
@@ -237,6 +244,7 @@ async function sendTelegramNotification(tracker, oldPrice, newPrice, settings) {
         chat_id: settings.telegramChatId,
         text,
         parse_mode: 'HTML',
+        reply_markup: replyMarkup,
       }),
     });
   } catch (err) {
