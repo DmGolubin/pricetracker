@@ -99,29 +99,11 @@ function waitForExtractionMessage(trackerId, timeoutMs) {
 }
 
 /**
- * Capture a screenshot of the visible tab.
- * @param {number} tabId
- * @returns {Promise<string>} data URL of the screenshot, or empty string on failure
- */
-async function captureScreenshot(tabId) {
-  try {
-    // Make the tab active briefly to capture
-    await chrome.tabs.update(tabId, { active: true });
-    // Small delay for rendering
-    await new Promise(function (r) { setTimeout(r, 500); });
-    var dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 60 });
-    return dataUrl || '';
-  } catch (_) {
-    return '';
-  }
-}
-
-/**
  * Open a tab, inject the extractor, and return the extraction result.
  *
  * @param {Object} tracker
  * @param {boolean} pinned — whether to open as pinned tab
- * @returns {Promise<Object>} — extraction message with optional screenshotUrl
+ * @returns {Promise<Object>} — extraction message
  */
 async function performExtraction(tracker, pinned) {
   const tab = await chrome.tabs.create({
@@ -164,13 +146,6 @@ async function performExtraction(tracker, pinned) {
     // Wait for the extraction result message
     const message = await extractionPromise;
 
-    // Capture screenshot for history
-    var screenshotUrl = '';
-    try {
-      screenshotUrl = await captureScreenshot(tabId);
-    } catch (_) {}
-    message._screenshotUrl = screenshotUrl;
-
     return message;
   } finally {
     // Always close the tab
@@ -191,7 +166,7 @@ async function performExtraction(tracker, pinned) {
  * @param {Object} deps — { apiClient, badgeManager, notifier }
  * @returns {Promise<void>}
  */
-async function handlePriceResult(tracker, newPrice, deps, screenshotUrl) {
+async function handlePriceResult(tracker, newPrice, deps) {
   const { apiClient, badgeManager, notifier } = deps;
   const now = new Date().toISOString();
 
@@ -199,7 +174,6 @@ async function handlePriceResult(tracker, newPrice, deps, screenshotUrl) {
   await apiClient.addPriceRecord(tracker.id, {
     price: newPrice,
     checkedAt: now,
-    screenshotUrl: screenshotUrl || '',
   });
 
   // Compute updated stats
@@ -247,7 +221,7 @@ async function handlePriceResult(tracker, newPrice, deps, screenshotUrl) {
  * @param {Object} deps — { apiClient, badgeManager, notifier }
  * @returns {Promise<void>}
  */
-async function handleContentResult(tracker, newContent, deps, screenshotUrl) {
+async function handleContentResult(tracker, newContent, deps) {
   const { apiClient, badgeManager, notifier } = deps;
   const now = new Date().toISOString();
 
@@ -274,7 +248,6 @@ async function handleContentResult(tracker, newContent, deps, screenshotUrl) {
     contentValue: newContent,
     previousContent: contentChanged ? (tracker.currentContent || '') : '',
     checkedAt: now,
-    screenshotUrl: screenshotUrl || '',
   });
 
   const updateData = {
@@ -373,9 +346,9 @@ async function checkPrice(trackerId, deps) {
   // Process successful extraction
   try {
     if (message.action === MessageFromCS.PRICE_EXTRACTED) {
-      await handlePriceResult(tracker, message.price, deps, message._screenshotUrl);
+      await handlePriceResult(tracker, message.price, deps);
     } else if (message.action === MessageFromCS.CONTENT_EXTRACTED) {
-      await handleContentResult(tracker, message.content, deps, message._screenshotUrl);
+      await handleContentResult(tracker, message.content, deps);
     }
   } catch (err) {
     await setTrackerError(tracker, 'Failed to save result: ' + err.message, apiClient);
@@ -439,7 +412,6 @@ const _priceChecker = {
   _handlePriceResult: handlePriceResult,
   _handleContentResult: handleContentResult,
   _setTrackerError: setTrackerError,
-  _captureScreenshot: captureScreenshot,
 };
 
 if (typeof module !== 'undefined' && module.exports) {
