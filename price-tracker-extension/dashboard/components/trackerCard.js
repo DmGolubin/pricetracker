@@ -174,8 +174,7 @@ const TrackerCard = (function () {
     if (tracker.imageUrl) {
       html += '<img src="' + escapeHtml(tracker.imageUrl) + '"'
             + ' alt="' + escapeHtml(tracker.productName) + '"'
-            + ' class="tracker-card-img"'
-            + ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
+            + ' class="tracker-card-img">';
       html += '<div class="tracker-card-img-placeholder" style="display:none" aria-hidden="true">' + (_Icons ? _Icons.get('package') : '📦') + '</div>';
     } else {
       html += '<div class="tracker-card-img-placeholder" aria-hidden="true">' + (_Icons ? _Icons.get('package') : '📦') + '</div>';
@@ -248,6 +247,16 @@ const TrackerCard = (function () {
     html += '</div>'; // end card-body
 
     card.innerHTML = html;
+
+    // Programmatic image error handler (CSP-safe, no inline onerror)
+    var img = card.querySelector('.tracker-card-img');
+    if (img) {
+      img.addEventListener('error', function () {
+        img.style.display = 'none';
+        var placeholder = img.nextElementSibling;
+        if (placeholder) placeholder.style.display = 'flex';
+      });
+    }
 
     // Prevent checkbox clicks from bubbling to card (CSP-safe, no inline handlers)
     var checkboxLabel = card.querySelector('.tracker-card-checkbox');
