@@ -134,6 +134,7 @@ const PriceHistory = (function () {
     var contentText = record.content != null ? record.content : record.contentValue;
     if (isContentTracker && contentText != null && contentText !== '') {
       valueEl.textContent = contentText;
+      valueEl.style.whiteSpace = 'pre-line';
     } else {
       var p = typeof record.price === 'number' ? record.price : parseFloat(record.price);
       valueEl.textContent = !isNaN(p) ? p.toFixed(2) : String(record.price);

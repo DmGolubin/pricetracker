@@ -67,38 +67,44 @@ const ContentDiff = (function () {
   }
 
   /**
-   * Split text into words by whitespace. Returns an array of non-empty strings.
+   * Split text into tokens for diffing.
+   * If text contains newlines, split by lines to produce a line-level diff.
+   * Otherwise, split by whitespace for word-level diff.
    */
-  function splitWords(text) {
+  function splitTokens(text) {
     if (!text) return [];
+    if (text.indexOf('\n') !== -1) {
+      return text.split('\n').filter(function (l) { return l.trim().length > 0; });
+    }
     return text.split(/\s+/).filter(function (w) { return w.length > 0; });
   }
 
   /**
-   * Compute a word-level diff between oldText and newText.
+   * Compute a diff between oldText and newText.
+   * Uses line-level diff when content contains newlines, word-level otherwise.
    *
    * @param {string} oldText - The previous content.
    * @param {string} newText - The current content.
    * @returns {Array<{type: string, value: string}>} Array of diff operations.
    */
   function computeDiff(oldText, newText) {
-    var oldWords = splitWords(oldText);
-    var newWords = splitWords(newText);
+    var oldTokens = splitTokens(oldText);
+    var newTokens = splitTokens(newText);
 
-    if (oldWords.length === 0 && newWords.length === 0) {
+    if (oldTokens.length === 0 && newTokens.length === 0) {
       return [];
     }
 
-    if (oldWords.length === 0) {
-      return newWords.map(function (w) { return { type: 'added', value: w }; });
+    if (oldTokens.length === 0) {
+      return newTokens.map(function (w) { return { type: 'added', value: w }; });
     }
 
-    if (newWords.length === 0) {
-      return oldWords.map(function (w) { return { type: 'removed', value: w }; });
+    if (newTokens.length === 0) {
+      return oldTokens.map(function (w) { return { type: 'removed', value: w }; });
     }
 
-    var table = buildLCSTable(oldWords, newWords);
-    return backtrack(table, oldWords, newWords, oldWords.length, newWords.length);
+    var table = buildLCSTable(oldTokens, newTokens);
+    return backtrack(table, oldTokens, newTokens, oldTokens.length, newTokens.length);
   }
 
   // ─── Rendering ────────────────────────────────────────────────────
@@ -128,10 +134,14 @@ const ContentDiff = (function () {
       var span = document.createElement('span');
       span.setAttribute('data-testid', 'content-diff-text');
       span.textContent = currentContent;
+      span.style.whiteSpace = 'pre-line';
       wrapper.appendChild(span);
       container.appendChild(wrapper);
       return;
     }
+
+    // Determine if content is line-based (contains newlines)
+    var isLineBased = currentContent.indexOf('\n') !== -1 || previousContent.indexOf('\n') !== -1;
 
     // Compute and render diff
     var ops = computeDiff(previousContent, currentContent);
@@ -153,9 +163,13 @@ const ContentDiff = (function () {
       el.textContent = op.value;
       wrapper.appendChild(el);
 
-      // Add space between words (except after the last one)
+      // Add separator between tokens (except after the last one)
       if (i < ops.length - 1) {
-        wrapper.appendChild(document.createTextNode(' '));
+        if (isLineBased) {
+          wrapper.appendChild(document.createElement('br'));
+        } else {
+          wrapper.appendChild(document.createTextNode(' '));
+        }
       }
     }
 

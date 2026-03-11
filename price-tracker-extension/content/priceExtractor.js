@@ -84,16 +84,60 @@
 
   // ─── Helpers ───────────────────────────────────────────────────────
 
-  function getTextContent(el, excluded) {
-    if (!excluded || !excluded.length) {
-      return (el.textContent || '').trim();
+  // Block-level tags that should produce line breaks between content chunks
+  var BLOCK_TAGS = /^(DIV|P|LI|TR|DT|DD|H[1-6]|SECTION|ARTICLE|HEADER|FOOTER|NAV|ASIDE|MAIN|BLOCKQUOTE|FIGURE|FIGCAPTION|DETAILS|SUMMARY|UL|OL|DL|TABLE|THEAD|TBODY|TFOOT|FIELDSET|FORM|PRE|ADDRESS)$/;
+
+  /**
+   * Recursively extract text from a DOM tree, inserting newlines between
+   * block-level elements so the output is human-readable regardless of site.
+   */
+  function extractReadableText(node) {
+    if (node.nodeType === 3) { // Text node
+      return node.textContent || '';
     }
-    var clone = el.cloneNode(true);
-    excluded.forEach(function (sel) {
-      var nodes = clone.querySelectorAll(sel);
-      nodes.forEach(function (node) { node.remove(); });
-    });
-    return (clone.textContent || '').trim();
+    if (node.nodeType !== 1) return ''; // Not an element
+
+    var tag = node.tagName;
+    if (tag === 'BR') return '\n';
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') return '';
+
+    var parts = [];
+    var children = node.childNodes;
+    for (var i = 0; i < children.length; i++) {
+      parts.push(extractReadableText(children[i]));
+    }
+    var text = parts.join('');
+
+    if (BLOCK_TAGS.test(tag)) {
+      text = '\n' + text + '\n';
+    }
+
+    return text;
+  }
+
+  /**
+   * Clean up extracted text: collapse multiple newlines, trim each line,
+   * remove empty lines, and trim the whole result.
+   */
+  function cleanExtractedText(raw) {
+    return raw
+      .split('\n')
+      .map(function (line) { return line.replace(/[\s\u00A0\u202F]+/g, ' ').trim(); })
+      .filter(function (line) { return line.length > 0; })
+      .join('\n')
+      .trim();
+  }
+
+  function getTextContent(el, excluded) {
+    var target = el;
+    if (excluded && excluded.length) {
+      target = el.cloneNode(true);
+      excluded.forEach(function (sel) {
+        var nodes = target.querySelectorAll(sel);
+        nodes.forEach(function (node) { node.remove(); });
+      });
+    }
+    return cleanExtractedText(extractReadableText(target));
   }
 
   // ─── Selector fallback: strip <font> tags (Google Translate artifacts) ──

@@ -145,16 +145,50 @@
     return '';
   }
 
-  function getTextContent(el, excludedSelectors) {
-    if (!excludedSelectors || !excludedSelectors.length) {
-      return (el.textContent || '').trim();
+  // Block-level tags that should produce line breaks between content chunks
+  var BLOCK_TAGS = /^(DIV|P|LI|TR|DT|DD|H[1-6]|SECTION|ARTICLE|HEADER|FOOTER|NAV|ASIDE|MAIN|BLOCKQUOTE|FIGURE|FIGCAPTION|DETAILS|SUMMARY|UL|OL|DL|TABLE|THEAD|TBODY|TFOOT|FIELDSET|FORM|PRE|ADDRESS)$/;
+
+  function extractReadableText(node) {
+    if (node.nodeType === 3) return node.textContent || '';
+    if (node.nodeType !== 1) return '';
+
+    var tag = node.tagName;
+    if (tag === 'BR') return '\n';
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') return '';
+
+    var parts = [];
+    var children = node.childNodes;
+    for (var i = 0; i < children.length; i++) {
+      parts.push(extractReadableText(children[i]));
     }
-    const clone = el.cloneNode(true);
-    excludedSelectors.forEach(function (sel) {
-      const excluded = clone.querySelectorAll(sel);
-      excluded.forEach(function (node) { node.remove(); });
-    });
-    return (clone.textContent || '').trim();
+    var text = parts.join('');
+
+    if (BLOCK_TAGS.test(tag)) {
+      text = '\n' + text + '\n';
+    }
+
+    return text;
+  }
+
+  function cleanExtractedText(raw) {
+    return raw
+      .split('\n')
+      .map(function (line) { return line.replace(/[\s\u00A0\u202F]+/g, ' ').trim(); })
+      .filter(function (line) { return line.length > 0; })
+      .join('\n')
+      .trim();
+  }
+
+  function getTextContent(el, excludedSelectors) {
+    var target = el;
+    if (excludedSelectors && excludedSelectors.length) {
+      target = el.cloneNode(true);
+      excludedSelectors.forEach(function (sel) {
+        var nodes = target.querySelectorAll(sel);
+        nodes.forEach(function (node) { node.remove(); });
+      });
+    }
+    return cleanExtractedText(extractReadableText(target));
   }
 
   // ─── State ─────────────────────────────────────────────────────────
