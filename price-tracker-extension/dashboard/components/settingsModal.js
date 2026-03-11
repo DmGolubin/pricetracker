@@ -237,7 +237,8 @@ const SettingsModal = (function () {
 
     // Show/hide filter value based on type
     function updateFilterValueVisibility() {
-      if (filterSelect.value === 'none') {
+      var noValueTypes = ['none', 'increased', 'decreased'];
+      if (noValueTypes.indexOf(filterSelect.value) !== -1) {
         filterValueInput.style.display = 'none';
       } else {
         filterValueInput.style.display = '';

@@ -274,6 +274,18 @@ describe('SettingsModal', () => {
       sel.dispatchEvent(new Event('change'));
       expect(val.style.display).not.toBe('none');
 
+      sel.value = 'decreased';
+      sel.dispatchEvent(new Event('change'));
+      expect(val.style.display).toBe('none');
+
+      sel.value = 'increased';
+      sel.dispatchEvent(new Event('change'));
+      expect(val.style.display).toBe('none');
+
+      sel.value = 'greaterThan';
+      sel.dispatchEvent(new Event('change'));
+      expect(val.style.display).not.toBe('none');
+
       sel.value = 'none';
       sel.dispatchEvent(new Event('change'));
       expect(val.style.display).toBe('none');

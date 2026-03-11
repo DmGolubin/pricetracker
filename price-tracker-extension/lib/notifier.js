@@ -22,8 +22,8 @@ function evaluateFilter(tracker, newPrice, previousPrice) {
   const filter = tracker.notificationFilter;
 
   if (!filter || filter.type === NotificationFilterType.NONE) {
-    // Default behavior: notify when price drops below initial
-    return newPrice < tracker.initialPrice;
+    // Default behavior: notify on any price change
+    return newPrice !== previousPrice;
   }
 
   switch (filter.type) {
@@ -44,7 +44,7 @@ function evaluateFilter(tracker, newPrice, previousPrice) {
       return newPrice < previousPrice;
 
     default:
-      return newPrice < tracker.initialPrice;
+      return newPrice !== previousPrice;
   }
 }
 

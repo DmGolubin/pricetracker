@@ -555,12 +555,12 @@ describe('Integration: Notifier decision logic', () => {
     expect(decision.telegram).toBe(true);
   });
 
-  test('shouldNotify returns false when price did not drop below initial', () => {
+  test('shouldNotify returns false when price did not change', () => {
     const realNotifier = jest.requireActual('../../lib/notifier');
     const tracker = makeTracker({ notificationsEnabled: true, initialPrice: 100 });
     const settings = { telegramBotToken: 'bot', telegramChatId: 'chat' };
 
-    const decision = realNotifier.shouldNotify(tracker, 110, 100, settings);
+    const decision = realNotifier.shouldNotify(tracker, 100, 100, settings);
 
     expect(decision.chrome).toBe(false);
     expect(decision.telegram).toBe(false);

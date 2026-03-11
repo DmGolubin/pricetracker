@@ -48,15 +48,15 @@ function makeSettings(overrides = {}) {
 // ─── evaluateFilter ─────────────────────────────────────────────────
 
 describe('evaluateFilter', () => {
-  test('returns true when no filter and newPrice < initialPrice', () => {
+  test('returns true when no filter and price changed', () => {
     const tracker = makeTracker({ initialPrice: 100 });
     expect(evaluateFilter(tracker, 80, 100)).toBe(true);
+    expect(evaluateFilter(tracker, 110, 100)).toBe(true);
   });
 
-  test('returns false when no filter and newPrice >= initialPrice', () => {
+  test('returns false when no filter and price unchanged', () => {
     const tracker = makeTracker({ initialPrice: 100 });
-    expect(evaluateFilter(tracker, 100, 90)).toBe(false);
-    expect(evaluateFilter(tracker, 110, 90)).toBe(false);
+    expect(evaluateFilter(tracker, 100, 100)).toBe(false);
   });
 
   test('filter type "none" uses default behavior', () => {
@@ -65,7 +65,8 @@ describe('evaluateFilter', () => {
       notificationFilter: { type: NotificationFilterType.NONE },
     });
     expect(evaluateFilter(tracker, 80, 100)).toBe(true);
-    expect(evaluateFilter(tracker, 110, 100)).toBe(false);
+    expect(evaluateFilter(tracker, 110, 100)).toBe(true);
+    expect(evaluateFilter(tracker, 100, 100)).toBe(false);
   });
 
   test('filter type "contains" checks currentContent', () => {
@@ -133,7 +134,8 @@ describe('evaluateFilter', () => {
       notificationFilter: { type: 'unknownType' },
     });
     expect(evaluateFilter(tracker, 80, 100)).toBe(true);
-    expect(evaluateFilter(tracker, 110, 100)).toBe(false);
+    expect(evaluateFilter(tracker, 110, 100)).toBe(true);
+    expect(evaluateFilter(tracker, 100, 100)).toBe(false);
   });
 });
 
@@ -182,7 +184,8 @@ describe('shouldNotify', () => {
   test('both false when filter does not pass', () => {
     const tracker = makeTracker({ initialPrice: 100, notificationsEnabled: true });
     const settings = makeSettings();
-    const result = shouldNotify(tracker, 110, 100, settings);
+    // Same price = no change = filter does not pass
+    const result = shouldNotify(tracker, 100, 100, settings);
     expect(result).toEqual({ chrome: false, telegram: false });
   });
 
@@ -378,7 +381,8 @@ describe('notify', () => {
     const tracker = makeTracker({ initialPrice: 100, notificationsEnabled: true });
     const settings = makeSettings();
 
-    await notify(tracker, 100, 110, settings);
+    // Same price = no change = filter does not pass
+    await notify(tracker, 100, 100, settings);
 
     expect(chrome.notifications.create).not.toHaveBeenCalled();
     expect(global.fetch).not.toHaveBeenCalled();
