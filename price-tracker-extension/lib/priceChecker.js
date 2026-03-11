@@ -241,10 +241,11 @@ async function handleContentResult(tracker, newContent, deps) {
   const contentChanged = normalizedNew !== normalizedOld;
 
   // Save content record to history with the contentValue field (server expects "contentValue")
-  // Include previousContent so ContentDiff can render the diff in history view
+  // Only include previousContent when content actually changed, so ContentDiff
+  // doesn't show a false diff from formatting differences (e.g. whitespace changes)
   await apiClient.addPriceRecord(tracker.id, {
     contentValue: newContent,
-    previousContent: tracker.currentContent || '',
+    previousContent: contentChanged ? (tracker.currentContent || '') : '',
     checkedAt: now,
   });
 
