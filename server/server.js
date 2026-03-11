@@ -48,7 +48,7 @@ async function initDB() {
       "minPrice" NUMERIC DEFAULT 0,
       "maxPrice" NUMERIC DEFAULT 0,
       "previousPrice" NUMERIC DEFAULT 0,
-      "checkIntervalHours" INTEGER DEFAULT 12,
+      "checkIntervalHours" NUMERIC DEFAULT 12,
       "trackingType" TEXT DEFAULT 'price',
       "isAutoDetected" BOOLEAN DEFAULT false,
       status TEXT DEFAULT 'active',
@@ -89,6 +89,11 @@ async function initDB() {
   // Migration: add notificationsEnabled column if missing
   await pool.query(`
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "notificationsEnabled" BOOLEAN DEFAULT true;
+  `);
+
+  // Migration: change checkIntervalHours from INTEGER to NUMERIC for sub-hour intervals
+  await pool.query(`
+    ALTER TABLE trackers ALTER COLUMN "checkIntervalHours" TYPE NUMERIC USING "checkIntervalHours"::NUMERIC;
   `);
 
   console.log('Database tables initialized');

@@ -27,7 +27,15 @@ function scheduleTracker(trackerId, intervalHours) {
   }
 
   const alarmName = getAlarmName(trackerId);
-  chrome.alarms.create(alarmName, { periodInMinutes: intervalHours * 60 });
+  var periodMin = intervalHours * 60;
+
+  // For very short test intervals (< 1 min), use delayInMinutes
+  // Chrome enforces minimum ~30s in unpacked extensions
+  if (periodMin < 1) {
+    chrome.alarms.create(alarmName, { delayInMinutes: periodMin, periodInMinutes: periodMin });
+  } else {
+    chrome.alarms.create(alarmName, { periodInMinutes: periodMin });
+  }
 }
 
 /**

@@ -42,6 +42,15 @@ describe('scheduleTracker', () => {
     );
   });
 
+  test('creates alarm with delayInMinutes for sub-minute intervals', () => {
+    scheduleTracker('test-10s', 0.003);
+
+    expect(chrome.alarms.create).toHaveBeenCalledWith(
+      'price-check-test-10s',
+      { delayInMinutes: 0.003 * 60, periodInMinutes: 0.003 * 60 }
+    );
+  });
+
   test('cancels alarm when intervalHours is 0', () => {
     scheduleTracker('tracker-2', 0);
 

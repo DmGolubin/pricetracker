@@ -110,6 +110,7 @@ const SettingsModal = (function () {
     radioGroup.setAttribute('aria-label', 'Интервал проверки');
 
     var intervals = [
+      { value: 0.003, label: '10 сек (тест)' },
       { value: 3, label: '3 часа' },
       { value: 6, label: '6 часов' },
       { value: 12, label: '12 часов' },
@@ -118,7 +119,7 @@ const SettingsModal = (function () {
       { value: -1, label: 'Свой' },
     ];
 
-    var presetValues = [3, 6, 12, 24, 0];
+    var presetValues = [0.003, 3, 6, 12, 24, 0];
     var isCustom = presetValues.indexOf(tracker.checkIntervalHours) === -1 && tracker.checkIntervalHours > 0;
 
     // Custom interval input (hidden by default)
@@ -379,7 +380,7 @@ const SettingsModal = (function () {
     var notificationsEnabled = notifCheckbox ? notifCheckbox.checked : true;
 
     var intervalRadio = modal.querySelector('input[name="checkInterval"]:checked');
-    var checkIntervalHours = intervalRadio ? parseInt(intervalRadio.value, 10) : 12;
+    var checkIntervalHours = intervalRadio ? parseFloat(intervalRadio.value) : 12;
     // Handle custom interval
     if (checkIntervalHours === -1) {
       var customInput = modal.querySelector('[data-field="customInterval"]');
