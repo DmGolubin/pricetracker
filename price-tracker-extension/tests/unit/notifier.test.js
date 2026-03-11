@@ -8,6 +8,8 @@ const {
   sendTelegramNotification,
   notify,
   registerNotificationClickHandler,
+  computeLineDiff,
+  formatContentDiffHtml,
 } = require('../../lib/notifier');
 
 const { NotificationFilterType } = require('../../shared/constants');
@@ -406,5 +408,139 @@ describe('registerNotificationClickHandler', () => {
     listener('price-tracker-tracker-1');
 
     expect(chrome.notifications.clear).toHaveBeenCalledWith('price-tracker-tracker-1');
+  });
+});
+
+// ─── computeLineDiff ────────────────────────────────────────────────
+
+describe('computeLineDiff', () => {
+  test('returns empty array for identical content', () => {
+    expect(computeLineDiff('hello', 'hello')).toEqual([
+      { type: 'equal', value: 'hello' },
+    ]);
+  });
+
+  test('detects added lines', () => {
+    var ops = computeLineDiff('line1', 'line1\nline2');
+    expect(ops).toEqual([
+      { type: 'equal', value: 'line1' },
+      { type: 'added', value: 'line2' },
+    ]);
+  });
+
+  test('detects removed lines', () => {
+    var ops = computeLineDiff('line1\nline2', 'line1');
+    expect(ops).toEqual([
+      { type: 'equal', value: 'line1' },
+      { type: 'removed', value: 'line2' },
+    ]);
+  });
+
+  test('detects changed lines', () => {
+    var ops = computeLineDiff('old line', 'new line');
+    var types = ops.map(function (o) { return o.type; });
+    expect(types).toContain('removed');
+    expect(types).toContain('added');
+  });
+
+  test('handles empty old text', () => {
+    var ops = computeLineDiff('', 'new');
+    expect(ops).toEqual([{ type: 'added', value: 'new' }]);
+  });
+
+  test('handles empty new text', () => {
+    var ops = computeLineDiff('old', '');
+    expect(ops).toEqual([{ type: 'removed', value: 'old' }]);
+  });
+
+  test('handles both empty', () => {
+    expect(computeLineDiff('', '')).toEqual([]);
+  });
+});
+
+// ─── formatContentDiffHtml ──────────────────────────────────────────
+
+describe('formatContentDiffHtml', () => {
+  test('formats removed lines with strikethrough', () => {
+    var html = formatContentDiffHtml('old line', 'new line');
+    expect(html).toContain('<s>');
+    expect(html).toContain('➖');
+  });
+
+  test('formats added lines with bold', () => {
+    var html = formatContentDiffHtml('old line', 'new line');
+    expect(html).toContain('<b>');
+    expect(html).toContain('➕');
+  });
+
+  test('escapes HTML in content', () => {
+    var html = formatContentDiffHtml('<script>alert(1)</script>', 'safe');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  test('returns fallback for identical content', () => {
+    var html = formatContentDiffHtml('same', 'same');
+    expect(html).toBe('Контент изменился');
+  });
+
+  test('handles multiline content diff', () => {
+    var old = '80 мл\n4 200грн\n50 мл\n3 200грн';
+    var newC = '80 мл\n4 305грн\n50 мл\n3 305грн';
+    var html = formatContentDiffHtml(old, newC);
+    expect(html).toContain('➖');
+    expect(html).toContain('➕');
+    expect(html).toContain('4 200грн');
+    expect(html).toContain('4 305грн');
+  });
+});
+
+// ─── Content tracker Telegram notification ──────────────────────────
+
+describe('sendTelegramNotification for content trackers', () => {
+  let originalFetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({ ok: true });
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  test('sends diff-formatted message for content tracker', async () => {
+    var tracker = makeTracker({
+      trackingType: 'content',
+      productName: 'Test Content',
+    });
+    var settings = makeSettings();
+    var oldContent = '80 мл\n4 200грн';
+    var newContent = '80 мл\n4 305грн';
+
+    await sendTelegramNotification(tracker, oldContent, newContent, settings);
+
+    var body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.text).toContain('➖');
+    expect(body.text).toContain('➕');
+    expect(body.text).toContain('<s>');
+    expect(body.text).toContain('<b>');
+    expect(body.text).not.toContain('Было:');
+    expect(body.text).not.toContain('Стало:');
+  });
+
+  test('Chrome notification uses compact diff for content tracker', () => {
+    var tracker = makeTracker({
+      trackingType: 'content',
+      productName: 'Test Content',
+    });
+    var oldContent = '80 мл\n4 200грн';
+    var newContent = '80 мл\n4 305грн';
+
+    sendChromeNotification(tracker, oldContent, newContent);
+
+    var callArgs = chrome.notifications.create.mock.calls[0][1];
+    expect(callArgs.message).toContain('−');
+    expect(callArgs.message).toContain('+');
   });
 });

@@ -9,6 +9,92 @@ var _constants = (typeof self !== 'undefined' && self.PriceTracker && self.Price
   : require('../shared/constants');
 var NotificationFilterType = _constants.NotificationFilterType;
 
+// ─── Inline LCS diff for Telegram formatting ────────────────────
+
+function buildLCSTable(oldArr, newArr) {
+  var m = oldArr.length, n = newArr.length;
+  var t = [];
+  for (var i = 0; i <= m; i++) {
+    t[i] = [];
+    for (var j = 0; j <= n; j++) {
+      if (i === 0 || j === 0) t[i][j] = 0;
+      else if (oldArr[i - 1] === newArr[j - 1]) t[i][j] = t[i - 1][j - 1] + 1;
+      else t[i][j] = Math.max(t[i - 1][j], t[i][j - 1]);
+    }
+  }
+  return t;
+}
+
+function diffBacktrack(table, oldArr, newArr, i, j) {
+  var ops = [];
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldArr[i - 1] === newArr[j - 1]) {
+      ops.push({ type: 'equal', value: oldArr[i - 1] });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || table[i][j - 1] >= table[i - 1][j])) {
+      ops.push({ type: 'added', value: newArr[j - 1] });
+      j--;
+    } else {
+      ops.push({ type: 'removed', value: oldArr[i - 1] });
+      i--;
+    }
+  }
+  ops.reverse();
+  return ops;
+}
+
+function computeLineDiff(oldText, newText) {
+  var oldLines = String(oldText || '').split('\n').filter(function (l) { return l.trim().length > 0; });
+  var newLines = String(newText || '').split('\n').filter(function (l) { return l.trim().length > 0; });
+  if (oldLines.length === 0 && newLines.length === 0) return [];
+  if (oldLines.length === 0) return newLines.map(function (l) { return { type: 'added', value: l }; });
+  if (newLines.length === 0) return oldLines.map(function (l) { return { type: 'removed', value: l }; });
+  var table = buildLCSTable(oldLines, newLines);
+  return diffBacktrack(table, oldLines, newLines, oldLines.length, newLines.length);
+}
+
+/**
+ * Escape HTML special characters for Telegram HTML parse mode.
+ */
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Format a content diff as Telegram HTML.
+ * Shows only changed lines with ➖/➕ markers.
+ * Unchanged lines shown as context (max 2 around changes).
+ */
+function formatContentDiffHtml(oldContent, newContent) {
+  var ops = computeLineDiff(oldContent, newContent);
+  if (ops.length === 0) return 'Контент изменился';
+
+  // Collect only changed lines, with up to 1 context line around them
+  var lines = [];
+  for (var i = 0; i < ops.length; i++) {
+    var op = ops[i];
+    if (op.type === 'removed') {
+      lines.push('➖ <s>' + escapeHtml(op.value) + '</s>');
+    } else if (op.type === 'added') {
+      lines.push('➕ <b>' + escapeHtml(op.value) + '</b>');
+    }
+    // Skip equal lines to keep message compact
+  }
+
+  if (lines.length === 0) return 'Контент изменился';
+
+  // Limit to 20 lines max for Telegram readability
+  if (lines.length > 20) {
+    lines = lines.slice(0, 20);
+    lines.push('… ещё изменения');
+  }
+
+  return lines.join('\n');
+}
+
 /**
  * Evaluate the notification filter for a tracker.
  * Returns true if the filter condition is met (notification should be sent).
@@ -86,12 +172,16 @@ function sendChromeNotification(tracker, oldPrice, newPrice) {
     var oldContent = String(oldPrice || '');
     var newContent = String(newPrice || '');
     if (oldContent && newContent && oldContent !== newContent) {
-      // Show a brief snippet of old → new (truncated to fit notification)
-      var oldSnippet = oldContent.length > 60 ? oldContent.substring(0, 60) + '…' : oldContent;
-      var newSnippet = newContent.length > 60 ? newContent.substring(0, 60) + '…' : newContent;
-      message = `Было: ${oldSnippet}\nСтало: ${newSnippet}`;
+      // Build a compact text diff for Chrome notification
+      var ops = computeLineDiff(oldContent, newContent);
+      var diffLines = [];
+      for (var k = 0; k < ops.length && diffLines.length < 6; k++) {
+        if (ops[k].type === 'removed') diffLines.push('− ' + ops[k].value);
+        else if (ops[k].type === 'added') diffLines.push('+ ' + ops[k].value);
+      }
+      message = diffLines.length > 0 ? diffLines.join('\n') : 'Контент изменился';
     } else {
-      message = `Контент изменился`;
+      message = 'Контент изменился';
     }
   } else {
     message = `Цена изменилась: ${oldPrice} \u2192 ${newPrice}`;
@@ -126,18 +216,16 @@ async function sendTelegramNotification(tracker, oldPrice, newPrice, settings) {
     var oldContent = String(oldPrice || '');
     var newContent = String(newPrice || '');
     if (oldContent && newContent && oldContent !== newContent) {
-      var oldSnippet = oldContent.length > 100 ? oldContent.substring(0, 100) + '…' : oldContent;
-      var newSnippet = newContent.length > 100 ? newContent.substring(0, 100) + '…' : newContent;
-      priceText = `Было: ${oldSnippet}\nСтало: ${newSnippet}`;
+      priceText = formatContentDiffHtml(oldContent, newContent);
     } else {
       priceText = `Контент изменился`;
     }
   } else {
-    priceText = `Цена: ${oldPrice} \u2192 ${newPrice}`;
+    priceText = `Цена: ${oldPrice} → ${newPrice}`;
   }
 
   const text =
-    `<b>${tracker.productName}</b>\n` +
+    `<b>${escapeHtml(tracker.productName)}</b>\n` +
     priceText + `\n` +
     `<a href="${tracker.pageUrl}">Открыть страницу</a>`;
 
@@ -201,6 +289,8 @@ const _notifier = {
   sendTelegramNotification,
   notify,
   registerNotificationClickHandler,
+  computeLineDiff,
+  formatContentDiffHtml,
 };
 
 if (typeof module !== 'undefined' && module.exports) {
