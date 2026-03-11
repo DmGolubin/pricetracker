@@ -345,6 +345,171 @@ const PriceHistory = (function () {
       svg.appendChild(lastLabel);
     }
 
+    // ─── Interactive elements (crosshair, tooltip, highlight) ──────
+    // Crosshair vertical line
+    var crosshair = document.createElementNS(svgNS, 'line');
+    crosshair.setAttribute('x1', '0');
+    crosshair.setAttribute('y1', String(padTop));
+    crosshair.setAttribute('x2', '0');
+    crosshair.setAttribute('y2', String(padTop + chartH));
+    crosshair.setAttribute('stroke', 'var(--text-muted)');
+    crosshair.setAttribute('stroke-width', '1');
+    crosshair.setAttribute('stroke-dasharray', '4,3');
+    crosshair.setAttribute('display', 'none');
+    crosshair.setAttribute('data-testid', 'chart-crosshair');
+    svg.appendChild(crosshair);
+
+    // Highlight circle
+    var highlight = document.createElementNS(svgNS, 'circle');
+    highlight.setAttribute('cx', '0');
+    highlight.setAttribute('cy', '0');
+    highlight.setAttribute('r', '6');
+    highlight.setAttribute('fill', lineColor);
+    highlight.setAttribute('stroke', 'var(--bg-card)');
+    highlight.setAttribute('stroke-width', '2');
+    highlight.setAttribute('display', 'none');
+    highlight.setAttribute('data-testid', 'chart-highlight');
+    highlight.style.transition = 'r 150ms, display 0s';
+    svg.appendChild(highlight);
+
+    // Tooltip group
+    var tooltip = document.createElementNS(svgNS, 'g');
+    tooltip.setAttribute('display', 'none');
+    tooltip.setAttribute('data-testid', 'chart-tooltip');
+
+    var tooltipRect = document.createElementNS(svgNS, 'rect');
+    tooltipRect.setAttribute('rx', '4');
+    tooltipRect.setAttribute('ry', '4');
+    tooltipRect.setAttribute('width', '120');
+    tooltipRect.setAttribute('height', '44');
+    tooltipRect.classList.add('price-chart-tooltip-rect');
+    tooltip.appendChild(tooltipRect);
+
+    var tooltipDate = document.createElementNS(svgNS, 'text');
+    tooltipDate.setAttribute('font-size', '11');
+    tooltipDate.setAttribute('data-testid', 'chart-tooltip-date');
+    tooltipDate.classList.add('price-chart-tooltip-text');
+    tooltip.appendChild(tooltipDate);
+
+    var tooltipPrice = document.createElementNS(svgNS, 'text');
+    tooltipPrice.setAttribute('font-size', '12');
+    tooltipPrice.setAttribute('font-weight', '600');
+    tooltipPrice.setAttribute('data-testid', 'chart-tooltip-price');
+    tooltipPrice.classList.add('price-chart-tooltip-text');
+    tooltip.appendChild(tooltipPrice);
+
+    svg.appendChild(tooltip);
+
+    // ─── Mouse interaction handlers ─────────────────────────────────
+
+    function formatTooltipDate(isoString) {
+      try {
+        var dt = new Date(isoString);
+        if (isNaN(dt.getTime())) return '';
+        var dd = String(dt.getDate()).padStart(2, '0');
+        var mm = String(dt.getMonth() + 1).padStart(2, '0');
+        var yyyy = dt.getFullYear();
+        return dd + '.' + mm + '.' + yyyy;
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function formatTooltipPrice(price) {
+      var parts = price.toFixed(2).split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+      return parts.join(',');
+    }
+
+    var prevHighlightIdx = -1;
+    var allDots = svg.querySelectorAll('circle[r="3.5"]');
+
+    svg.addEventListener('mousemove', function (e) {
+      var rect = svg.getBoundingClientRect();
+      var svgWidth = rect.width;
+      if (svgWidth === 0) return;
+
+      var mouseX = e.clientX - rect.left;
+      var proportion = mouseX / svgWidth;
+      var svgX = proportion * W;
+
+      // Find nearest point
+      var nearestIdx = 0;
+      var nearestDist = Infinity;
+      for (var pi = 0; pi < points.length; pi++) {
+        var dist = Math.abs(points[pi].x - svgX);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestIdx = pi;
+        }
+      }
+
+      var pt = points[nearestIdx];
+
+      // Show crosshair
+      crosshair.setAttribute('x1', pt.x.toFixed(1));
+      crosshair.setAttribute('x2', pt.x.toFixed(1));
+      crosshair.setAttribute('display', '');
+
+      // Highlight point
+      highlight.setAttribute('cx', pt.x.toFixed(1));
+      highlight.setAttribute('cy', pt.y.toFixed(1));
+      highlight.setAttribute('display', '');
+
+      // Reset previous dot, enlarge current
+      if (prevHighlightIdx >= 0 && prevHighlightIdx < allDots.length) {
+        allDots[prevHighlightIdx].setAttribute('r', '3.5');
+      }
+      if (nearestIdx < allDots.length) {
+        allDots[nearestIdx].setAttribute('r', '6');
+      }
+      prevHighlightIdx = nearestIdx;
+
+      // Tooltip content
+      tooltipDate.textContent = formatTooltipDate(pt.date);
+      tooltipPrice.textContent = formatTooltipPrice(pt.price);
+
+      // Tooltip positioning
+      var tooltipW = 120;
+      var tooltipH = 44;
+      var offsetX = 12;
+      var offsetY = -tooltipH - 8;
+
+      var tx = pt.x + offsetX;
+      var ty = pt.y + offsetY;
+
+      // Shift left if near right edge
+      if (tx + tooltipW > W - padRight) {
+        tx = pt.x - tooltipW - offsetX;
+      }
+
+      // Shift down if near top edge
+      if (ty < padTop) {
+        ty = pt.y + 12;
+      }
+
+      tooltipRect.setAttribute('x', tx);
+      tooltipRect.setAttribute('y', ty);
+      tooltipDate.setAttribute('x', tx + 8);
+      tooltipDate.setAttribute('y', ty + 16);
+      tooltipPrice.setAttribute('x', tx + 8);
+      tooltipPrice.setAttribute('y', ty + 34);
+
+      tooltip.setAttribute('display', '');
+    });
+
+    svg.addEventListener('mouseleave', function () {
+      crosshair.setAttribute('display', 'none');
+      highlight.setAttribute('display', 'none');
+      tooltip.setAttribute('display', 'none');
+
+      // Reset dot radius
+      if (prevHighlightIdx >= 0 && prevHighlightIdx < allDots.length) {
+        allDots[prevHighlightIdx].setAttribute('r', '3.5');
+      }
+      prevHighlightIdx = -1;
+    });
+
     wrapper.appendChild(svg);
     container.appendChild(wrapper);
   }

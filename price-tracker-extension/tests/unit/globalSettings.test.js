@@ -5,6 +5,7 @@
  */
 
 const GlobalSettings = require('../../dashboard/components/globalSettings');
+const Icons = require('../../shared/icons');
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -42,6 +43,12 @@ describe('GlobalSettings', () => {
     document.body.innerHTML = '';
     container = createContainer();
     chrome.runtime.lastError = null;
+    // Make Icons available globally for globalSettings.js which checks typeof Icons
+    global.Icons = Icons;
+  });
+
+  afterEach(() => {
+    delete global.Icons;
   });
 
   // ─── open() loads settings and renders modal ───────────────────
@@ -99,7 +106,7 @@ describe('GlobalSettings', () => {
       expect(header.textContent).toBe('Глобальные настройки');
     });
 
-    test('modal has close button', async () => {
+    test('modal has close button with SVG icon', async () => {
       chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
         if (cb) cb({ settings: makeSettings() });
       });
@@ -109,7 +116,9 @@ describe('GlobalSettings', () => {
 
       const closeBtn = container.querySelector('.modal-header .btn-icon');
       expect(closeBtn).not.toBeNull();
-      expect(closeBtn.textContent).toBe('×');
+      const svg = closeBtn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg.getAttribute('aria-hidden')).toBe('true');
     });
 
     test('modal has all four form fields', async () => {
@@ -138,6 +147,77 @@ describe('GlobalSettings', () => {
       const saveBtn = footer.querySelector('.btn-primary');
       expect(saveBtn).not.toBeNull();
       expect(saveBtn.textContent).toBe('Сохранить');
+    });
+  });
+
+  // ─── SVG icons and save animation (Req 10.1, 10.2, 10.3) ──────
+
+  describe('SVG icons and save animation', () => {
+    test('modal header contains settings SVG icon', async () => {
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (cb) cb({ settings: makeSettings() });
+      });
+
+      GlobalSettings.open(container);
+      await flushPromises();
+
+      const titleWrap = container.querySelector('.modal-title-wrap');
+      expect(titleWrap).not.toBeNull();
+      const svg = titleWrap.querySelector('svg');
+      expect(svg).not.toBeNull();
+    });
+
+    test('save button shows spinner during save', async () => {
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (msg.action === 'getSettings') {
+          if (cb) cb({ settings: makeSettings() });
+        }
+        // Don't call cb for saveSettings to keep it in loading state
+      });
+
+      GlobalSettings.open(container);
+      await flushPromises();
+
+      container.querySelector('.btn-primary').click();
+      // After click, button should show spinner
+      const saveBtn = container.querySelector('.btn-primary');
+      expect(saveBtn.disabled).toBe(true);
+      expect(saveBtn.querySelector('.save-spinner')).not.toBeNull();
+    });
+
+    test('save button shows check icon on success', async () => {
+      const originalReload = window.location.reload;
+      Object.defineProperty(window, 'location', {
+        writable: true,
+        value: { reload: jest.fn() },
+      });
+
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (cb) cb({ settings: makeSettings() });
+      });
+
+      GlobalSettings.open(container);
+      await flushPromises();
+
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (cb) cb({});
+      });
+
+      container.querySelector('.btn-primary').click();
+      await flushPromises();
+
+      const saveBtn = container.querySelector('.btn-primary');
+      // After successful save, button should show check icon
+      const svg = saveBtn.querySelector('svg');
+      expect(svg).not.toBeNull();
+
+      // Wait for close timeout
+      await new Promise(resolve => setTimeout(resolve, 700));
+
+      Object.defineProperty(window, 'location', {
+        writable: true,
+        value: { reload: originalReload },
+      });
     });
   });
 
@@ -241,6 +321,13 @@ describe('GlobalSettings', () => {
     });
 
     test('closes modal on successful save', async () => {
+      // Mock window.location.reload to prevent jsdom navigation error
+      const originalReload = window.location.reload;
+      Object.defineProperty(window, 'location', {
+        writable: true,
+        value: { reload: jest.fn() },
+      });
+
       chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
         if (cb) cb({ settings: makeSettings() });
       });
@@ -255,7 +342,14 @@ describe('GlobalSettings', () => {
       container.querySelector('.btn-primary').click();
       await flushPromises();
 
+      // Save shows check icon then closes after 600ms delay
+      await new Promise(function (resolve) { setTimeout(resolve, 700); });
+
       expect(container.querySelector('.modal-overlay')).toBeNull();
+      Object.defineProperty(window, 'location', {
+        writable: true,
+        value: { reload: originalReload },
+      });
     });
   });
 

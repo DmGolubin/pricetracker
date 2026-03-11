@@ -2,17 +2,23 @@
  * Toolbar component for Price Tracker Extension dashboard.
  *
  * Renders a toolbar with:
- * - "Обновить все" button — triggers refresh of all trackers
- * - Search input — filters cards by product name (case-insensitive)
+ * - "Обновить все" button with refresh SVG icon — triggers refresh of all trackers
+ * - Search input with search SVG icon — filters cards by product name (case-insensitive)
  * - Filter dropdown — all / price down / price up
- * - Settings icon button — opens global settings
+ * - Settings SVG icon button — opens global settings
+ *
+ * Layout: refresh (left) | search + filter (center) | settings (right)
  *
  * Usage: Toolbar.init(container, { onSearch, onFilter, onRefreshAll, onSettingsClick })
  *
- * Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
+ * Requirements: 2.4, 2.8, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6
  */
 
 const Toolbar = (function () {
+  // ─── Icons reference (global in browser, require in Node/Jest) ────
+  var _Icons = (typeof Icons !== 'undefined') ? Icons
+             : (typeof require === 'function' ? require('../../shared/icons') : null);
+
   /**
    * Initialise the toolbar inside the given container element.
    * @param {HTMLElement} container - Parent element to render into
@@ -32,22 +38,50 @@ const Toolbar = (function () {
     toolbar.setAttribute('role', 'toolbar');
     toolbar.setAttribute('aria-label', 'Dashboard toolbar');
 
-    // Refresh button
+    // ─── Left group: Refresh button ─────────────────────────────
+    var leftGroup = document.createElement('div');
+    leftGroup.className = 'toolbar-group toolbar-group-left';
+
     var refreshBtn = document.createElement('button');
     refreshBtn.className = 'btn btn-primary';
     refreshBtn.type = 'button';
-    refreshBtn.textContent = 'Обновить все';
     refreshBtn.setAttribute('aria-label', 'Обновить все трекеры');
+    // Add refresh icon + text
+    var refreshIcon = _Icons ? _Icons.el('refresh', 18) : '';
+    refreshBtn.innerHTML = refreshIcon + ' Обновить все';
     refreshBtn.addEventListener('click', function () {
+      // Spin animation on the SVG icon
+      var svgEl = refreshBtn.querySelector('svg');
+      if (svgEl) {
+        svgEl.classList.add('toolbar-refresh-spin');
+        svgEl.addEventListener('animationend', function handler() {
+          svgEl.classList.remove('toolbar-refresh-spin');
+          svgEl.removeEventListener('animationend', handler);
+        });
+      }
       if (typeof cb.onRefreshAll === 'function') {
         cb.onRefreshAll();
       }
     });
 
-    // Search input
+    leftGroup.appendChild(refreshBtn);
+
+    // ─── Center group: Search + Filter ──────────────────────────
+    var centerGroup = document.createElement('div');
+    centerGroup.className = 'toolbar-group toolbar-group-center';
+
+    // Search wrapper with icon
+    var searchWrapper = document.createElement('div');
+    searchWrapper.className = 'toolbar-search-wrapper';
+
+    var searchIconEl = document.createElement('span');
+    searchIconEl.className = 'toolbar-search-icon';
+    searchIconEl.setAttribute('aria-hidden', 'true');
+    searchIconEl.innerHTML = _Icons ? _Icons.el('search', 16) : '';
+
     var searchInput = document.createElement('input');
     searchInput.type = 'text';
-    searchInput.className = 'input';
+    searchInput.className = 'input toolbar-search-input';
     searchInput.placeholder = 'Поиск по названию...';
     searchInput.setAttribute('aria-label', 'Поиск трекеров по названию');
     searchInput.addEventListener('input', function () {
@@ -55,6 +89,9 @@ const Toolbar = (function () {
         cb.onSearch(searchInput.value);
       }
     });
+
+    searchWrapper.appendChild(searchIconEl);
+    searchWrapper.appendChild(searchInput);
 
     // Filter select
     var filterSelect = document.createElement('select');
@@ -80,23 +117,43 @@ const Toolbar = (function () {
       }
     });
 
-    // Settings button
+    centerGroup.appendChild(searchWrapper);
+    centerGroup.appendChild(filterSelect);
+
+    // ─── Right group: Settings button ───────────────────────────
+    var rightGroup = document.createElement('div');
+    rightGroup.className = 'toolbar-group toolbar-group-right';
+
     var settingsBtn = document.createElement('button');
     settingsBtn.className = 'btn-icon';
     settingsBtn.type = 'button';
-    settingsBtn.textContent = '⚙️';
     settingsBtn.setAttribute('aria-label', 'Открыть настройки');
+    // Replace ⚙️ emoji with SVG icon
+    settingsBtn.innerHTML = _Icons ? _Icons.el('settings', 20) : '⚙️';
     settingsBtn.addEventListener('click', function () {
       if (typeof cb.onSettingsClick === 'function') {
         cb.onSettingsClick();
       }
     });
 
-    // Assemble toolbar
-    toolbar.appendChild(refreshBtn);
-    toolbar.appendChild(searchInput);
-    toolbar.appendChild(filterSelect);
-    toolbar.appendChild(settingsBtn);
+    rightGroup.appendChild(settingsBtn);
+
+    // ─── Assemble toolbar with dividers ─────────────────────────
+    toolbar.appendChild(leftGroup);
+
+    var divider1 = document.createElement('div');
+    divider1.className = 'toolbar-divider';
+    divider1.setAttribute('aria-hidden', 'true');
+    toolbar.appendChild(divider1);
+
+    toolbar.appendChild(centerGroup);
+
+    var divider2 = document.createElement('div');
+    divider2.className = 'toolbar-divider';
+    divider2.setAttribute('aria-hidden', 'true');
+    toolbar.appendChild(divider2);
+
+    toolbar.appendChild(rightGroup);
 
     container.appendChild(toolbar);
   }

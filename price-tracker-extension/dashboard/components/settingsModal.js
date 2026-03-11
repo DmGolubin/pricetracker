@@ -18,6 +18,10 @@
  */
 
 const SettingsModal = (function () {
+  // ─── Icons reference (global in browser, require in Node/Jest) ────
+  var _Icons = (typeof Icons !== 'undefined') ? Icons
+             : (typeof require === 'function' ? require('../../shared/icons') : null);
+
   var currentTracker = null;
   var currentContainer = null;
   var currentCallbacks = null;
@@ -69,7 +73,7 @@ const SettingsModal = (function () {
     var closeBtn = document.createElement('button');
     closeBtn.className = 'btn-icon';
     closeBtn.type = 'button';
-    closeBtn.textContent = '×';
+    closeBtn.innerHTML = _Icons ? _Icons.el('close', 20) : '×';
     closeBtn.setAttribute('aria-label', 'Закрыть');
     closeBtn.addEventListener('click', close);
 
@@ -81,7 +85,7 @@ const SettingsModal = (function () {
     body.className = 'modal-body';
 
     // Notifications toggle
-    var notifGroup = createFormGroup('Уведомления');
+    var notifGroup = createFormGroup('Уведомления', 'notifications');
     var toggleLabel = document.createElement('label');
     toggleLabel.className = 'toggle';
     var notifCheckbox = document.createElement('input');
@@ -95,8 +99,11 @@ const SettingsModal = (function () {
     notifGroup.appendChild(toggleLabel);
     body.appendChild(notifGroup);
 
+    // Divider after notifications
+    body.appendChild(createSectionDivider());
+
     // Check interval radio buttons
-    var intervalGroup = createFormGroup('Интервал проверки');
+    var intervalGroup = createFormGroup('Интервал проверки', 'refresh');
     var radioGroup = document.createElement('div');
     radioGroup.className = 'radio-group';
     radioGroup.setAttribute('role', 'radiogroup');
@@ -136,6 +143,9 @@ const SettingsModal = (function () {
     intervalGroup.appendChild(radioGroup);
     body.appendChild(intervalGroup);
 
+    // Divider after interval
+    body.appendChild(createSectionDivider());
+
     // Product name input
     var nameGroup = createFormGroup('Название товара');
     var nameInput = document.createElement('input');
@@ -147,8 +157,11 @@ const SettingsModal = (function () {
     nameGroup.appendChild(nameInput);
     body.appendChild(nameGroup);
 
+    // Divider after name
+    body.appendChild(createSectionDivider());
+
     // Image URL input
-    var imageGroup = createFormGroup('URL изображения');
+    var imageGroup = createFormGroup('URL изображения', 'link');
     var imageInput = document.createElement('input');
     imageInput.type = 'text';
     imageInput.className = 'input';
@@ -157,6 +170,9 @@ const SettingsModal = (function () {
     imageInput.setAttribute('aria-label', 'URL изображения');
     imageGroup.appendChild(imageInput);
     body.appendChild(imageGroup);
+
+    // Divider after image URL
+    body.appendChild(createSectionDivider());
 
     // Check mode radio buttons
     var modeGroup = createFormGroup('Режим проверки');
@@ -196,6 +212,9 @@ const SettingsModal = (function () {
 
     modeGroup.appendChild(modeRadioGroup);
     body.appendChild(modeGroup);
+
+    // Divider after check mode
+    body.appendChild(createSectionDivider());
 
     // Notification filter
     var filterGroup = createFormGroup('Фильтр уведомлений');
@@ -302,13 +321,23 @@ const SettingsModal = (function () {
     return overlay;
   }
 
-  function createFormGroup(labelText) {
+  function createFormGroup(labelText, iconName) {
     var group = document.createElement('div');
     group.className = 'form-group';
     var label = document.createElement('label');
-    label.textContent = labelText;
+    if (iconName && _Icons) {
+      label.innerHTML = _Icons.el(iconName, 16) + ' ' + escapeHtml(labelText);
+    } else {
+      label.textContent = labelText;
+    }
     group.appendChild(label);
     return group;
+  }
+
+  function createSectionDivider() {
+    var hr = document.createElement('hr');
+    hr.className = 'modal-section-divider';
+    return hr;
   }
 
   // ─── Actions ──────────────────────────────────────────────────────
@@ -380,6 +409,14 @@ const SettingsModal = (function () {
   function handleDelete(trackerId) {
     var confirmed = confirm('Вы уверены, что хотите удалить этот трекер?');
     if (!confirmed) return;
+
+    // Apply shake animation before closing
+    if (currentContainer) {
+      var modal = currentContainer.querySelector('.modal');
+      if (modal) {
+        modal.classList.add('modal-shake');
+      }
+    }
 
     sendMessage({
       action: 'deleteTracker',

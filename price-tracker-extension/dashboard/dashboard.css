@@ -103,6 +103,18 @@
   to { transform: rotate(360deg); }
 }
 
+/* Save button spinner */
+.save-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+}
+
 .loading-text {
   font-size: var(--font-sm);
   color: var(--text-muted);
@@ -118,6 +130,38 @@
     grid-template-columns: 1fr;
     gap: var(--spacing-md);
   }
+}
+
+/* ===== Glass-morphism Tracker Card ===== */
+.card.tracker-card {
+  background-color: #1f2940; /* fallback for browsers without backdrop-filter */
+  background: rgba(31, 41, 64, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  position: relative;
+}
+
+/* Gradient bar at top of card (default blue) */
+.tracker-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-primary), rgba(79, 140, 255, 0.4));
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  z-index: 1;
+}
+
+/* Green gradient bar for price down */
+.tracker-card-price-down::before {
+  background: linear-gradient(90deg, var(--accent-green), rgba(76, 175, 80, 0.4)) !important;
+}
+
+/* Red gradient bar for price up */
+.tracker-card-price-up::before {
+  background: linear-gradient(90deg, var(--accent-red), rgba(244, 67, 54, 0.4)) !important;
 }
 
 /* ===== Tracker Card Enhancements ===== */
@@ -291,4 +335,204 @@
 .price-history-chart svg {
   width: 100%;
   height: auto;
+}
+
+/* ===== Skeleton Loader ===== */
+.skeleton-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.skeleton-image {
+  width: 100%;
+  aspect-ratio: 1;
+  background: linear-gradient(90deg, var(--bg-input) 25%, var(--border-primary) 50%, var(--bg-input) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-line {
+  height: 14px;
+  margin: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-input) 25%, var(--border-primary) 50%, var(--bg-input) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-line:nth-child(2) {
+  width: 60%;
+}
+
+.skeleton-price {
+  height: 20px;
+  width: 40%;
+  margin: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-input) 25%, var(--border-primary) 50%, var(--bg-input) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ===== Stagger Animation for Cards ===== */
+.tracker-card-enter {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+
+.tracker-card-enter.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ===== Range Fill Animation ===== */
+@keyframes range-fill-grow {
+  from {
+    width: 0%;
+  }
+  to {
+    width: var(--range-fill-width, 100%);
+  }
+}
+
+.tracker-card-range-fill {
+  animation: range-fill-grow 600ms ease-out;
+}
+
+/* ===== Crossfade State Transitions ===== */
+.state-fade-enter {
+  opacity: 0;
+  animation: fadeIn 300ms ease forwards;
+}
+
+.state-fade-exit {
+  opacity: 1;
+  animation: fadeOut 150ms ease forwards;
+}
+
+/* ===== Toolbar Layout ===== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.toolbar-group-left {
+  flex-shrink: 0;
+}
+
+.toolbar-group-center {
+  flex: 1;
+  justify-content: center;
+}
+
+.toolbar-group-right {
+  flex-shrink: 0;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-primary);
+  flex-shrink: 0;
+}
+
+/* ===== Toolbar Search Wrapper ===== */
+.toolbar-search-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.toolbar-search-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  line-height: 0;
+}
+
+.toolbar-search-input {
+  padding-left: 30px;
+  width: 180px;
+  transition: width 200ms ease;
+}
+
+.toolbar-search-input:focus {
+  width: 216px;
+}
+
+/* ===== Toolbar Refresh Spin ===== */
+.toolbar-refresh-spin {
+  animation: spin 600ms ease-in-out;
+}
+
+/* ===== Modal Section Divider ===== */
+.modal-section-divider {
+  border: none;
+  height: 1px;
+  background: var(--border-primary);
+  margin: var(--spacing-sm) 0;
+}
+
+/* ===== Modal Shake Animation ===== */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.modal-shake {
+  animation: shake 400ms ease-in-out;
+}
+
+/* ===== Price Chart Tooltip ===== */
+.price-chart-tooltip-rect {
+  fill: var(--bg-card);
+  stroke: var(--border-light, var(--border-primary));
+  stroke-width: 1;
+}
+
+.price-chart-tooltip-text {
+  fill: var(--text-primary);
+}
+
+/* ===== Content Diff Highlight Animation ===== */
+@keyframes diff-highlight-added {
+  from {
+    background-color: rgba(76, 175, 80, 0.4);
+  }
+  to {
+    background-color: rgba(76, 175, 80, 0.15);
+  }
+}
+
+@keyframes diff-highlight-removed {
+  from {
+    background-color: rgba(244, 67, 54, 0.4);
+  }
+  to {
+    background-color: rgba(244, 67, 54, 0.15);
+  }
+}
+
+.diff-added {
+  animation: diff-highlight-added 500ms ease-out forwards;
+}
+
+.diff-removed {
+  animation: diff-highlight-removed 500ms ease-out forwards;
 }

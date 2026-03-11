@@ -411,8 +411,81 @@ describe('PriceHistory', () => {
       await flushPromises();
 
       const chart = container.querySelector('[data-testid="price-history-chart"]');
-      const circles = chart.querySelectorAll('circle');
-      expect(circles.length).toBe(3);
+      // Data point circles have r="3.5", highlight circle has r="6"
+      const dataDots = chart.querySelectorAll('circle[r="3.5"]');
+      expect(dataDots.length).toBe(3);
+    });
+  });
+
+  // ─── Interactive chart elements (Req 3.1–3.7) ───────────────────
+
+  describe('interactive chart elements', () => {
+    function setupChartWith3Points() {
+      const records = [
+        makeRecord({ id: 'r1', price: 100, checkedAt: '2024-01-01T10:00:00Z' }),
+        makeRecord({ id: 'r2', price: 90, checkedAt: '2024-02-01T10:00:00Z' }),
+        makeRecord({ id: 'r3', price: 80, checkedAt: '2024-03-01T10:00:00Z' }),
+      ];
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (cb) cb(records);
+      });
+      return records;
+    }
+
+    test('chart contains crosshair line element with display="none"', async () => {
+      setupChartWith3Points();
+      PriceHistory.render(makeTracker(), container);
+      await flushPromises();
+
+      const crosshair = container.querySelector('[data-testid="chart-crosshair"]');
+      expect(crosshair).not.toBeNull();
+      expect(crosshair.tagName.toLowerCase()).toBe('line');
+      expect(crosshair.getAttribute('display')).toBe('none');
+    });
+
+    test('chart contains highlight circle with r="6" and display="none"', async () => {
+      setupChartWith3Points();
+      PriceHistory.render(makeTracker(), container);
+      await flushPromises();
+
+      const highlight = container.querySelector('[data-testid="chart-highlight"]');
+      expect(highlight).not.toBeNull();
+      expect(highlight.tagName.toLowerCase()).toBe('circle');
+      expect(highlight.getAttribute('r')).toBe('6');
+      expect(highlight.getAttribute('display')).toBe('none');
+    });
+
+    test('chart contains tooltip group with rect and text elements', async () => {
+      setupChartWith3Points();
+      PriceHistory.render(makeTracker(), container);
+      await flushPromises();
+
+      const tooltip = container.querySelector('[data-testid="chart-tooltip"]');
+      expect(tooltip).not.toBeNull();
+      expect(tooltip.tagName.toLowerCase()).toBe('g');
+      expect(tooltip.getAttribute('display')).toBe('none');
+
+      const rect = tooltip.querySelector('rect');
+      expect(rect).not.toBeNull();
+
+      const dateText = tooltip.querySelector('[data-testid="chart-tooltip-date"]');
+      expect(dateText).not.toBeNull();
+
+      const priceText = tooltip.querySelector('[data-testid="chart-tooltip-price"]');
+      expect(priceText).not.toBeNull();
+    });
+
+    test('no interactive elements when chart has less than 2 data points', async () => {
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (cb) cb([makeRecord({ price: 100 })]);
+      });
+
+      PriceHistory.render(makeTracker(), container);
+      await flushPromises();
+
+      expect(container.querySelector('[data-testid="chart-crosshair"]')).toBeNull();
+      expect(container.querySelector('[data-testid="chart-tooltip"]')).toBeNull();
+      expect(container.querySelector('[data-testid="chart-highlight"]')).toBeNull();
     });
   });
 

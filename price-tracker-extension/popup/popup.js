@@ -33,6 +33,14 @@ const btnShowTrackers = document.getElementById('btn-show-trackers');
 const btnTrackManual = document.getElementById('btn-track-manual');
 const btnTrackAuto = document.getElementById('btn-track-auto');
 const statusMessage = document.getElementById('status-message');
+const popupLogo = document.getElementById('popup-logo');
+
+// Inject SVG logo icon
+if (popupLogo && typeof Icons !== 'undefined') {
+  popupLogo.innerHTML = Icons.el('logo', 28);
+} else if (popupLogo) {
+  popupLogo.textContent = '📊';
+}
 
 // ─── Button handlers ────────────────────────────────────────────────
 
@@ -90,9 +98,25 @@ btnTrackAuto.addEventListener('click', () => {
 function showStatus(text, isError) {
   statusMessage.textContent = text;
   statusMessage.hidden = false;
+  statusMessage.classList.remove('popup-status-exit');
+  statusMessage.classList.add('popup-status-enter');
   if (isError) {
     statusMessage.classList.add('popup-status-error');
   }
+}
+
+/**
+ * Hide the status message with slideUp animation.
+ */
+function hideStatus() {
+  if (statusMessage.hidden) return;
+  statusMessage.classList.remove('popup-status-enter');
+  statusMessage.classList.add('popup-status-exit');
+  statusMessage.addEventListener('animationend', function onEnd() {
+    statusMessage.removeEventListener('animationend', onEnd);
+    statusMessage.hidden = true;
+    statusMessage.classList.remove('popup-status-exit', 'popup-status-error');
+  });
 }
 
 /**
@@ -171,5 +195,5 @@ init();
 
 // ─── Exports for testing ────────────────────────────────────────────
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { isInternalPage, showAutoButton };
+  module.exports = { isInternalPage, showAutoButton, showStatus, hideStatus };
 }

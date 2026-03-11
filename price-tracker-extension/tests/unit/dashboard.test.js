@@ -59,6 +59,14 @@ function flushPromises() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/**
+ * Flush all pending timers and promises (for crossfade/filter animations).
+ * Waits 500ms to ensure all setTimeout callbacks (150ms crossfade, 200ms filter, 300ms cleanup) complete.
+ */
+function flushAnimations() {
+  return new Promise((resolve) => setTimeout(resolve, 500));
+}
+
 // ─── Test suite ───────────────────────────────────────────────────────
 
 describe('Dashboard', () => {
@@ -88,6 +96,7 @@ describe('Dashboard', () => {
   describe('loadTrackers', () => {
     test('shows empty state when no trackers returned', async () => {
       await flushPromises();
+      await flushAnimations();
 
       const emptyState = document.getElementById('empty-state');
       const trackerGrid = document.getElementById('tracker-grid');
@@ -108,6 +117,7 @@ describe('Dashboard', () => {
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
+      await flushAnimations();
 
       const grid = document.getElementById('tracker-grid');
       expect(grid.hidden).toBe(false);
@@ -165,6 +175,7 @@ describe('Dashboard', () => {
   describe('empty state', () => {
     test('shows empty state for empty tracker list', async () => {
       await flushPromises();
+      await flushAnimations();
 
       const emptyState = document.getElementById('empty-state');
       expect(emptyState.hidden).toBe(false);
@@ -240,6 +251,7 @@ describe('Dashboard', () => {
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
+      await flushAnimations();
 
       const errorState = document.getElementById('error-state');
       const errorMsg = document.getElementById('error-message');
@@ -256,6 +268,7 @@ describe('Dashboard', () => {
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
+      await flushAnimations();
 
       const errorState = document.getElementById('error-state');
       expect(errorState.hidden).toBe(false);
@@ -281,11 +294,13 @@ describe('Dashboard', () => {
 
       Dashboard = require('../../dashboard/dashboard');
       await flushPromises();
+      await flushAnimations();
 
       expect(document.getElementById('error-state').hidden).toBe(false);
 
       document.getElementById('btn-retry').click();
       await flushPromises();
+      await flushAnimations();
 
       const grid = document.getElementById('tracker-grid');
       expect(grid.hidden).toBe(false);
@@ -314,36 +329,42 @@ describe('Dashboard', () => {
       await flushPromises();
     });
 
-    test('search filters by product name (case-insensitive)', () => {
+    test('search filters by product name (case-insensitive)', async () => {
       Dashboard.onSearchChange('iphone');
+      await flushAnimations();
       const grid = document.getElementById('tracker-grid');
       expect(grid.children.length).toBe(2);
     });
 
-    test('price filter "down" shows only trackers with decreased price', () => {
+    test('price filter "down" shows only trackers with decreased price', async () => {
       Dashboard.onFilterChange('down');
+      await flushAnimations();
       const grid = document.getElementById('tracker-grid');
       expect(grid.children.length).toBe(1);
       expect(grid.children[0].textContent).toContain('iPhone 15');
     });
 
-    test('price filter "up" shows only trackers with increased price', () => {
+    test('price filter "up" shows only trackers with increased price', async () => {
       Dashboard.onFilterChange('up');
+      await flushAnimations();
       const grid = document.getElementById('tracker-grid');
       expect(grid.children.length).toBe(1);
       expect(grid.children[0].textContent).toContain('Samsung Galaxy');
     });
 
-    test('combined search and filter', () => {
+    test('combined search and filter', async () => {
       Dashboard.onSearchChange('iphone');
+      await flushAnimations();
       Dashboard.onFilterChange('down');
+      await flushAnimations();
       const grid = document.getElementById('tracker-grid');
       expect(grid.children.length).toBe(1);
       expect(grid.children[0].textContent).toContain('iPhone 15');
     });
 
-    test('shows "no matches" message when filters exclude all', () => {
+    test('shows "no matches" message when filters exclude all', async () => {
       Dashboard.onSearchChange('nonexistent');
+      await flushAnimations();
       const grid = document.getElementById('tracker-grid');
       expect(grid.textContent).toContain('Нет трекеров, соответствующих фильтру');
     });
@@ -403,6 +424,131 @@ describe('Dashboard', () => {
       const trackers = Dashboard.getAllTrackers();
       expect(trackers.length).toBe(1);
       expect(trackers[0].id).toBe('u2');
+    });
+  });
+
+  // ─── Skeleton loader ─────────────────────────────────────────────
+
+  describe('skeleton loader', () => {
+    test('renderSkeletons creates 6 skeleton cards in loading state', () => {
+      Dashboard.renderSkeletons();
+      const loadingState = document.getElementById('loading-state');
+      const skeletons = loadingState.querySelectorAll('.skeleton-card');
+      expect(skeletons.length).toBe(6);
+    });
+
+    test('skeleton cards have correct structure (image, lines, price)', () => {
+      Dashboard.renderSkeletons();
+      const loadingState = document.getElementById('loading-state');
+      const card = loadingState.querySelector('.skeleton-card');
+      expect(card.querySelector('.skeleton-image')).toBeTruthy();
+      expect(card.querySelectorAll('.skeleton-line').length).toBe(2);
+      expect(card.querySelector('.skeleton-price')).toBeTruthy();
+    });
+
+    test('loading state gets tracker-grid class for grid layout', () => {
+      Dashboard.renderSkeletons();
+      const loadingState = document.getElementById('loading-state');
+      expect(loadingState.classList.contains('tracker-grid')).toBe(true);
+    });
+
+    test('showLoading renders skeletons instead of spinner', async () => {
+      jest.resetModules();
+      createDashboardDOM();
+      mockFetchResponse([]);
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
+
+      Dashboard = require('../../dashboard/dashboard');
+      // After init, showLoading is called which renders skeletons
+      const loadingState = document.getElementById('loading-state');
+      const skeletons = loadingState.querySelectorAll('.skeleton-card');
+      expect(skeletons.length).toBe(6);
+    });
+  });
+
+  // ─── Stagger animation ───────────────────────────────────────────
+
+  describe('stagger animation', () => {
+    beforeEach(async () => {
+      jest.resetModules();
+      createDashboardDOM();
+
+      mockFetchResponse([
+        makeTracker({ id: 's1', productName: 'Stagger A' }),
+        makeTracker({ id: 's2', productName: 'Stagger B' }),
+      ]);
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => { cb({}); });
+
+      Dashboard = require('../../dashboard/dashboard');
+      await flushPromises();
+      await flushAnimations();
+    });
+
+    test('cards get tracker-card-enter class on render', () => {
+      const grid = document.getElementById('tracker-grid');
+      const cards = grid.querySelectorAll('.tracker-card-enter');
+      expect(cards.length).toBe(2);
+    });
+
+    test('cards get visible class after stagger delay', async () => {
+      const grid = document.getElementById('tracker-grid');
+      // After flushAnimations (500ms), all stagger delays (50ms × index) should have completed
+      const visibleCards = grid.querySelectorAll('.tracker-card-enter.visible');
+      expect(visibleCards.length).toBe(2);
+    });
+  });
+
+  // ─── Ripple effect ────────────────────────────────────────────────
+
+  describe('ripple effect', () => {
+    test('clicking a .btn element creates a ripple span', async () => {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = 'Test';
+      document.body.appendChild(btn);
+
+      // getBoundingClientRect mock
+      btn.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 40 });
+
+      const clickEvent = new MouseEvent('click', { bubbles: true, clientX: 50, clientY: 20 });
+      btn.dispatchEvent(clickEvent);
+
+      const ripple = btn.querySelector('.ripple');
+      expect(ripple).toBeTruthy();
+      expect(btn.classList.contains('ripple-container')).toBe(true);
+
+      document.body.removeChild(btn);
+    });
+
+    test('ripple is removed after 400ms', async () => {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      document.body.appendChild(btn);
+
+      btn.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 40 });
+
+      const clickEvent = new MouseEvent('click', { bubbles: true, clientX: 50, clientY: 20 });
+      btn.dispatchEvent(clickEvent);
+
+      expect(btn.querySelector('.ripple')).toBeTruthy();
+
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      expect(btn.querySelector('.ripple')).toBeFalsy();
+
+      document.body.removeChild(btn);
+    });
+
+    test('non-btn elements do not get ripple', () => {
+      const div = document.createElement('div');
+      div.textContent = 'Not a button';
+      document.body.appendChild(div);
+
+      const clickEvent = new MouseEvent('click', { bubbles: true, clientX: 10, clientY: 10 });
+      div.dispatchEvent(clickEvent);
+
+      expect(div.querySelector('.ripple')).toBeFalsy();
+
+      document.body.removeChild(div);
     });
   });
 });

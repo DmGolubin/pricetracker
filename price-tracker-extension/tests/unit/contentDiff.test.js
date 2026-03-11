@@ -5,6 +5,7 @@
  */
 
 const ContentDiff = require('../../dashboard/components/contentDiff');
+const Icons = require('../../shared/icons');
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -254,5 +255,64 @@ describe('ContentDiff.render', () => {
 
     var wrapper = container.querySelector('.content-diff');
     expect(wrapper).not.toBeNull();
+  });
+});
+
+// ─── Icons +/− in diff blocks ─────────────────────────────────────────
+
+describe('ContentDiff.render with Icons', () => {
+  let container;
+
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    global.Icons = Icons;
+  });
+
+  afterEach(() => {
+    delete global.Icons;
+  });
+
+  test('added blocks contain plus SVG icon when Icons is available', () => {
+    var record = {
+      previousContent: 'hello',
+      content: 'hello world',
+    };
+
+    ContentDiff.render(record, container);
+
+    var added = container.querySelector('[data-testid="diff-added"]');
+    expect(added).not.toBeNull();
+    var svg = added.querySelector('svg');
+    expect(svg).not.toBeNull();
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  test('removed blocks contain minus SVG icon when Icons is available', () => {
+    var record = {
+      previousContent: 'hello world',
+      content: 'hello',
+    };
+
+    ContentDiff.render(record, container);
+
+    var removed = container.querySelector('[data-testid="diff-removed"]');
+    expect(removed).not.toBeNull();
+    var svg = removed.querySelector('svg');
+    expect(svg).not.toBeNull();
+  });
+
+  test('equal blocks do not contain SVG icons', () => {
+    var record = {
+      previousContent: 'same text',
+      content: 'same text',
+    };
+
+    ContentDiff.render(record, container);
+
+    var equal = container.querySelector('[data-testid="diff-equal"]');
+    expect(equal).not.toBeNull();
+    expect(equal.querySelector('svg')).toBeNull();
   });
 });

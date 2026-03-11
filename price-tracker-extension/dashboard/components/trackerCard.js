@@ -15,6 +15,10 @@
  */
 
 const TrackerCard = (function () {
+  // ─── Icons reference (global in browser, require in Node/Jest) ────
+  var _Icons = (typeof Icons !== 'undefined') ? Icons
+             : (typeof require === 'function' ? require('../../shared/icons') : null);
+
   // ─── Helpers ──────────────────────────────────────────────────────
 
   /**
@@ -70,8 +74,14 @@ const TrackerCard = (function () {
 
   /**
    * Return the arrow/symbol for the price direction.
+   * Uses SVG icons from Icons module when available, falls back to text symbols.
    */
   function getDirectionSymbol(direction) {
+    if (_Icons) {
+      if (direction === 'down') return _Icons.el('arrow-down', 16);
+      if (direction === 'up') return _Icons.el('arrow-up', 16);
+      return _Icons.el('arrow-neutral', 16);
+    }
     if (direction === 'down') return '▼';
     if (direction === 'up') return '▲';
     return '—';
@@ -141,6 +151,9 @@ const TrackerCard = (function () {
     var direction = isContent ? 'neutral' : getPriceDirection(tracker.currentPrice, tracker.initialPrice);
     var domain = extractDomain(tracker.pageUrl);
 
+    // Add price direction CSS class for gradient bar
+    card.className += ' tracker-card-price-' + direction;
+
     // Build inner HTML
     var html = '';
 
@@ -151,9 +164,9 @@ const TrackerCard = (function () {
             + ' alt="' + escapeHtml(tracker.productName) + '"'
             + ' class="tracker-card-img"'
             + ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
-      html += '<div class="tracker-card-img-placeholder" style="display:none" aria-hidden="true">📦</div>';
+      html += '<div class="tracker-card-img-placeholder" style="display:none" aria-hidden="true">' + (_Icons ? _Icons.get('package') : '📦') + '</div>';
     } else {
-      html += '<div class="tracker-card-img-placeholder" aria-hidden="true">📦</div>';
+      html += '<div class="tracker-card-img-placeholder" aria-hidden="true">' + (_Icons ? _Icons.get('package') : '📦') + '</div>';
     }
     html += '</div>';
 
@@ -166,7 +179,8 @@ const TrackerCard = (function () {
           + ' role="img" aria-label="Status: ' + getStatusLabel(tracker.status) + '"></span>';
     html += '<span class="tracker-card-domain text-truncate">' + escapeHtml(domain) + '</span>';
     if (tracker.isAutoDetected) {
-      html += '<span class="badge-auto" title="Auto-detected" aria-label="Auto-detected tracker">A</span>';
+      html += '<span class="badge-auto" title="Auto-detected" aria-label="Auto-detected tracker">'
+            + (_Icons ? _Icons.el('auto-detect', 14) : 'A') + '</span>';
     }
     html += '</div>';
 

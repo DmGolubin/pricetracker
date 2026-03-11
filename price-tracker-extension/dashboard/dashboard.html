@@ -17,14 +17,14 @@
 
     <!-- Empty state (shown when no trackers) -->
     <div id="empty-state" class="empty-state" hidden>
-      <span class="empty-state-icon">📊</span>
+      <span class="empty-state-icon" id="empty-state-icon">📊</span>
       <p class="empty-state-text">Нет трекеров</p>
       <p class="empty-state-hint">Откройте страницу товара и нажмите «Отслеживать цену» в popup расширения</p>
     </div>
 
     <!-- Error state -->
     <div id="error-state" class="error-state" hidden>
-      <span class="error-state-icon">⚠️</span>
+      <span class="error-state-icon" id="error-state-icon">⚠️</span>
       <p id="error-message" class="error-state-text"></p>
       <button id="btn-retry" class="btn btn-primary">Повторить</button>
     </div>
@@ -39,8 +39,9 @@
   <!-- Modal container (used by settingsModal.js, globalSettings.js) -->
   <div id="modal-container"></div>
 
-  <!-- Scripts: shared constants, then dashboard components, then main -->
+  <!-- Scripts: shared constants & icons, then dashboard components, then main -->
   <script src="../shared/constants.js"></script>
+  <script src="../shared/icons.js"></script>
   <script src="components/trackerCard.js"></script>
   <script src="components/toolbar.js"></script>
   <script src="components/settingsModal.js"></script>

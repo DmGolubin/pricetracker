@@ -88,7 +88,7 @@ describe('TrackerCard', () => {
       const dirEl = card.querySelector('.tracker-card-direction');
       expect(dirEl).not.toBeNull();
       expect(dirEl.classList.contains('price-down')).toBe(true);
-      expect(dirEl.textContent).toBe('▼');
+      expect(dirEl.querySelector('svg')).not.toBeNull();
     });
 
     test('shows red indicator when price increased', () => {
@@ -96,7 +96,7 @@ describe('TrackerCard', () => {
       const dirEl = card.querySelector('.tracker-card-direction');
       expect(dirEl).not.toBeNull();
       expect(dirEl.classList.contains('price-up')).toBe(true);
-      expect(dirEl.textContent).toBe('▲');
+      expect(dirEl.querySelector('svg')).not.toBeNull();
     });
 
     test('shows neutral indicator when price unchanged', () => {
@@ -104,13 +104,24 @@ describe('TrackerCard', () => {
       const dirEl = card.querySelector('.tracker-card-direction');
       expect(dirEl).not.toBeNull();
       expect(dirEl.classList.contains('price-neutral')).toBe(true);
-      expect(dirEl.textContent).toBe('—');
+      expect(dirEl.querySelector('svg')).not.toBeNull();
     });
 
     test('direction indicator has accessible label', () => {
       const card = TrackerCard.create(makeTracker({ currentPrice: 80, initialPrice: 100 }));
       const dirEl = card.querySelector('.tracker-card-direction');
       expect(dirEl.getAttribute('aria-label')).toBe('Price decreased');
+    });
+
+    test('card has price direction CSS class for gradient bar', () => {
+      const downCard = TrackerCard.create(makeTracker({ currentPrice: 80, initialPrice: 100 }));
+      expect(downCard.classList.contains('tracker-card-price-down')).toBe(true);
+
+      const upCard = TrackerCard.create(makeTracker({ currentPrice: 120, initialPrice: 100 }));
+      expect(upCard.classList.contains('tracker-card-price-up')).toBe(true);
+
+      const neutralCard = TrackerCard.create(makeTracker({ currentPrice: 100, initialPrice: 100 }));
+      expect(neutralCard.classList.contains('tracker-card-price-neutral')).toBe(true);
     });
   });
 
@@ -158,7 +169,7 @@ describe('TrackerCard', () => {
       const card = TrackerCard.create(makeTracker({ isAutoDetected: true }));
       const badge = card.querySelector('.badge-auto');
       expect(badge).not.toBeNull();
-      expect(badge.textContent).toBe('A');
+      expect(badge.querySelector('svg')).not.toBeNull();
     });
 
     test('does not show badge when isAutoDetected is false', () => {
@@ -263,7 +274,7 @@ describe('TrackerCard', () => {
       expect(img).toBeNull();
       const placeholder = card.querySelector('.tracker-card-img-placeholder');
       expect(placeholder).not.toBeNull();
-      expect(placeholder.textContent).toBe('📦');
+      expect(placeholder.querySelector('svg')).not.toBeNull();
     });
 
     test('handles null imageUrl with placeholder', () => {

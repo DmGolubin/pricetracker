@@ -78,12 +78,14 @@ describe('SettingsModal', () => {
       expect(header.textContent).toBe('My Widget');
     });
 
-    test('modal has close button', () => {
+    test('modal has close button with SVG icon', () => {
       SettingsModal.open(makeTracker(), container, {});
 
       const closeBtn = container.querySelector('.modal-header .btn-icon');
       expect(closeBtn).not.toBeNull();
-      expect(closeBtn.textContent).toBe('×');
+      const svg = closeBtn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg.getAttribute('aria-hidden')).toBe('true');
     });
 
     test('modal has notifications toggle', () => {
@@ -481,6 +483,32 @@ describe('SettingsModal', () => {
         c => c[0] && c[0].action === 'markAsRead'
       );
       expect(markCalls.length).toBe(0);
+    });
+  });
+
+  // ─── Section dividers and icons (Req 9.1, 9.5) ─────────────────
+
+  describe('section dividers and icons', () => {
+    test('modal body contains section dividers between form groups', () => {
+      SettingsModal.open(makeTracker(), container, {});
+      const dividers = container.querySelectorAll('.modal-section-divider');
+      expect(dividers.length).toBeGreaterThanOrEqual(3);
+    });
+
+    test('section dividers are <hr> elements', () => {
+      SettingsModal.open(makeTracker(), container, {});
+      const dividers = container.querySelectorAll('.modal-section-divider');
+      dividers.forEach(d => {
+        expect(d.tagName).toBe('HR');
+      });
+    });
+
+    test('form group labels with icons contain SVG elements', () => {
+      SettingsModal.open(makeTracker(), container, {});
+      const labels = container.querySelectorAll('.form-group label');
+      const labelsWithSvg = Array.from(labels).filter(l => l.querySelector('svg'));
+      // At least notifications, refresh/interval, and link/image URL should have icons
+      expect(labelsWithSvg.length).toBeGreaterThanOrEqual(3);
     });
   });
 

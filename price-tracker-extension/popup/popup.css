@@ -19,6 +19,18 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  padding-bottom: var(--spacing-md);
+  position: relative;
+}
+
+.popup-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--border-light, rgba(255,255,255,0.12)), transparent);
 }
 
 .popup-logo {
@@ -84,4 +96,25 @@
 
 .popup-status-error {
   color: var(--accent-red);
+}
+
+
+/* ===== SVG Logo ===== */
+.popup-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.popup-logo svg {
+  color: var(--accent-primary, #5C6BC0);
+}
+
+/* ===== Status message animations ===== */
+.popup-status-enter {
+  animation: slideDown 200ms ease-out forwards;
+}
+
+.popup-status-exit {
+  animation: slideUp 200ms ease-in forwards;
 }

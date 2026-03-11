@@ -153,14 +153,25 @@ const ContentDiff = (function () {
       if (op.type === 'removed') {
         el.className = 'diff-removed';
         el.setAttribute('data-testid', 'diff-removed');
+        if (typeof Icons !== 'undefined' && Icons.el) {
+          el.innerHTML = Icons.el('minus', 14) + ' ';
+          el.appendChild(document.createTextNode(op.value));
+        } else {
+          el.textContent = op.value;
+        }
       } else if (op.type === 'added') {
         el.className = 'diff-added';
         el.setAttribute('data-testid', 'diff-added');
+        if (typeof Icons !== 'undefined' && Icons.el) {
+          el.innerHTML = Icons.el('plus', 14) + ' ';
+          el.appendChild(document.createTextNode(op.value));
+        } else {
+          el.textContent = op.value;
+        }
       } else {
         el.setAttribute('data-testid', 'diff-equal');
+        el.textContent = op.value;
       }
-
-      el.textContent = op.value;
       wrapper.appendChild(el);
 
       // Add separator between tokens (except after the last one)

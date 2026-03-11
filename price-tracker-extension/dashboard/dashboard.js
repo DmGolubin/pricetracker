@@ -45,9 +45,88 @@ const Dashboard = (function () {
     });
   }
 
+  // ─── Skeleton Loader ─────────────────────────────────────────────────
+
+  /**
+   * Render 6 skeleton placeholder cards in the loading state area.
+   * Each card mimics the structure of a real tracker card with shimmer animation.
+   */
+  function renderSkeletons() {
+    loadingState.innerHTML = '';
+    loadingState.classList.add('tracker-grid');
+    for (var i = 0; i < 6; i++) {
+      var card = document.createElement('div');
+      card.className = 'skeleton-card';
+      card.innerHTML =
+        '<div class="skeleton-image"></div>' +
+        '<div class="skeleton-line"></div>' +
+        '<div class="skeleton-line"></div>' +
+        '<div class="skeleton-price"></div>';
+      loadingState.appendChild(card);
+    }
+  }
+
+  // ─── Crossfade state transitions ───────────────────────────────────
+
+  /**
+   * Get the currently visible state element (loading, grid, empty, or error).
+   */
+  function getCurrentVisibleState() {
+    if (!loadingState.hidden) return loadingState;
+    if (!trackerGrid.hidden) return trackerGrid;
+    if (!emptyState.hidden) return emptyState;
+    if (!errorState.hidden) return errorState;
+    return null;
+  }
+
+  /**
+   * Crossfade from the current visible state to the target element.
+   * Fades out the current state (150ms), then fades in the new state (150ms).
+   */
+  function crossfadeTo(targetEl, setupFn) {
+    var current = getCurrentVisibleState();
+
+    // If no current visible state or same element, just show directly
+    if (!current || current === targetEl) {
+      loadingState.hidden = true;
+      trackerGrid.hidden = true;
+      emptyState.hidden = true;
+      errorState.hidden = true;
+      if (setupFn) setupFn();
+      targetEl.hidden = false;
+      targetEl.classList.add('state-fade-enter');
+      // Clean up class after animation
+      setTimeout(function () {
+        targetEl.classList.remove('state-fade-enter');
+      }, 300);
+      return;
+    }
+
+    // Fade out current
+    current.classList.add('state-fade-exit');
+    setTimeout(function () {
+      current.classList.remove('state-fade-exit');
+      // Hide all states
+      loadingState.hidden = true;
+      trackerGrid.hidden = true;
+      emptyState.hidden = true;
+      errorState.hidden = true;
+
+      if (setupFn) setupFn();
+
+      // Fade in target
+      targetEl.hidden = false;
+      targetEl.classList.add('state-fade-enter');
+      setTimeout(function () {
+        targetEl.classList.remove('state-fade-enter');
+      }, 300);
+    }, 150);
+  }
+
   // ─── UI state management ────────────────────────────────────────────
 
   function showLoading() {
+    renderSkeletons();
     loadingState.hidden = false;
     trackerGrid.hidden = true;
     emptyState.hidden = true;
@@ -55,25 +134,17 @@ const Dashboard = (function () {
   }
 
   function showGrid() {
-    loadingState.hidden = true;
-    trackerGrid.hidden = false;
-    emptyState.hidden = true;
-    errorState.hidden = true;
+    crossfadeTo(trackerGrid);
   }
 
   function showEmpty() {
-    loadingState.hidden = true;
-    trackerGrid.hidden = true;
-    emptyState.hidden = false;
-    errorState.hidden = true;
+    crossfadeTo(emptyState);
   }
 
   function showError(message) {
-    loadingState.hidden = true;
-    trackerGrid.hidden = true;
-    emptyState.hidden = true;
-    errorState.hidden = false;
-    errorMessage.textContent = message || 'Не удалось загрузить трекеры';
+    crossfadeTo(errorState, function () {
+      errorMessage.textContent = message || 'Не удалось загрузить трекеры';
+    });
   }
 
   // ─── Filtering logic ───────────────────────────────────────────────
@@ -107,6 +178,8 @@ const Dashboard = (function () {
 
   /**
    * Render the tracker card grid from filteredTrackers.
+   * Applies stagger animation: each card gets .tracker-card-enter, then
+   * via requestAnimationFrame + 50ms × index delay, .visible is added.
    */
   function renderGrid() {
     trackerGrid.innerHTML = '';
@@ -125,10 +198,40 @@ const Dashboard = (function () {
 
     showGrid();
 
-    filteredTrackers.forEach((tracker) => {
+    filteredTrackers.forEach((tracker, index) => {
       const cardEl = renderTrackerCard(tracker);
+      cardEl.classList.add('tracker-card-enter');
       trackerGrid.appendChild(cardEl);
+
+      // Stagger animation: requestAnimationFrame + 50ms × index delay
+      requestAnimationFrame(function () {
+        setTimeout(function () {
+          cardEl.classList.add('visible');
+        }, 50 * index);
+      });
     });
+  }
+
+  /**
+   * Animate filter/search changes: fade out current cards, then render new ones.
+   * Cards fadeOut/fadeIn with 200ms duration.
+   */
+  function animateFilterChange(renderFn) {
+    var cards = trackerGrid.querySelectorAll('.tracker-card, .card');
+    if (cards.length === 0) {
+      renderFn();
+      return;
+    }
+
+    // Fade out existing cards
+    cards.forEach(function (card) {
+      card.style.transition = 'opacity 200ms ease';
+      card.style.opacity = '0';
+    });
+
+    setTimeout(function () {
+      renderFn();
+    }, 200);
   }
 
   /**
@@ -235,20 +338,26 @@ const Dashboard = (function () {
 
   /**
    * Called by Toolbar when search query changes.
+   * Animates filter transition with fadeOut/fadeIn.
    */
   function onSearchChange(query) {
     searchQuery = query;
     applyFilters();
-    renderGrid();
+    animateFilterChange(function () {
+      renderGrid();
+    });
   }
 
   /**
    * Called by Toolbar when price filter changes.
+   * Animates filter transition with fadeOut/fadeIn.
    */
   function onFilterChange(filter) {
     priceFilter = filter;
     applyFilters();
-    renderGrid();
+    animateFilterChange(function () {
+      renderGrid();
+    });
   }
 
   // ─── Data loading ──────────────────────────────────────────────────
@@ -281,9 +390,56 @@ const Dashboard = (function () {
     sendMessage({ action: 'resetBadge' }).catch(() => {});
   }
 
+  // ─── Ripple Effect ──────────────────────────────────────────────────
+
+  /**
+   * Initialize ripple effect via delegated click handler on document.body.
+   * Creates a .ripple span at click position for all .btn elements.
+   */
+  function initRipple() {
+    document.body.addEventListener('click', function (e) {
+      var btn = e.target.closest('.btn');
+      if (!btn) return;
+
+      // Ensure the button has ripple-container class for overflow:hidden
+      if (!btn.classList.contains('ripple-container')) {
+        btn.classList.add('ripple-container');
+      }
+
+      var rect = btn.getBoundingClientRect();
+      var size = Math.max(rect.width, rect.height);
+      var x = e.clientX - rect.left - size / 2;
+      var y = e.clientY - rect.top - size / 2;
+
+      var ripple = document.createElement('span');
+      ripple.className = 'ripple';
+      ripple.style.width = size + 'px';
+      ripple.style.height = size + 'px';
+      ripple.style.left = x + 'px';
+      ripple.style.top = y + 'px';
+
+      btn.appendChild(ripple);
+
+      // Remove ripple element after animation completes (400ms)
+      setTimeout(function () {
+        if (ripple.parentNode) {
+          ripple.parentNode.removeChild(ripple);
+        }
+      }, 400);
+    });
+  }
+
   // ─── Initialisation ────────────────────────────────────────────────
 
   function init() {
+    // Replace emoji icons with SVG icons
+    if (typeof Icons !== 'undefined') {
+      var emptyIcon = document.getElementById('empty-state-icon');
+      if (emptyIcon) emptyIcon.innerHTML = Icons.el('chart', 48);
+      var errorIcon = document.getElementById('error-state-icon');
+      if (errorIcon) errorIcon.innerHTML = Icons.el('warning', 48);
+    }
+
     // Retry button
     if (btnRetry) {
       btnRetry.addEventListener('click', loadTrackers);
@@ -306,6 +462,9 @@ const Dashboard = (function () {
       });
     }
 
+    // Initialise ripple effect for all .btn elements
+    initRipple();
+
     // Load trackers
     loadTrackers();
   }
@@ -327,6 +486,9 @@ const Dashboard = (function () {
     onTrackerDeleted,
     applyFilters,
     renderGrid,
+    renderSkeletons,
+    animateFilterChange,
+    initRipple,
     sendMessage,
     extractDomain,
     formatPrice,

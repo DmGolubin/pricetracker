@@ -1,7 +1,7 @@
 /**
  * Unit tests for Toolbar component (dashboard/components/toolbar.js)
  *
- * Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
+ * Requirements: 2.4, 2.8, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6
  */
 
 const Toolbar = require('../../dashboard/components/toolbar');
@@ -26,7 +26,7 @@ describe('Toolbar', () => {
       Toolbar.init(container, {});
       const btn = container.querySelector('.btn.btn-primary');
       expect(btn).not.toBeNull();
-      expect(btn.textContent).toBe('Обновить все');
+      expect(btn.textContent).toContain('Обновить все');
     });
 
     test('renders search input with input class', () => {
@@ -42,11 +42,73 @@ describe('Toolbar', () => {
       expect(select).not.toBeNull();
     });
 
-    test('renders settings icon button with btn-icon class', () => {
+    test('renders settings icon button with btn-icon class and SVG icon', () => {
       Toolbar.init(container, {});
       const btn = container.querySelector('.btn-icon');
       expect(btn).not.toBeNull();
-      expect(btn.textContent).toBe('⚙️');
+      // Should contain SVG settings icon instead of ⚙️ emoji
+      const svg = btn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(btn.textContent).not.toContain('⚙️');
+    });
+  });
+
+  // ─── SVG Icons ──────────────────────────────────────────────────
+
+  describe('SVG icons', () => {
+    test('refresh button contains SVG refresh icon', () => {
+      Toolbar.init(container, {});
+      const btn = container.querySelector('.btn.btn-primary');
+      const svg = btn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    test('settings button contains SVG settings icon', () => {
+      Toolbar.init(container, {});
+      const btn = container.querySelector('.btn-icon');
+      const svg = btn.querySelector('svg');
+      expect(svg).not.toBeNull();
+    });
+
+    test('search wrapper contains SVG search icon', () => {
+      Toolbar.init(container, {});
+      const searchIcon = container.querySelector('.toolbar-search-icon');
+      expect(searchIcon).not.toBeNull();
+      const svg = searchIcon.querySelector('svg');
+      expect(svg).not.toBeNull();
+    });
+  });
+
+  // ─── Layout Groups ─────────────────────────────────────────────
+
+  describe('toolbar layout groups', () => {
+    test('has left group with refresh button', () => {
+      Toolbar.init(container, {});
+      const leftGroup = container.querySelector('.toolbar-group-left');
+      expect(leftGroup).not.toBeNull();
+      expect(leftGroup.querySelector('.btn.btn-primary')).not.toBeNull();
+    });
+
+    test('has center group with search and filter', () => {
+      Toolbar.init(container, {});
+      const centerGroup = container.querySelector('.toolbar-group-center');
+      expect(centerGroup).not.toBeNull();
+      expect(centerGroup.querySelector('.toolbar-search-wrapper')).not.toBeNull();
+      expect(centerGroup.querySelector('select.input')).not.toBeNull();
+    });
+
+    test('has right group with settings button', () => {
+      Toolbar.init(container, {});
+      const rightGroup = container.querySelector('.toolbar-group-right');
+      expect(rightGroup).not.toBeNull();
+      expect(rightGroup.querySelector('.btn-icon')).not.toBeNull();
+    });
+
+    test('has dividers between groups', () => {
+      Toolbar.init(container, {});
+      const dividers = container.querySelectorAll('.toolbar-divider');
+      expect(dividers.length).toBe(2);
     });
   });
 
@@ -57,6 +119,14 @@ describe('Toolbar', () => {
       Toolbar.init(container, {});
       const input = container.querySelector('input.input');
       expect(input.placeholder).toBe('Поиск по названию...');
+    });
+
+    test('is wrapped in search wrapper with icon', () => {
+      Toolbar.init(container, {});
+      const wrapper = container.querySelector('.toolbar-search-wrapper');
+      expect(wrapper).not.toBeNull();
+      expect(wrapper.querySelector('input.input')).not.toBeNull();
+      expect(wrapper.querySelector('.toolbar-search-icon')).not.toBeNull();
     });
 
     test('triggers onSearch callback on input event', () => {
@@ -136,6 +206,28 @@ describe('Toolbar', () => {
 
       expect(onRefreshAll).toHaveBeenCalledTimes(1);
     });
+
+    test('adds toolbar-refresh-spin class to SVG on click', () => {
+      Toolbar.init(container, {});
+      const btn = container.querySelector('.btn.btn-primary');
+      const svg = btn.querySelector('svg');
+
+      btn.click();
+
+      expect(svg.classList.contains('toolbar-refresh-spin')).toBe(true);
+    });
+
+    test('removes toolbar-refresh-spin class after animationend', () => {
+      Toolbar.init(container, {});
+      const btn = container.querySelector('.btn.btn-primary');
+      const svg = btn.querySelector('svg');
+
+      btn.click();
+      expect(svg.classList.contains('toolbar-refresh-spin')).toBe(true);
+
+      svg.dispatchEvent(new Event('animationend'));
+      expect(svg.classList.contains('toolbar-refresh-spin')).toBe(false);
+    });
   });
 
   // ─── Settings button ──────────────────────────────────────────
@@ -189,6 +281,20 @@ describe('Toolbar', () => {
       Toolbar.init(container, {});
       const btn = container.querySelector('.btn-icon');
       expect(btn.getAttribute('aria-label')).toBe('Открыть настройки');
+    });
+
+    test('search icon is aria-hidden', () => {
+      Toolbar.init(container, {});
+      const searchIcon = container.querySelector('.toolbar-search-icon');
+      expect(searchIcon.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    test('dividers are aria-hidden', () => {
+      Toolbar.init(container, {});
+      const dividers = container.querySelectorAll('.toolbar-divider');
+      dividers.forEach(d => {
+        expect(d.getAttribute('aria-hidden')).toBe('true');
+      });
     });
   });
 

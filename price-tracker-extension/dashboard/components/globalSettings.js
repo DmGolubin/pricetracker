@@ -61,17 +61,27 @@ const GlobalSettings = (function () {
     var header = document.createElement('div');
     header.className = 'modal-header';
 
+    var titleWrap = document.createElement('span');
+    titleWrap.className = 'modal-title-wrap';
+    if (typeof Icons !== 'undefined') {
+      titleWrap.innerHTML = Icons.el('settings', 20);
+    }
     var title = document.createElement('h2');
     title.textContent = 'Глобальные настройки';
+    titleWrap.appendChild(title);
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'btn-icon';
     closeBtn.type = 'button';
-    closeBtn.textContent = '×';
+    if (typeof Icons !== 'undefined') {
+      closeBtn.innerHTML = Icons.el('close', 20);
+    } else {
+      closeBtn.textContent = '×';
+    }
     closeBtn.setAttribute('aria-label', 'Закрыть');
     closeBtn.addEventListener('click', close);
 
-    header.appendChild(title);
+    header.appendChild(titleWrap);
     header.appendChild(closeBtn);
 
     // ── Body ──
@@ -190,9 +200,10 @@ const GlobalSettings = (function () {
   function handleSave(overlay) {
     var settings = collectFormData(overlay);
     var saveBtn = overlay.querySelector('.btn-primary');
+    var originalText = saveBtn ? saveBtn.textContent : 'Сохранить';
     if (saveBtn) {
       saveBtn.disabled = true;
-      saveBtn.textContent = 'Сохранение...';
+      saveBtn.innerHTML = '<span class="save-spinner"></span>';
     }
 
     // Try service worker first, fall back to direct fetch
@@ -201,10 +212,16 @@ const GlobalSettings = (function () {
       settings: settings,
     })
       .then(function () {
-        close();
-        if (typeof window !== 'undefined' && window.location) {
-          window.location.reload();
+        if (saveBtn && typeof Icons !== 'undefined') {
+          saveBtn.innerHTML = Icons.el('check', 18);
+          saveBtn.style.color = 'var(--accent-green, #4CAF50)';
         }
+        setTimeout(function () {
+          close();
+          if (typeof window !== 'undefined' && window.location) {
+            window.location.reload();
+          }
+        }, 600);
       })
       .catch(function () {
         // Fallback: save directly via fetch
@@ -214,10 +231,16 @@ const GlobalSettings = (function () {
           body: JSON.stringify(Object.assign({}, settings, { id: 'global' })),
         }).then(function (res) {
           if (res.ok) {
-            close();
-            if (typeof window !== 'undefined' && window.location) {
-              window.location.reload();
+            if (saveBtn && typeof Icons !== 'undefined') {
+              saveBtn.innerHTML = Icons.el('check', 18);
+              saveBtn.style.color = 'var(--accent-green, #4CAF50)';
             }
+            setTimeout(function () {
+              close();
+              if (typeof window !== 'undefined' && window.location) {
+                window.location.reload();
+              }
+            }, 600);
           } else {
             throw new Error('HTTP ' + res.status);
           }
@@ -226,7 +249,12 @@ const GlobalSettings = (function () {
       .catch(function (err) {
         if (saveBtn) {
           saveBtn.disabled = false;
-          saveBtn.textContent = 'Сохранить';
+          if (typeof Icons !== 'undefined') {
+            saveBtn.innerHTML = Icons.el('warning', 18) + ' ' + originalText;
+            saveBtn.style.color = '';
+          } else {
+            saveBtn.textContent = originalText;
+          }
         }
         var errorEl = overlay.querySelector('.settings-error');
         if (!errorEl) {
@@ -237,6 +265,9 @@ const GlobalSettings = (function () {
           if (footer) footer.insertBefore(errorEl, footer.firstChild);
         }
         errorEl.textContent = 'Ошибка сохранения: ' + (err.message || 'неизвестная ошибка');
+        if (typeof Icons !== 'undefined') {
+          errorEl.innerHTML = Icons.el('warning', 14) + ' ' + errorEl.textContent;
+        }
       });
   }
 
