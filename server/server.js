@@ -40,6 +40,7 @@ async function initDB() {
       "currentContent" TEXT DEFAULT '',
       "previousContent" TEXT DEFAULT '',
       "excludedSelectors" JSONB DEFAULT '[]',
+      "notificationsEnabled" BOOLEAN DEFAULT true,
       "createdAt" TIMESTAMP DEFAULT NOW(),
       "updatedAt" TIMESTAMP DEFAULT NOW()
     );
@@ -63,6 +64,12 @@ async function initDB() {
 
     INSERT INTO settings (id) VALUES ('global') ON CONFLICT (id) DO NOTHING;
   `);
+
+  // Migration: add notificationsEnabled column if missing
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "notificationsEnabled" BOOLEAN DEFAULT true;
+  `);
+
   console.log('Database tables initialized');
 }
 
@@ -124,6 +131,7 @@ app.put('/trackers/:id', async (req, res) => {
       'checkIntervalHours', 'trackingType', 'status', 'unread',
       'errorMessage', 'checkMode', 'notificationFilter',
       'initialContent', 'currentContent', 'previousContent', 'excludedSelectors',
+      'notificationsEnabled',
     ];
 
     for (const key of allowed) {

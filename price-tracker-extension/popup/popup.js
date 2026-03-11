@@ -56,25 +56,32 @@ btnTrackManual.addEventListener('click', () => {
   });
 });
 
+// Store auto-detect data for one-click tracking
+let autoDetectData = null;
+
 btnTrackAuto.addEventListener('click', () => {
+  if (!autoDetectData) return;
+
   // Disable button to prevent double-clicks
   btnTrackAuto.disabled = true;
   btnTrackAuto.textContent = 'Создание трекера…';
 
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const tab = tabs[0];
-    if (!tab) {
-      showStatus('Не удалось определить вкладку', true);
+  // Send the stored auto-detect data to service worker to create the tracker
+  chrome.runtime.sendMessage({
+    action: 'autoDetected',
+    selector: autoDetectData.selector,
+    price: autoDetectData.price,
+    title: autoDetectData.title,
+    imageUrl: autoDetectData.imageUrl,
+    pageUrl: autoDetectData.pageUrl,
+  }, (response) => {
+    if (chrome.runtime.lastError || (response && response.error)) {
+      showStatus('Ошибка создания трекера', true);
+      btnTrackAuto.disabled = false;
+      btnTrackAuto.textContent = 'Повторить';
       return;
     }
-
-    // Inject autoDetector — it sends autoDetected/autoDetectFailed to the SW
-    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/autoDetector.js'] })
-      .then(() => { window.close(); })
-      .catch((err) => {
-        showStatus('Ошибка: ' + (err.message || 'не удалось внедрить скрипт'), true);
-        btnTrackAuto.disabled = false;
-      });
+    window.close();
   });
 });
 
@@ -118,17 +125,23 @@ function init() {
 function tryAutoDetect(tab) {
   chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/autoDetector.js'] })
     .then(() => {
-      // The autoDetector sends a message to the service worker.
-      // We set up a temporary listener to intercept the result.
+      // autoDetector sends autoDetectResult (not autoDetected) — just price info, no tracker creation
       const listener = (message) => {
         if (!message || !message.action) return;
 
-        if (message.action === 'autoDetected') {
+        if (message.action === 'autoDetectResult') {
           chrome.runtime.onMessage.removeListener(listener);
+          // Store data for one-click tracking button
+          autoDetectData = {
+            selector: message.selector,
+            price: message.price,
+            title: message.title,
+            imageUrl: message.imageUrl,
+            pageUrl: message.pageUrl,
+          };
           showAutoButton(message.price);
         } else if (message.action === 'autoDetectFailed') {
           chrome.runtime.onMessage.removeListener(listener);
-          // No auto-detected price — manual button is already visible
         }
       };
 

@@ -5,6 +5,15 @@
  * Requirements: 4.1, 4.5, 12.1
  */
 
+/* ===== Hidden attribute override ===== */
+/* CSS display values override [hidden], so we need explicit rules */
+.empty-state[hidden],
+.error-state[hidden],
+.loading-state[hidden],
+.tracker-grid[hidden] {
+  display: none !important;
+}
+
 /* ===== Main Layout ===== */
 .dashboard-main {
   padding: var(--spacing-lg);

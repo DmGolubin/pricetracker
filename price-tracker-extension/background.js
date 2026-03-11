@@ -134,6 +134,10 @@ function getMessageHandler(message, sender) {
     case MessageFromCS.AUTO_DETECT_FAILED:
       return Promise.resolve();
 
+    // autoDetectResult is for popup only — SW ignores it
+    case 'autoDetectResult':
+      return Promise.resolve();
+
     default:
       return null;
   }

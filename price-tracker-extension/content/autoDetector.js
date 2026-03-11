@@ -415,7 +415,7 @@
 
   if (result.found) {
     chrome.runtime.sendMessage({
-      action: 'autoDetected',
+      action: 'autoDetectResult',
       selector: result.selector,
       price: result.price,
       title: document.title || '',

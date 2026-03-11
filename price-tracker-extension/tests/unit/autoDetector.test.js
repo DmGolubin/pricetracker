@@ -88,7 +88,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 29.99
         })
       );
@@ -106,7 +106,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 149
         })
       );
@@ -133,7 +133,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 59.99
         })
       );
@@ -159,7 +159,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 25
         })
       );
@@ -182,7 +182,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 10
         })
       );
@@ -198,7 +198,7 @@ describe('AutoDetector', () => {
       // Should still detect via DOM search
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 15
         })
       );
@@ -220,7 +220,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 30
         })
       );
@@ -236,7 +236,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 199.99
         })
       );
@@ -250,7 +250,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 49.99
         })
       );
@@ -264,7 +264,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 1500
         })
       );
@@ -278,7 +278,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 29.99
         })
       );
@@ -317,7 +317,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           title: 'Test Product Page'
         })
       );
@@ -343,7 +343,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           imageUrl: 'https://example.com/product.jpg'
         })
       );
@@ -379,7 +379,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 99.99
         })
       );
@@ -393,7 +393,7 @@ describe('AutoDetector', () => {
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'autoDetected',
+          action: 'autoDetectResult',
           price: 75.5
         })
       );

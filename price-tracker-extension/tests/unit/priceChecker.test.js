@@ -48,6 +48,7 @@ function makeDeps(overrides = {}) {
     apiClient: {
       getTracker: jest.fn(),
       getTrackers: jest.fn(),
+      getSettings: jest.fn().mockResolvedValue({}),
       updateTracker: jest.fn().mockResolvedValue({}),
       addPriceRecord: jest.fn().mockResolvedValue({}),
     },
@@ -230,7 +231,7 @@ describe('handlePriceResult', () => {
     }));
 
     expect(deps.badgeManager.incrementUnread).toHaveBeenCalled();
-    expect(deps.notifier.notify).toHaveBeenCalledWith(tracker, 100, 85);
+    expect(deps.notifier.notify).toHaveBeenCalledWith(tracker, 100, 85, {});
   });
 
   test('does not set updated status when price unchanged', async () => {

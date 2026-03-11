@@ -194,7 +194,9 @@ async function handlePriceResult(tracker, newPrice, deps) {
 
   if (priceChanged && notifier) {
     try {
-      await notifier.notify(tracker, tracker.currentPrice, newPrice);
+      var settings = {};
+      try { settings = await deps.apiClient.getSettings(); } catch (_s) {}
+      await notifier.notify(tracker, tracker.currentPrice, newPrice, settings);
     } catch (_) {
       // Notification errors should not break the check
     }
@@ -242,7 +244,9 @@ async function handleContentResult(tracker, newContent, deps) {
 
   if (contentChanged && notifier) {
     try {
-      await notifier.notify(tracker, tracker.currentContent, newContent);
+      var settings = {};
+      try { settings = await deps.apiClient.getSettings(); } catch (_s) {}
+      await notifier.notify(tracker, tracker.currentContent, newContent, settings);
     } catch (_) {
       // Notification errors should not break the check
     }
