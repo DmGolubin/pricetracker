@@ -65,30 +65,51 @@ function escapeHtml(str) {
 
 /**
  * Format a content diff as Telegram HTML.
- * Shows only changed lines with ➖/➕ markers.
- * Unchanged lines shown as context (max 2 around changes).
+ * Shows changed lines with ➖/➕ markers, plus 1 context line around changes.
  */
 function formatContentDiffHtml(oldContent, newContent) {
   var ops = computeLineDiff(oldContent, newContent);
   if (ops.length === 0) return 'Контент изменился';
 
-  // Collect only changed lines, with up to 1 context line around them
-  var lines = [];
+  // Mark which indices are changed
+  var changed = [];
   for (var i = 0; i < ops.length; i++) {
+    changed[i] = ops[i].type !== 'equal';
+  }
+
+  // Include 1 context line around each change
+  var include = [];
+  for (var i = 0; i < ops.length; i++) {
+    if (changed[i]) {
+      if (i > 0 && !include[i - 1]) include[i - 1] = true;
+      include[i] = true;
+      if (i + 1 < ops.length) include[i + 1] = true;
+    }
+  }
+
+  var lines = [];
+  var skipped = false;
+  for (var i = 0; i < ops.length; i++) {
+    if (!include[i]) {
+      if (!skipped) { skipped = true; }
+      continue;
+    }
+    skipped = false;
     var op = ops[i];
     if (op.type === 'removed') {
       lines.push('➖ <s>' + escapeHtml(op.value) + '</s>');
     } else if (op.type === 'added') {
       lines.push('➕ <b>' + escapeHtml(op.value) + '</b>');
+    } else {
+      lines.push('   ' + escapeHtml(op.value));
     }
-    // Skip equal lines to keep message compact
   }
 
   if (lines.length === 0) return 'Контент изменился';
 
-  // Limit to 20 lines max for Telegram readability
-  if (lines.length > 20) {
-    lines = lines.slice(0, 20);
+  // Limit to 30 lines max for Telegram readability
+  if (lines.length > 30) {
+    lines = lines.slice(0, 30);
     lines.push('… ещё изменения');
   }
 

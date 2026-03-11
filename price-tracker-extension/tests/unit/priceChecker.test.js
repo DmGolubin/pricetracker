@@ -556,7 +556,7 @@ describe('checkPrice', () => {
 // ─── checkAllPrices ─────────────────────────────────────────────────
 
 describe('checkAllPrices', () => {
-  test('checks only active and updated trackers sequentially', async () => {
+  test('checks only active and updated trackers in parallel', async () => {
     const trackers = [
       makeTracker({ id: 't1', status: TrackerStatus.ACTIVE }),
       makeTracker({ id: 't2', status: TrackerStatus.PAUSED }),
@@ -574,29 +574,35 @@ describe('checkAllPrices', () => {
     });
 
     // Setup extraction: dynamically respond with the correct trackerId
-    chrome.tabs.create.mockResolvedValue({ id: 10 });
+    let tabCounter = 10;
+    chrome.tabs.create.mockImplementation(() => Promise.resolve({ id: tabCounter++ }));
     chrome.tabs.onUpdated.addListener.mockImplementation((fn) => {
-      setTimeout(() => fn(10, { status: 'complete' }), 0);
+      // Respond for any tab
+      setTimeout(() => {
+        for (let t = 10; t < tabCounter; t++) {
+          fn(t, { status: 'complete' });
+        }
+      }, 0);
     });
     chrome.scripting.executeScript.mockResolvedValue([]);
 
-    // The message listener needs to respond with the trackerId that's being checked
+    // Track which trackerIds are being extracted and respond accordingly
     chrome.runtime.onMessage.addListener.mockImplementation((fn) => {
-      // Extract trackerId from the most recent getTracker call
       setTimeout(() => {
         const calls = deps.apiClient.getTracker.mock.calls;
-        const lastTrackerId = calls.length > 0 ? calls[calls.length - 1][0] : 'unknown';
-        fn({
-          action: MessageFromCS.PRICE_EXTRACTED,
-          trackerId: lastTrackerId,
-          price: 100,
-        }, {}, jest.fn());
+        calls.forEach((call) => {
+          fn({
+            action: MessageFromCS.PRICE_EXTRACTED,
+            trackerId: call[0],
+            price: 100,
+          }, {}, jest.fn());
+        });
       }, 0);
     });
     chrome.tabs.remove.mockResolvedValue(undefined);
 
     const promise = checkAllPrices(deps);
-    // Advance timers enough for both sequential checks (2s delay each)
+    // Advance timers enough for parallel checks (2s delay each)
     for (let i = 0; i < 20; i++) {
       await jest.advanceTimersByTimeAsync(500);
     }

@@ -396,10 +396,22 @@ async function checkAllPrices(deps) {
     (t) => t.status === TrackerStatus.ACTIVE || t.status === TrackerStatus.UPDATED
   );
 
-  // Check sequentially
-  for (const tracker of activeTrackers) {
-    await checkPrice(tracker.id, deps);
+  // Check in parallel with concurrency limit
+  const CONCURRENCY = 3;
+  var i = 0;
+
+  async function next() {
+    while (i < activeTrackers.length) {
+      var tracker = activeTrackers[i++];
+      await checkPrice(tracker.id, deps);
+    }
   }
+
+  var workers = [];
+  for (var w = 0; w < Math.min(CONCURRENCY, activeTrackers.length); w++) {
+    workers.push(next());
+  }
+  await Promise.all(workers);
 }
 
 const _priceChecker = {
