@@ -224,10 +224,16 @@ async function handleContentResult(tracker, newContent, deps) {
   const { apiClient, badgeManager, notifier } = deps;
   const now = new Date().toISOString();
 
-  // Normalize whitespace for comparison to avoid false positives
-  // from HTML rendering differences (extra spaces, non-breaking spaces, etc.)
+  // Normalize text for comparison to avoid false positives from HTML rendering
+  // differences. Sites often render with varying whitespace between loads
+  // (e.g. "305 грн" vs "305грн", extra spaces, non-breaking spaces).
+  // We collapse all whitespace and remove spaces between digits and letters
+  // to produce a canonical form for comparison only.
   function normalizeForComparison(text) {
-    return String(text || '').replace(/[\s\u00A0\u202F]+/g, ' ').trim();
+    return String(text || '')
+      .replace(/[\s\u00A0\u202F]+/g, '')  // remove all whitespace
+      .toLowerCase()
+      .trim();
   }
 
   const normalizedNew = normalizeForComparison(newContent);
