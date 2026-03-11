@@ -386,8 +386,96 @@ const Dashboard = (function () {
     applyFilters();
     renderGrid();
 
+    // Load sparklines for price trackers
+    loadSparklines();
+
     // Reset badge when dashboard opens (Requirement 17.2)
     sendMessage({ action: 'resetBadge' }).catch(() => {});
+  }
+
+  // ─── Import / Export ─────────────────────────────────────────────
+
+  function handleExport() {
+    var data = JSON.stringify(allTrackers, null, 2);
+    var blob = new Blob([data], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'price-tracker-export-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleImport() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.addEventListener('change', function () {
+      var file = input.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = async function () {
+        try {
+          var trackers = JSON.parse(reader.result);
+          if (!Array.isArray(trackers)) throw new Error('Invalid format');
+          var count = 0;
+          for (var i = 0; i < trackers.length; i++) {
+            var t = trackers[i];
+            if (!t.pageUrl || !t.cssSelector) continue;
+            try {
+              await fetch(API_BASE + '/trackers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  pageUrl: t.pageUrl,
+                  cssSelector: t.cssSelector,
+                  productName: t.productName || '',
+                  imageUrl: t.imageUrl || '',
+                  initialPrice: t.initialPrice || t.currentPrice || 0,
+                  checkIntervalHours: t.checkIntervalHours || 12,
+                  trackingType: t.trackingType || 'price',
+                  isAutoDetected: t.isAutoDetected || false,
+                  initialContent: t.initialContent || t.currentContent || '',
+                  excludedSelectors: t.excludedSelectors || [],
+                }),
+              });
+              count++;
+            } catch (_) {}
+          }
+          alert('Импортировано трекеров: ' + count);
+          loadTrackers();
+        } catch (e) {
+          alert('Ошибка импорта: ' + e.message);
+        }
+      };
+      reader.readAsText(file);
+    });
+    input.click();
+  }
+
+  // ─── Sparklines ──────────────────────────────────────────────────
+
+  /**
+   * Load price history for all price trackers and render sparklines.
+   */
+  async function loadSparklines() {
+    if (typeof TrackerCard === 'undefined' || !TrackerCard.renderSparkline) return;
+
+    var containers = document.querySelectorAll('.tracker-card-sparkline[data-tracker-id]');
+    for (var i = 0; i < containers.length; i++) {
+      var el = containers[i];
+      var tid = el.getAttribute('data-tracker-id');
+      try {
+        var res = await fetch(API_BASE + '/priceHistory?trackerId=' + encodeURIComponent(tid));
+        if (!res.ok) continue;
+        var records = await res.json();
+        if (!Array.isArray(records) || records.length < 2) continue;
+        // Sort oldest first
+        records.sort(function (a, b) { return new Date(a.checkedAt) - new Date(b.checkedAt); });
+        var prices = records.map(function (r) { return Number(r.price); }).filter(function (p) { return !isNaN(p) && p > 0; });
+        TrackerCard.renderSparkline(el, prices);
+      } catch (_) {}
+    }
   }
 
   // ─── Ripple Effect ──────────────────────────────────────────────────
@@ -459,6 +547,8 @@ const Dashboard = (function () {
             GlobalSettings.open(modalContainer);
           }
         },
+        onExport: handleExport,
+        onImport: handleImport,
       });
     }
 

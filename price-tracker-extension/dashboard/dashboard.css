@@ -170,6 +170,16 @@
   background: linear-gradient(90deg, var(--accent-red), rgba(244, 67, 54, 0.4)) !important;
 }
 
+/* Paused card dimmed */
+.tracker-card-paused {
+  opacity: 0.55;
+  filter: grayscale(0.3);
+}
+
+.tracker-card-paused::before {
+  background: linear-gradient(90deg, var(--text-muted), rgba(107, 122, 144, 0.4)) !important;
+}
+
 /* ===== Tracker Card Enhancements ===== */
 
 .tracker-card-image {
@@ -289,6 +299,19 @@
 .tracker-card-content {
   font-size: var(--font-sm);
   color: var(--text-secondary);
+}
+
+/* ===== Sparkline ===== */
+.tracker-card-sparkline {
+  margin-top: var(--spacing-xs);
+  height: 28px;
+  overflow: hidden;
+}
+
+.tracker-card-sparkline svg {
+  display: block;
+  width: 100%;
+  height: 28px;
 }
 
 /* ===== Price History in Modal ===== */

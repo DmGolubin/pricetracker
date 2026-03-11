@@ -324,6 +324,16 @@ const SettingsModal = (function () {
       handleDelete(tracker.id);
     });
 
+    var pauseBtn = document.createElement('button');
+    pauseBtn.className = 'btn';
+    pauseBtn.type = 'button';
+    var isPaused = tracker.status === 'paused';
+    pauseBtn.textContent = isPaused ? 'Возобновить' : 'Приостановить';
+    pauseBtn.setAttribute('aria-label', isPaused ? 'Возобновить трекер' : 'Приостановить трекер');
+    pauseBtn.addEventListener('click', function () {
+      handleTogglePause(overlay, tracker);
+    });
+
     var saveBtn = document.createElement('button');
     saveBtn.className = 'btn btn-primary';
     saveBtn.type = 'button';
@@ -334,6 +344,7 @@ const SettingsModal = (function () {
     });
 
     footer.appendChild(deleteBtn);
+    footer.appendChild(pauseBtn);
     footer.appendChild(saveBtn);
 
     // Assemble modal
@@ -463,6 +474,33 @@ const SettingsModal = (function () {
       .then(function () {
         if (currentCallbacks && typeof currentCallbacks.onDelete === 'function') {
           currentCallbacks.onDelete(trackerId);
+        }
+        close();
+      })
+      .catch(function () {
+        close();
+      });
+  }
+
+  function handleTogglePause(overlay, tracker) {
+    var isPaused = tracker.status === 'paused';
+    var newStatus = isPaused ? 'active' : 'paused';
+    var newInterval = isPaused ? (tracker.checkIntervalHours || 12) : 0;
+
+    sendMessage({
+      action: 'updateTracker',
+      trackerId: tracker.id,
+      data: { status: newStatus, checkIntervalHours: isPaused ? tracker.checkIntervalHours : tracker.checkIntervalHours },
+    })
+      .then(function (response) {
+        var updatedTracker = response && response.tracker ? response.tracker : Object.assign({}, tracker, { status: newStatus });
+        // If pausing, also cancel alarm; if resuming, reschedule
+        if (!isPaused) {
+          // Pausing — cancel alarm via setting interval to 0 then back
+          sendMessage({ action: 'updateTracker', trackerId: tracker.id, data: { status: 'paused' } }).catch(function () {});
+        }
+        if (currentCallbacks && typeof currentCallbacks.onSave === 'function') {
+          currentCallbacks.onSave(updatedTracker);
         }
         close();
       })

@@ -228,6 +228,11 @@ const TrackerCard = (function () {
       }
     }
 
+    // Sparkline placeholder (filled async)
+    if (!isContent) {
+      html += '<div class="tracker-card-sparkline" data-tracker-id="' + escapeHtml(String(tracker.id)) + '"></div>';
+    }
+
     html += '</div>'; // end card-body
 
     card.innerHTML = html;
@@ -243,9 +248,41 @@ const TrackerCard = (function () {
     return card;
   }
 
+  // ─── Sparkline rendering ────────────────────────────────────────
+
+  /**
+   * Render a mini SVG sparkline from price history data points.
+   * @param {HTMLElement} container - The sparkline container element
+   * @param {number[]} prices - Array of price values (oldest first)
+   */
+  function renderSparkline(container, prices) {
+    if (!container || !prices || prices.length < 2) return;
+
+    var w = 120, h = 28, pad = 2;
+    var min = Math.min.apply(null, prices);
+    var max = Math.max.apply(null, prices);
+    var range = max - min || 1;
+
+    var points = [];
+    for (var i = 0; i < prices.length; i++) {
+      var x = pad + (i / (prices.length - 1)) * (w - 2 * pad);
+      var y = h - pad - ((prices[i] - min) / range) * (h - 2 * pad);
+      points.push(x.toFixed(1) + ',' + y.toFixed(1));
+    }
+
+    var color = prices[prices.length - 1] <= prices[0] ? 'var(--accent-green)' : 'var(--accent-red)';
+
+    var svg = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">'
+      + '<polyline fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="' + points.join(' ') + '"/>'
+      + '</svg>';
+
+    container.innerHTML = svg;
+  }
+
   // ─── Public API ───────────────────────────────────────────────────
   return {
     create: create,
+    renderSparkline: renderSparkline,
     // Expose helpers for testing
     extractDomain: extractDomain,
     formatPrice: formatPrice,

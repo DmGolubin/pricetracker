@@ -245,8 +245,15 @@ async function handleDeleteTracker(trackerId) {
 async function handleUpdateTracker(trackerId, data) {
   const updated = await apiClient.updateTracker(trackerId, data);
 
-  // Reschedule alarm if interval was changed
-  if (data.checkIntervalHours !== undefined) {
+  // Handle pause/resume: cancel alarm when paused, reschedule when active
+  if (data.status === 'paused') {
+    alarmManager.cancelTracker(trackerId);
+  } else if (data.status === 'active' && updated.checkIntervalHours) {
+    alarmManager.scheduleTracker(trackerId, updated.checkIntervalHours);
+  }
+
+  // Reschedule alarm if interval was changed (and not paused)
+  if (data.checkIntervalHours !== undefined && updated.status !== 'paused') {
     alarmManager.scheduleTracker(trackerId, data.checkIntervalHours);
   }
 

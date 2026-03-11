@@ -514,6 +514,42 @@ describe('SettingsModal', () => {
 
   // ─── Overlay gets active class ─────────────────────────────────
 
+  describe('pause/resume button', () => {
+    test('shows "Приостановить" for active tracker', () => {
+      SettingsModal.open(makeTracker({ status: 'active' }), container, {});
+      const footer = container.querySelector('.modal-footer');
+      const btns = footer.querySelectorAll('.btn');
+      const pauseBtn = Array.from(btns).find(b => b.textContent === 'Приостановить');
+      expect(pauseBtn).not.toBeUndefined();
+    });
+
+    test('shows "Возобновить" for paused tracker', () => {
+      SettingsModal.open(makeTracker({ status: 'paused' }), container, {});
+      const footer = container.querySelector('.modal-footer');
+      const btns = footer.querySelectorAll('.btn');
+      const resumeBtn = Array.from(btns).find(b => b.textContent === 'Возобновить');
+      expect(resumeBtn).not.toBeUndefined();
+    });
+
+    test('sends updateTracker on pause click', async () => {
+      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
+        if (cb) cb({ tracker: makeTracker({ status: 'paused' }) });
+      });
+
+      const onSave = jest.fn();
+      SettingsModal.open(makeTracker({ id: 'pause-test', status: 'active' }), container, { onSave });
+      const footer = container.querySelector('.modal-footer');
+      const pauseBtn = Array.from(footer.querySelectorAll('.btn')).find(b => b.textContent === 'Приостановить');
+      pauseBtn.click();
+      await flushPromises();
+
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'updateTracker', trackerId: 'pause-test' }),
+        expect.any(Function)
+      );
+    });
+  });
+
   describe('overlay activation', () => {
     test('overlay gets active class after open', () => {
       SettingsModal.open(makeTracker(), container, {});

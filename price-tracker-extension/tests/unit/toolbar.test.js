@@ -44,12 +44,11 @@ describe('Toolbar', () => {
 
     test('renders settings icon button with btn-icon class and SVG icon', () => {
       Toolbar.init(container, {});
-      const btn = container.querySelector('.btn-icon');
-      expect(btn).not.toBeNull();
-      // Should contain SVG settings icon instead of ⚙️ emoji
-      const svg = btn.querySelector('svg');
+      const btns = container.querySelectorAll('.toolbar-group-right .btn-icon');
+      const settingsBtn = btns[btns.length - 1];
+      expect(settingsBtn).not.toBeNull();
+      const svg = settingsBtn.querySelector('svg');
       expect(svg).not.toBeNull();
-      expect(btn.textContent).not.toContain('⚙️');
     });
   });
 
@@ -103,6 +102,16 @@ describe('Toolbar', () => {
       const rightGroup = container.querySelector('.toolbar-group-right');
       expect(rightGroup).not.toBeNull();
       expect(rightGroup.querySelector('.btn-icon')).not.toBeNull();
+    });
+
+    test('has right group with export, import, and settings buttons', () => {
+      Toolbar.init(container, {});
+      const rightGroup = container.querySelector('.toolbar-group-right');
+      const btns = rightGroup.querySelectorAll('.btn-icon');
+      expect(btns.length).toBe(3);
+      expect(btns[0].getAttribute('aria-label')).toBe('Экспорт трекеров');
+      expect(btns[1].getAttribute('aria-label')).toBe('Импорт трекеров');
+      expect(btns[2].getAttribute('aria-label')).toBe('Открыть настройки');
     });
 
     test('has dividers between groups', () => {
@@ -237,10 +246,35 @@ describe('Toolbar', () => {
       const onSettingsClick = jest.fn();
       Toolbar.init(container, { onSettingsClick });
 
-      const btn = container.querySelector('.btn-icon');
-      btn.click();
+      const btns = container.querySelectorAll('.toolbar-group-right .btn-icon');
+      const settingsBtn = btns[btns.length - 1]; // settings is last
+      settingsBtn.click();
 
       expect(onSettingsClick).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ─── Export / Import buttons ──────────────────────────────────
+
+  describe('export and import buttons', () => {
+    test('triggers onExport callback on click', () => {
+      const onExport = jest.fn();
+      Toolbar.init(container, { onExport });
+
+      const btns = container.querySelectorAll('.toolbar-group-right .btn-icon');
+      btns[0].click();
+
+      expect(onExport).toHaveBeenCalledTimes(1);
+    });
+
+    test('triggers onImport callback on click', () => {
+      const onImport = jest.fn();
+      Toolbar.init(container, { onImport });
+
+      const btns = container.querySelectorAll('.toolbar-group-right .btn-icon');
+      btns[1].click();
+
+      expect(onImport).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -279,8 +313,9 @@ describe('Toolbar', () => {
 
     test('settings button has aria-label', () => {
       Toolbar.init(container, {});
-      const btn = container.querySelector('.btn-icon');
-      expect(btn.getAttribute('aria-label')).toBe('Открыть настройки');
+      const btns = container.querySelectorAll('.toolbar-group-right .btn-icon');
+      const settingsBtn = btns[btns.length - 1];
+      expect(settingsBtn.getAttribute('aria-label')).toBe('Открыть настройки');
     });
 
     test('search icon is aria-hidden', () => {

@@ -313,6 +313,56 @@ describe('TrackerCard', () => {
     });
   });
 
+  // ─── Sparkline ──────────────────────────────────────────────
+
+  describe('sparkline', () => {
+    test('price tracker card has sparkline placeholder', () => {
+      const card = TrackerCard.create(makeTracker({ id: 'spark-1' }));
+      const sparkline = card.querySelector('.tracker-card-sparkline');
+      expect(sparkline).not.toBeNull();
+      expect(sparkline.getAttribute('data-tracker-id')).toBe('spark-1');
+    });
+
+    test('content tracker card does not have sparkline placeholder', () => {
+      const card = TrackerCard.create(makeTracker({ trackingType: 'content' }));
+      const sparkline = card.querySelector('.tracker-card-sparkline');
+      expect(sparkline).toBeNull();
+    });
+
+    test('renderSparkline creates SVG polyline', () => {
+      const container = document.createElement('div');
+      TrackerCard.renderSparkline(container, [100, 90, 95, 80, 85]);
+      const svg = container.querySelector('svg');
+      expect(svg).not.toBeNull();
+      const polyline = svg.querySelector('polyline');
+      expect(polyline).not.toBeNull();
+    });
+
+    test('renderSparkline uses green for price decrease', () => {
+      const container = document.createElement('div');
+      TrackerCard.renderSparkline(container, [100, 90]);
+      const polyline = container.querySelector('polyline');
+      expect(polyline.getAttribute('stroke')).toContain('green');
+    });
+
+    test('renderSparkline uses red for price increase', () => {
+      const container = document.createElement('div');
+      TrackerCard.renderSparkline(container, [90, 100]);
+      const polyline = container.querySelector('polyline');
+      expect(polyline.getAttribute('stroke')).toContain('red');
+    });
+
+    test('renderSparkline does nothing with less than 2 prices', () => {
+      const container = document.createElement('div');
+      TrackerCard.renderSparkline(container, [100]);
+      expect(container.innerHTML).toBe('');
+    });
+
+    test('renderSparkline does nothing with null container', () => {
+      expect(() => TrackerCard.renderSparkline(null, [100, 90])).not.toThrow();
+    });
+  });
+
   // ─── Helper functions ──────────────────────────────────────────
 
   describe('helper functions', () => {

@@ -120,15 +120,34 @@ const Toolbar = (function () {
     centerGroup.appendChild(searchWrapper);
     centerGroup.appendChild(filterSelect);
 
-    // ─── Right group: Settings button ───────────────────────────
+    // ─── Right group: Import/Export + Settings ────────────────────
     var rightGroup = document.createElement('div');
     rightGroup.className = 'toolbar-group toolbar-group-right';
+
+    var exportBtn = document.createElement('button');
+    exportBtn.className = 'btn-icon';
+    exportBtn.type = 'button';
+    exportBtn.setAttribute('aria-label', 'Экспорт трекеров');
+    exportBtn.innerHTML = _Icons ? _Icons.el('arrow-up', 18) : '↑';
+    exportBtn.title = 'Экспорт';
+    exportBtn.addEventListener('click', function () {
+      if (typeof cb.onExport === 'function') cb.onExport();
+    });
+
+    var importBtn = document.createElement('button');
+    importBtn.className = 'btn-icon';
+    importBtn.type = 'button';
+    importBtn.setAttribute('aria-label', 'Импорт трекеров');
+    importBtn.innerHTML = _Icons ? _Icons.el('arrow-down', 18) : '↓';
+    importBtn.title = 'Импорт';
+    importBtn.addEventListener('click', function () {
+      if (typeof cb.onImport === 'function') cb.onImport();
+    });
 
     var settingsBtn = document.createElement('button');
     settingsBtn.className = 'btn-icon';
     settingsBtn.type = 'button';
     settingsBtn.setAttribute('aria-label', 'Открыть настройки');
-    // Replace ⚙️ emoji with SVG icon
     settingsBtn.innerHTML = _Icons ? _Icons.el('settings', 20) : '⚙️';
     settingsBtn.addEventListener('click', function () {
       if (typeof cb.onSettingsClick === 'function') {
@@ -136,6 +155,8 @@ const Toolbar = (function () {
       }
     });
 
+    rightGroup.appendChild(exportBtn);
+    rightGroup.appendChild(importBtn);
     rightGroup.appendChild(settingsBtn);
 
     // ─── Assemble toolbar with dividers ─────────────────────────
