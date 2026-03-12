@@ -329,75 +329,73 @@
    *   - elements: flat list of all detected variant elements with all their data-* attrs
    */
   function detectVariants() {
-    // Collect all elements that have at least one data-* attribute with a value,
-    // are clickable (a, button, label, [role=button], [tabindex], or small divs/spans),
-    // and are visible.
-    var CLICKABLE = /^(A|BUTTON|LABEL|INPUT|LI|SPAN|DIV|TD|DT|DD)$/;
-    var SKIP_ATTRS = /^data-(testid|reactid|react|qa|cy|test|automation|gtm|ga|analytics|track|event|toggle|dismiss|target|bs-|popper|original-title|placement|container|trigger|content|html|delay|animation|selector|offset|fallback|boundary|reference|flip|popperConfig)/i;
-    var PRICE_LIKE = /price|cost|sum|total|цена|стоимость|ціна/i;
+    // Only look for product-relevant data-* attributes (whitelist approach)
+    var RELEVANT_ATTRS = [
+      'data-price', 'data-variant-id', 'data-product-id', 'data-sku',
+      'data-size', 'data-color', 'data-volume', 'data-weight',
+      'data-option', 'data-quantity', 'data-variant', 'data-value'
+    ];
 
-    var allEls = document.querySelectorAll('[data-price],[data-variant-id],[data-product-id],[data-sku],[data-value],[data-option],[data-size],[data-color],[data-volume],[data-weight],[data-quantity]');
+    // Build a selector that matches elements with ANY of these attributes
+    var selectorStr = RELEVANT_ATTRS.map(function (a) { return '[' + a + ']'; }).join(',');
+    var candidates;
+    try { candidates = document.querySelectorAll(selectorStr); } catch (_) { return {}; }
 
-    // If specific selectors found nothing, do a broader scan
-    var candidates = allEls.length > 0 ? allEls : document.querySelectorAll('*');
+    if (candidates.length === 0) return {};
 
-    var paramGroups = {}; // attrName -> [{ label, value, selector, el, allAttrs }]
+    var paramGroups = {}; // attrName -> [{ label, value, selector, allAttrs }]
     var seen = {};
 
     function isVisible(el) {
-      if (!el.offsetParent && el.style.display !== 'fixed') return false;
+      if (!el.offsetParent && el.style.position !== 'fixed') return false;
       var r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0;
     }
 
     function getLabel(el) {
-      return (el.getAttribute('title') || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 50);
+      return (el.getAttribute('title') || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60);
     }
 
     for (var i = 0; i < candidates.length; i++) {
       var el = candidates[i];
-      if (!CLICKABLE.test(el.tagName)) continue;
       if (!isVisible(el)) continue;
 
-      // Collect all data-* attributes
+      // Collect only whitelisted data-* attributes
       var dataAttrs = {};
       var hasRelevant = false;
-      for (var a = 0; a < el.attributes.length; a++) {
-        var attr = el.attributes[a];
-        if (!attr.name.startsWith('data-')) continue;
-        if (SKIP_ATTRS.test(attr.name)) continue;
-        if (!attr.value || attr.value.length > 200) continue;
-        dataAttrs[attr.name] = attr.value;
-        hasRelevant = true;
+      for (var a = 0; a < RELEVANT_ATTRS.length; a++) {
+        var attrName = RELEVANT_ATTRS[a];
+        var val = el.getAttribute(attrName);
+        if (val && val.length <= 100) {
+          dataAttrs[attrName] = val;
+          hasRelevant = true;
+        }
       }
 
       if (!hasRelevant) continue;
 
-      // Generate a unique selector for this element
       var sel = generateSelector(el);
       if (!sel || seen[sel]) continue;
       seen[sel] = true;
 
       var label = getLabel(el);
 
-      // Group by each data-attribute
-      for (var attrName in dataAttrs) {
-        if (!paramGroups[attrName]) paramGroups[attrName] = [];
-        paramGroups[attrName].push({
+      for (var attrKey in dataAttrs) {
+        if (!paramGroups[attrKey]) paramGroups[attrKey] = [];
+        paramGroups[attrKey].push({
           label: label,
-          value: dataAttrs[attrName],
+          value: dataAttrs[attrKey],
           selector: sel,
           allAttrs: dataAttrs
         });
       }
     }
 
-    // Filter out groups with only 1 element (not really a "variant" set)
-    // and groups with too many elements (likely layout/structural attrs)
+    // Keep only groups with 2–30 items (real variant sets)
     var filtered = {};
     for (var key in paramGroups) {
       var group = paramGroups[key];
-      if (group.length >= 2 && group.length <= 50) {
+      if (group.length >= 2 && group.length <= 30) {
         filtered[key] = group;
       }
     }
@@ -592,7 +590,7 @@
       paramFilterWrap.appendChild(paramFilterLabel);
 
       var paramToggle = document.createElement('div');
-      paramToggle.className = 'pt-picker-type-toggle pt-picker-interval-toggle';
+      paramToggle.className = 'pt-picker-type-toggle pt-picker-interval-toggle pt-picker-variant-params';
 
       var activeParam = null;
 
@@ -606,15 +604,13 @@
       variantItemsWrap.appendChild(variantItemsLabel);
 
       var variantItemsToggle = document.createElement('div');
-      variantItemsToggle.className = 'pt-picker-type-toggle pt-picker-interval-toggle';
+      variantItemsToggle.className = 'pt-picker-type-toggle pt-picker-interval-toggle pt-picker-variant-items';
       variantItemsWrap.appendChild(variantItemsToggle);
 
       // "Текущий" always-visible option
       var currentBtn = document.createElement('button');
       currentBtn.className = 'pt-picker-type-btn active';
-      currentBtn.textContent = 'Текущий';
-      currentBtn.style.flex = 'none';
-      currentBtn.style.minWidth = 'auto';
+      currentBtn.textContent = 'Текущий (без варианта)';
 
       function updateCurrentBtn() {
         currentBtn.className = 'pt-picker-type-btn' + (selectedVariants.length === 0 ? ' active' : '');
@@ -640,19 +636,22 @@
           var btn = document.createElement('button');
           btn.className = 'pt-picker-type-btn';
 
-          // Build display text: show the value + label preview
-          var displayText = item.value;
-          if (item.label && item.label !== item.value) {
-            // Show label if it's different and short
-            var shortLabel = item.label.slice(0, 30);
-            displayText = shortLabel;
-            // If there's a price attr, append it
-            if (item.allAttrs['data-price']) {
-              displayText += ' — ' + item.allAttrs['data-price'];
-            }
+          // Build readable display text
+          var displayText = '';
+          // Prefer: short label text, then attribute value
+          if (item.label && item.label.length <= 40) {
+            displayText = item.label;
+          } else if (item.label) {
+            displayText = item.label.slice(0, 35) + '…';
+          } else {
+            displayText = item.value;
+          }
+          // Append price if this isn't the price param itself
+          if (paramName !== 'data-price' && item.allAttrs['data-price']) {
+            displayText += ' — ' + item.allAttrs['data-price'];
           }
           btn.textContent = displayText;
-          btn.title = 'Селектор: ' + item.selector + '\nАтрибуты: ' + JSON.stringify(item.allAttrs);
+          btn.title = displayText;
 
           // Check if already selected
           var isSelected = selectedVariants.some(function (sv) { return sv.selector === item.selector; });

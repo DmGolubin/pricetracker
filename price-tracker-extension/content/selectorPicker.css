@@ -345,23 +345,37 @@
 
 
 /* ===== Variant parameter discovery UI ===== */
-.pt-picker-type-btn {
-  position: relative;
+
+/* Parameter and variant buttons: no shrinking, readable text */
+.pt-picker-variant-params .pt-picker-type-btn,
+.pt-picker-variant-items .pt-picker-type-btn {
+  flex: none;
+  min-width: 60px;
+  max-width: 100%;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding: 6px 12px;
+  font-size: 13px;
 }
 
-.pt-picker-type-btn[title]:hover::after {
-  content: '';
+/* Scrollable variant items container */
+.pt-picker-variant-items {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.pt-picker-variant-items::-webkit-scrollbar {
+  width: 4px;
+}
+
+.pt-picker-variant-items::-webkit-scrollbar-thumb {
+  background-color: #2d3a50;
+  border-radius: 2px;
 }
 
 /* Multi-select: selected variants get a checkmark */
-.pt-picker-type-btn.active::before {
+.pt-picker-variant-items .pt-picker-type-btn.active::before {
   content: '✓ ';
   font-size: 11px;
-}
-
-/* Param filter buttons — slightly different style */
-.pt-picker-field .pt-picker-type-toggle {
-  margin-top: 4px;
 }
