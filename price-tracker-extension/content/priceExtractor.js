@@ -385,6 +385,21 @@
       }
 
       if (!element) {
+        // For variant trackers, the price element may be rendered differently
+        // (e.g. eva.ua hides [data-testid="product-price"] for out-of-stock variants).
+        // Fall back to auto-detecting the price on the page.
+        if (variantSelector && trackingType !== 'content') {
+          var autoPrice = tryAutoDetectPrice(null);
+          if (autoPrice !== null) {
+            chrome.runtime.sendMessage({
+              action: 'priceExtracted',
+              trackerId: trackerId,
+              price: autoPrice
+            });
+            return;
+          }
+        }
+
         chrome.runtime.sendMessage({
           action: 'extractionFailed',
           trackerId: trackerId,

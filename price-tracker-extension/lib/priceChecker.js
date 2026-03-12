@@ -177,13 +177,12 @@ async function handlePriceResult(tracker, newPrice, deps) {
     checkedAt: now,
   });
 
-  // Detect first check for variant trackers: if initialPrice equals
-  // currentPrice and the new price differs, this is likely the first
-  // real price read after creation (variant trackers are created with
-  // the page's current price, not the variant's actual price).
+  // Detect first check for variant trackers: use the explicit
+  // variantPriceVerified flag instead of price comparison heuristics.
+  // This flag is false when the tracker is first created and set to
+  // true after the first successful price read.
   var isFirstVariantCheck = tracker.variantSelector
-    && Number(tracker.initialPrice) === Number(tracker.currentPrice)
-    && Number(newPrice) !== Number(tracker.currentPrice);
+    && !tracker.variantPriceVerified;
 
   // Compute updated stats
   var baseMin = isFirstVariantCheck ? newPrice : tracker.minPrice;
@@ -201,8 +200,10 @@ async function handlePriceResult(tracker, newPrice, deps) {
   };
 
   // On first variant check, correct the initialPrice to the real value
+  // and mark the variant as verified so future checks trigger notifications.
   if (isFirstVariantCheck) {
     updateData.initialPrice = newPrice;
+    updateData.variantPriceVerified = true;
   }
 
   if (priceChanged && !isFirstVariantCheck) {

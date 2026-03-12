@@ -113,6 +113,23 @@ async function initDB() {
     ALTER TABLE trackers ALTER COLUMN "checkIntervalHours" TYPE NUMERIC USING "checkIntervalHours"::NUMERIC;
   `);
 
+  // Migration: add variantPriceVerified flag for variant trackers
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "variantPriceVerified" BOOLEAN DEFAULT false;
+  `);
+
+  // Mark existing variant trackers that have already been checked as verified
+  await pool.query(`
+    UPDATE trackers SET "variantPriceVerified" = true
+    WHERE "variantSelector" != '' AND "variantSelector" IS NOT NULL AND "variantPriceVerified" = false
+    AND "updatedAt" > "createdAt" + INTERVAL '1 minute';
+  `);
+
+  // Migration: add variantPriceVerified flag for variant trackers
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "variantPriceVerified" BOOLEAN DEFAULT false;
+  `);
+
   console.log('Database tables initialized');
 }
 
@@ -182,6 +199,8 @@ app.put('/trackers/:id', async (req, res) => {
       'notificationsEnabled',
       'productGroup',
       'variantSelector',
+      'variantPriceVerified',
+      'variantPriceVerified',
     ];
 
     for (const key of allowed) {
