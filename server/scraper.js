@@ -284,7 +284,7 @@ async function extractPrice(tracker) {
     if (variantClicked) {
       var variantPrice = await readPriceFromSelectors(page, priceWatchSelectors);
       if (variantPrice !== null) {
-        const elapsed = Date.now() - pageStart;
+        var elapsed = Date.now() - pageStart;
         console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + variantPrice + ' (variant price selector, ' + elapsed + 'ms) — ' + shortName);
         return { success: true, price: variantPrice };
       }
@@ -292,12 +292,12 @@ async function extractPrice(tracker) {
 
       var autoPrice = await autoDetectPriceOnPage(page);
       if (autoPrice !== null) {
-        const elapsed = Date.now() - pageStart;
+        var elapsed = Date.now() - pageStart;
         console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + autoPrice + ' (auto-detect after variant, ' + elapsed + 'ms) — ' + shortName);
         return { success: true, price: autoPrice };
       }
 
-      const elapsed = Date.now() - pageStart;
+      var elapsed = Date.now() - pageStart;
       console.log('[Scraper] #' + trackerId + ' ❌ Failed (variant, ' + elapsed + 'ms): Could not read price after variant click — ' + shortName);
       return { success: false, error: 'Could not read price after variant click for: ' + tracker.variantSelector };
     }
@@ -321,7 +321,7 @@ async function extractPrice(tracker) {
     if (result.found && result.text) {
       const price = parsePrice(result.text);
       if (price !== null && price > 0) {
-        const elapsed = Date.now() - pageStart;
+        var elapsed = Date.now() - pageStart;
         console.log(`[Scraper] #${trackerId} ✅ Price: ${price} (from selector, ${elapsed}ms) — ${shortName}`);
         return { success: true, price };
       }
@@ -334,7 +334,7 @@ async function extractPrice(tracker) {
     console.log(`[Scraper] #${trackerId} Trying auto-detect fallback...`);
     const fallbackPrice = await autoDetectPriceOnPage(page);
     if (fallbackPrice !== null) {
-      const elapsed = Date.now() - pageStart;
+      var elapsed = Date.now() - pageStart;
       console.log(`[Scraper] #${trackerId} ✅ Price: ${fallbackPrice} (auto-detect, ${elapsed}ms) — ${shortName}`);
       return { success: true, price: fallbackPrice };
     }
@@ -344,13 +344,13 @@ async function extractPrice(tracker) {
       console.log(`[Scraper] #${trackerId} Trying fallback selectors...`);
       const fallbackResult = await tryFallbackSelectors(page, tracker.cssSelector);
       if (fallbackResult !== null) {
-        const elapsed = Date.now() - pageStart;
+        var elapsed = Date.now() - pageStart;
         console.log(`[Scraper] #${trackerId} ✅ Price: ${fallbackResult} (fallback selector, ${elapsed}ms) — ${shortName}`);
         return { success: true, price: fallbackResult };
       }
     }
 
-    const elapsed = Date.now() - pageStart;
+    var elapsed = Date.now() - pageStart;
     const errorMsg = result.found
       ? `Could not parse price from text: "${result.text}"`
       : `Element not found: ${tracker.cssSelector}`;
@@ -358,7 +358,7 @@ async function extractPrice(tracker) {
 
     return { success: false, error: errorMsg };
   } catch (err) {
-    const elapsed = Date.now() - pageStart;
+    var elapsed = Date.now() - pageStart;
     console.error(`[Scraper] #${trackerId} ❌ Error (${elapsed}ms): ${err.message} — ${shortName}`);
     return { success: false, error: err.message };
   } finally {
