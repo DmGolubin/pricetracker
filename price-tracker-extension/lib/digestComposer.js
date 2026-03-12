@@ -109,7 +109,7 @@ function formatDigestHtml(entries, unchangedCount) {
   }
 
   if (unchangedCount > 0) {
-    parts.push('✅ Без изменений (' + unchangedCount + ')');
+    parts.push('<blockquote>✅ Без изменений (' + unchangedCount + ')</blockquote>');
   }
 
   return parts.join('\n\n');
