@@ -200,7 +200,6 @@ app.put('/trackers/:id', async (req, res) => {
       'productGroup',
       'variantSelector',
       'variantPriceVerified',
-      'variantPriceVerified',
     ];
 
     for (const key of allowed) {
