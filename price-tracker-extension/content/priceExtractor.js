@@ -30,6 +30,7 @@
   var cssSelector = data.cssSelector;
   var trackingType = data.trackingType || 'price';
   var excludedSelectors = data.excludedSelectors || [];
+  var variantSelector = data.variantSelector || '';
 
   // ─── Inlined: Price Parser ─────────────────────────────────────────
 
@@ -176,6 +177,7 @@
 
   var MAX_RETRIES = 5;
   var RETRY_DELAY = 1000; // ms
+  var VARIANT_SETTLE_DELAY = 1500; // ms — wait for DOM to update after variant click
 
   function findElement(selector) {
     try {
@@ -183,6 +185,31 @@
     } catch (e) {
       return null;
     }
+  }
+
+  /**
+   * Click a variant element (if variantSelector is set) and wait for DOM to settle.
+   * This handles pages like makeup.ua where selecting a volume/variant
+   * changes the price dynamically without page reload.
+   */
+  function clickVariantAndWait(callback) {
+    if (!variantSelector) {
+      callback();
+      return;
+    }
+
+    var variantEl = findElement(variantSelector);
+    if (!variantEl) {
+      // Variant element not found — proceed without clicking
+      callback();
+      return;
+    }
+
+    // Click the variant element
+    variantEl.click();
+
+    // Wait for DOM to settle after the click
+    setTimeout(callback, VARIANT_SETTLE_DELAY);
   }
 
   function tryExtract(attempt) {
@@ -251,5 +278,7 @@
     });
   }
 
-  tryExtract(0);
+  clickVariantAndWait(function () {
+    tryExtract(0);
+  });
 })();

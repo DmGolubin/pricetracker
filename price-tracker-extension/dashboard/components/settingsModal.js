@@ -204,6 +204,21 @@ const SettingsModal = (function () {
     // Divider after image URL
     body.appendChild(createSectionDivider());
 
+    // Variant selector input (for dynamic price pages)
+    var variantGroup = createFormGroup('Селектор варианта');
+    var variantInput = document.createElement('input');
+    variantInput.type = 'text';
+    variantInput.className = 'input';
+    variantInput.value = tracker.variantSelector || '';
+    variantInput.placeholder = 'CSS-селектор для клика перед проверкой';
+    variantInput.setAttribute('data-field', 'variantSelector');
+    variantInput.setAttribute('aria-label', 'CSS-селектор варианта товара');
+    variantGroup.appendChild(variantInput);
+    body.appendChild(variantGroup);
+
+    // Divider after variant selector
+    body.appendChild(createSectionDivider());
+
     // Product group dropdown (tag-like: select existing or create new)
     var groupGroup = createFormGroup('Группа товара');
     var groupWrapper = document.createElement('div');
@@ -582,6 +597,9 @@ const SettingsModal = (function () {
     var imageInput = modal.querySelector('[data-field="imageUrl"]');
     var imageUrl = imageInput ? imageInput.value : '';
 
+    var variantSelectorInput = modal.querySelector('[data-field="variantSelector"]');
+    var variantSelector = variantSelectorInput ? variantSelectorInput.value : '';
+
     var modeRadio = modal.querySelector('input[name="checkMode"]:checked');
     var checkMode = modeRadio ? modeRadio.value : 'auto';
 
@@ -608,6 +626,7 @@ const SettingsModal = (function () {
       checkIntervalHours: checkIntervalHours,
       productName: productName,
       imageUrl: imageUrl,
+      variantSelector: variantSelector,
       checkMode: checkMode,
       productGroup: productGroup,
       notificationFilter: notificationFilter,

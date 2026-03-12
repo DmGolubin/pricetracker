@@ -135,6 +135,7 @@ async function performExtraction(tracker, pinned) {
         cssSelector: tracker.cssSelector,
         trackingType: tracker.trackingType || TrackingType.PRICE,
         excludedSelectors: tracker.excludedSelectors || [],
+        variantSelector: tracker.variantSelector || '',
       }],
     });
 

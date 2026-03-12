@@ -193,6 +193,7 @@ async function handleElementSelected(message) {
     isAutoDetected: false,
     checkMode: message.checkMode || 'auto',
     productGroup: message.productGroup || '',
+    variantSelector: message.variantSelector || '',
     ...(message.contentValue ? { initialContent: message.contentValue, currentContent: message.contentValue } : {}),
     ...(message.excludedSelectors ? { excludedSelectors: message.excludedSelectors } : {}),
   };

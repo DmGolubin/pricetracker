@@ -88,6 +88,10 @@ async function initDB() {
     INSERT INTO settings (id) VALUES ('global') ON CONFLICT (id) DO NOTHING;
   `);
 
+    -- Migration: add variantSelector column if missing
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "variantSelector" TEXT DEFAULT '';
+  `);
+
   // Migration: add notificationsEnabled column if missing
   await pool.query(`
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "notificationsEnabled" BOOLEAN DEFAULT true;
@@ -142,13 +146,15 @@ app.post('/trackers', async (req, res) => {
         "pageUrl", "cssSelector", "productName", "imageUrl",
         "initialPrice", "currentPrice", "minPrice", "maxPrice",
         "checkIntervalHours", "trackingType", "isAutoDetected",
-        "initialContent", "currentContent", "excludedSelectors"
-      ) VALUES ($1,$2,$3,$4,$5,$5,$5,$5,$6,$7,$8,$9,$9,$10) RETURNING *`,
+        "initialContent", "currentContent", "excludedSelectors",
+        "checkMode", "productGroup", "variantSelector"
+      ) VALUES ($1,$2,$3,$4,$5,$5,$5,$5,$6,$7,$8,$9,$9,$10,$11,$12,$13) RETURNING *`,
       [
         d.pageUrl, d.cssSelector, d.productName || '', d.imageUrl || '',
         d.initialPrice || 0, d.checkIntervalHours || 3,
         d.trackingType || 'price', d.isAutoDetected || false,
         d.initialContent || '', JSON.stringify(d.excludedSelectors || []),
+        d.checkMode || 'auto', d.productGroup || '', d.variantSelector || '',
       ]
     );
     res.status(201).json(rows[0]);
@@ -174,6 +180,7 @@ app.put('/trackers/:id', async (req, res) => {
       'initialContent', 'currentContent', 'previousContent', 'excludedSelectors',
       'notificationsEnabled',
       'productGroup',
+      'variantSelector',
     ];
 
     for (const key of allowed) {

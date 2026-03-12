@@ -460,6 +460,9 @@
     // ─── Product group (text input) ─────────────────────────────
     var groupField = createField('Группа товаров', 'text', '', 'pt-field-group');
 
+    // ─── Variant selector (optional, for dynamic price pages) ───
+    var variantField = createField('Селектор варианта', 'text', '', 'pt-field-variant');
+
     body.appendChild(nameField);
     body.appendChild(urlField);
     body.appendChild(priceField);
@@ -468,6 +471,7 @@
     body.appendChild(intervalField);
     body.appendChild(modeField);
     body.appendChild(groupField);
+    body.appendChild(variantField);
 
     // Footer
     var footer = document.createElement('div');
@@ -486,6 +490,7 @@
       var priceInput = document.getElementById('pt-field-price');
       var imgInput = document.getElementById('pt-field-image');
       var groupInput = document.getElementById('pt-field-group');
+      var variantInput = document.getElementById('pt-field-variant');
 
       var payload = {
         action: 'elementSelected',
@@ -498,6 +503,7 @@
         checkIntervalHours: currentInterval,
         checkMode: currentMode,
         productGroup: groupInput ? groupInput.value : '',
+        variantSelector: variantInput ? variantInput.value : '',
         contentValue: currentType === 'content' ? data.contentValue : undefined,
         excludedSelectors: data.excludedSelectors
       };
