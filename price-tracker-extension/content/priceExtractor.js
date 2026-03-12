@@ -173,6 +173,75 @@
     return fallbacks;
   }
 
+  // ─── Auto-detect price fallback ──────────────────────────────────
+
+  var PRICE_TEXT_RE = /(?:₴|грн|UAH|USD|\$|€|₽|руб)\s*[\d\s.,]+|[\d\s.,]+\s*(?:₴|грн|UAH|USD|\$|€|₽|руб)/i;
+
+  /**
+   * Try to find a price on the page when the primary selector doesn't
+   * contain a parseable price (e.g. it points to a variant button).
+   * Scans common price selectors and visible elements with price-like text.
+   */
+  function tryAutoDetectPrice(excludeElement) {
+    // 1. Common price selectors
+    var PRICE_SELECTORS = [
+      '[data-testid="product-price"]', '[data-testid="price"]',
+      '[itemprop="price"]', '.product-price__big', '.product__price',
+      '.price-current', '.product-price', '.price__value', '.price-value',
+      '.current-price', '.product__price-current'
+    ];
+
+    for (var i = 0; i < PRICE_SELECTORS.length; i++) {
+      try {
+        var el = document.querySelector(PRICE_SELECTORS[i]);
+        if (el && el !== excludeElement) {
+          var p = parsePrice((el.textContent || '').trim());
+          if (p !== null) return p;
+        }
+      } catch (_) {}
+    }
+
+    // 2. Scan visible elements with price-like text
+    var candidates = document.querySelectorAll(
+      'span, div, p, strong, b, em, ins, .price, [class*="price"], [class*="Price"]'
+    );
+
+    var best = null;
+    var bestScore = 0;
+
+    for (var ci = 0; ci < candidates.length; ci++) {
+      var cand = candidates[ci];
+      if (cand === excludeElement) continue;
+      if (!cand.offsetParent && cand.style.position !== 'fixed') continue;
+      var rect = cand.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+
+      var cText = (cand.textContent || '').trim();
+      if (!PRICE_TEXT_RE.test(cText)) continue;
+      var cp = parsePrice(cText);
+      if (cp === null) continue;
+      if (cText.length > 50) continue;
+
+      var score = 0;
+      var cls = (cand.className || '').toLowerCase();
+      if (/price|цена|ціна/.test(cls)) score += 10;
+      if (rect.top < 800) score += 5;
+      score += Math.max(0, 30 - cText.length);
+      try {
+        var fontSize = parseFloat(window.getComputedStyle(cand).fontSize);
+        if (fontSize >= 18) score += 5;
+        if (fontSize >= 24) score += 5;
+      } catch (_) {}
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = cp;
+      }
+    }
+
+    return best;
+  }
+
   // ─── Extraction with retry for dynamic pages ───────────────────────
 
   var MAX_RETRIES = 5;
@@ -263,6 +332,18 @@
     var price = parsePrice(text);
 
     if (price === null) {
+      // Fallback: the saved cssSelector might point to a non-price element
+      // (e.g. a variant button like "30ml"). Try to find a price element on the page.
+      var fallbackPrice = tryAutoDetectPrice(element);
+      if (fallbackPrice !== null) {
+        chrome.runtime.sendMessage({
+          action: 'priceExtracted',
+          trackerId: trackerId,
+          price: fallbackPrice
+        });
+        return;
+      }
+
       chrome.runtime.sendMessage({
         action: 'extractionFailed',
         trackerId: trackerId,

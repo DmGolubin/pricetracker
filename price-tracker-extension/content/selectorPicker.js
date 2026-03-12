@@ -387,8 +387,26 @@
     // Find groups of 2+ clickable siblings with short text content.
     // This catches variant buttons on sites like eva.ua, rozetka, etc.
     // that don't use data-* attributes.
+    // Strict filtering: only accept groups where ALL texts look like
+    // product variants (numbers+units, colors, sizes) — not reviews/names.
     var CLICKABLE_SEL = 'a, button, [role="button"], [role="tab"], [role="option"], label, [tabindex]';
     var VARIANT_LABEL_RE = /об[ъ'є]м|размер|розмір|цвет|колір|color|size|volume|weight|вес|вага|тип|type|варіант|вариант|variant|option|опция|опція/i;
+
+    // Pattern for text that looks like a product variant value
+    var VARIANT_VALUE_RE = /^\d+\s*(мл|ml|г|g|кг|kg|л|l|шт|pcs|oz|мм|mm|см|cm|м|m|%)\b/i;
+    var SIZE_RE = /^(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|\d{2,3})\s*[-\/]?\s*(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|\d{2,3})?$/i;
+    var COLOR_RE = /^(#[0-9a-f]{3,8}|rgb|красн|синий|зелен|черн|бел|серый|жёлт|оранж|розов|фиолет|голуб|коричн|бежев|червон|синій|зелен|чорн|біл|сір|жовт|рожев|блакит)/i;
+
+    function looksLikeVariantValue(text) {
+      if (VARIANT_VALUE_RE.test(text)) return true;
+      if (SIZE_RE.test(text)) return true;
+      if (COLOR_RE.test(text)) return true;
+      // Short numeric text (e.g. "100", "250")
+      if (/^\d{1,5}$/.test(text)) return true;
+      // Number + dash + number (e.g. "30-50")
+      if (/^\d+\s*[-–]\s*\d+$/.test(text)) return true;
+      return false;
+    }
 
     // Scan containers that might hold variant groups
     var allContainers = document.querySelectorAll('div, ul, nav, fieldset, section');
@@ -440,13 +458,19 @@
         }
       }
       if (!groupName) {
-        // Check if texts look like variants (numbers, sizes, colors)
-        var hasNumber = texts.some(function (t) { return /\d/.test(t); });
-        var hasUnit = texts.some(function (t) { return /мл|ml|г|g|кг|kg|л|l|шт|oz|мм|mm|см|cm/i.test(t); });
-        if (hasNumber && hasUnit) {
-          groupName = 'Объём / Размер';
-        } else if (hasNumber) {
-          groupName = 'Варианты';
+        // Check if texts look like variants (numbers+units, sizes, colors)
+        var variantLikeCount = 0;
+        for (var ti = 0; ti < texts.length; ti++) {
+          if (looksLikeVariantValue(texts[ti])) variantLikeCount++;
+        }
+        // Require at least 50% of items to look like variant values
+        if (variantLikeCount >= texts.length * 0.5) {
+          var hasUnit = texts.some(function (t) { return /мл|ml|г|g|кг|kg|л|l|шт|oz|мм|mm|см|cm/i.test(t); });
+          if (hasUnit) {
+            groupName = 'Объём / Размер';
+          } else {
+            groupName = 'Варианты';
+          }
         } else {
           continue; // Skip groups that don't look like product variants
         }
@@ -498,6 +522,103 @@
     };
     if (translations[name]) return translations[name];
     return name.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  /**
+   * Auto-detect the main price element on the page.
+   * Used when saving variant trackers so that cssSelector points to the
+   * actual price element rather than the variant button the user clicked.
+   *
+   * Strategy: look for common price selectors, meta tags, and elements
+   * with price-like text near the product area.
+   */
+  function detectPriceSelector() {
+    // 1. Common price selectors used by e-commerce sites
+    var PRICE_SELECTORS = [
+      '[data-testid="product-price"]',
+      '[data-testid="price"]',
+      '[itemprop="price"]',
+      '.product-price__big',
+      '.product__price',
+      '.price-current',
+      '.product-price',
+      '.price__value',
+      '.price-value',
+      '.current-price',
+      '.product__price-current',
+    ];
+
+    for (var i = 0; i < PRICE_SELECTORS.length; i++) {
+      try {
+        var el = document.querySelector(PRICE_SELECTORS[i]);
+        if (el) {
+          var text = (el.textContent || '').trim();
+          if (parsePrice(text) !== null) {
+            var sel = generateSelector(el);
+            if (sel) return sel;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Look for elements with itemprop="price" or content attr with price
+    var metaPrice = document.querySelector('meta[itemprop="price"]');
+    if (metaPrice && metaPrice.content && parsePrice(metaPrice.content) !== null) {
+      // Can't use meta for extraction, but look for visible price near it
+    }
+
+    // 3. Scan visible elements with price-like text (currency symbols + numbers)
+    var PRICE_TEXT_RE = /(?:₴|грн|UAH|USD|\$|€|₽|руб)\s*[\d\s.,]+|[\d\s.,]+\s*(?:₴|грн|UAH|USD|\$|€|₽|руб)/i;
+    var candidates = document.querySelectorAll(
+      'span, div, p, strong, b, em, ins, .price, [class*="price"], [class*="Price"]'
+    );
+
+    var best = null;
+    var bestScore = 0;
+
+    for (var ci = 0; ci < candidates.length; ci++) {
+      var cand = candidates[ci];
+      // Skip hidden elements
+      if (!cand.offsetParent && cand.style.position !== 'fixed') continue;
+      var rect = cand.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+
+      // Skip our picker UI
+      if (isPickerElement(cand)) continue;
+
+      var cText = (cand.textContent || '').trim();
+      // Must contain a price-like pattern
+      if (!PRICE_TEXT_RE.test(cText)) continue;
+      // Must be parseable
+      if (parsePrice(cText) === null) continue;
+      // Prefer shorter text (more specific element)
+      if (cText.length > 50) continue;
+
+      var score = 0;
+      // Prefer elements with price-related class names
+      var cls = (cand.className || '').toLowerCase();
+      if (/price|цена|ціна/.test(cls)) score += 10;
+      // Prefer elements higher on the page (product area)
+      if (rect.top < window.innerHeight) score += 5;
+      // Prefer shorter text (more precise)
+      score += Math.max(0, 30 - cText.length);
+      // Prefer larger font size (main price, not small print)
+      var fontSize = parseFloat(window.getComputedStyle(cand).fontSize);
+      if (fontSize >= 18) score += 5;
+      if (fontSize >= 24) score += 5;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = cand;
+      }
+    }
+
+    if (best) {
+      var bestSel = generateSelector(best);
+      if (bestSel) return bestSel;
+    }
+
+    return null;
   }
 
   function showConfirmForm(data) {
@@ -836,9 +957,21 @@
       var variantManualInput = document.getElementById('pt-field-variant');
 
       var baseName = nameInput.value;
+
+      // When variants are selected, the user-picked element (data.selector)
+      // might be the variant button itself (e.g. "30ml"), not the price element.
+      // Auto-detect the price element on the page for variant trackers.
+      var priceCssSelector = data.selector;
+      if (selectedVariants.length > 0 && currentType === 'price') {
+        var detectedPriceSel = detectPriceSelector();
+        if (detectedPriceSel) {
+          priceCssSelector = detectedPriceSel;
+        }
+      }
+
       var basePayload = {
         action: 'elementSelected',
-        selector: data.selector,
+        selector: priceCssSelector,
         price: parsePrice(priceInput.value),
         title: baseName,
         imageUrl: imgInput.value,
