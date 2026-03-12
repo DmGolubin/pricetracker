@@ -316,6 +316,77 @@
 
   // ─── Confirmation Form ──────────────────────────────────────────
 
+  // ─── Variant Detection ────────────────────────────────────────
+
+  /**
+   * Detect product variant elements on the page.
+   * Looks for common patterns: elements with data-price, data-variant-id,
+   * .variant class, option selectors, etc.
+   * Returns array of { label, price, selector }.
+   */
+  function detectVariants() {
+    var results = [];
+    var seen = {};
+
+    // Strategy 1: elements with data-variant-id and data-price (makeup.ua pattern)
+    var variantEls = document.querySelectorAll('[data-variant-id][data-price]');
+    for (var i = 0; i < variantEls.length; i++) {
+      var el = variantEls[i];
+      var vid = el.getAttribute('data-variant-id');
+      var price = el.getAttribute('data-price');
+      var label = (el.getAttribute('title') || el.textContent || '').trim().slice(0, 30);
+      if (!label) label = 'Вариант ' + (i + 1);
+      if (price) label += ' — ' + price;
+
+      var sel = '[data-variant-id="' + vid + '"]';
+      if (!seen[sel]) {
+        seen[sel] = true;
+        results.push({ label: label, price: price, selector: sel });
+      }
+    }
+
+    // Strategy 2: elements with class "variant" and data-price (generic)
+    if (results.length === 0) {
+      var genericVariants = document.querySelectorAll('.variant[data-price]');
+      for (var j = 0; j < genericVariants.length; j++) {
+        var gEl = genericVariants[j];
+        var gPrice = gEl.getAttribute('data-price');
+        var gLabel = (gEl.getAttribute('title') || gEl.textContent || '').trim().slice(0, 30);
+        if (!gLabel) gLabel = 'Вариант ' + (j + 1);
+        if (gPrice) gLabel += ' — ' + gPrice;
+
+        var gSel = generateSelector(gEl);
+        if (gSel && !seen[gSel]) {
+          seen[gSel] = true;
+          results.push({ label: gLabel, price: gPrice, selector: gSel });
+        }
+      }
+    }
+
+    // Strategy 3: select/option with price-like values (e.g. size selectors)
+    if (results.length === 0) {
+      var selects = document.querySelectorAll('select');
+      for (var s = 0; s < selects.length; s++) {
+        var options = selects[s].querySelectorAll('option');
+        if (options.length > 1 && options.length <= 20) {
+          var hasPrice = false;
+          for (var o = 0; o < options.length; o++) {
+            if (options[o].getAttribute('data-price') || /\d/.test(options[o].value)) {
+              hasPrice = true;
+              break;
+            }
+          }
+          if (hasPrice) {
+            // This is likely a variant selector — but we can't "click" an option,
+            // so skip for now (would need a different approach)
+          }
+        }
+      }
+    }
+
+    return results;
+  }
+
   function showConfirmForm(data) {
     removeFormOverlay();
     removeNavPanel();
@@ -460,8 +531,60 @@
     // ─── Product group (text input) ─────────────────────────────
     var groupField = createField('Группа товаров', 'text', '', 'pt-field-group');
 
-    // ─── Variant selector (optional, for dynamic price pages) ───
-    var variantField = createField('Селектор варианта', 'text', '', 'pt-field-variant');
+    // ─── Variant selector (auto-detect variants on page) ───────
+    var variantFieldWrapper = document.createElement('div');
+    variantFieldWrapper.className = 'pt-picker-field';
+    var variantLabel = document.createElement('label');
+    variantLabel.textContent = 'Вариант товара';
+    variantFieldWrapper.appendChild(variantLabel);
+
+    var selectedVariantSelector = '';
+
+    // Try to find variant elements on the page
+    var variantCandidates = detectVariants();
+
+    if (variantCandidates.length > 0) {
+      var variantToggle = document.createElement('div');
+      variantToggle.className = 'pt-picker-type-toggle pt-picker-interval-toggle';
+
+      // "None" button (default — no variant click)
+      var noneBtn = document.createElement('button');
+      noneBtn.className = 'pt-picker-type-btn active';
+      noneBtn.textContent = 'Текущий';
+      noneBtn.addEventListener('click', function () {
+        selectedVariantSelector = '';
+        variantToggle.querySelectorAll('.pt-picker-type-btn').forEach(function (b) {
+          b.className = 'pt-picker-type-btn';
+        });
+        noneBtn.className = 'pt-picker-type-btn active';
+      });
+      variantToggle.appendChild(noneBtn);
+
+      variantCandidates.forEach(function (v) {
+        var btn = document.createElement('button');
+        btn.className = 'pt-picker-type-btn';
+        btn.textContent = v.label;
+        if (v.price) btn.title = v.price;
+        btn.addEventListener('click', function () {
+          selectedVariantSelector = v.selector;
+          variantToggle.querySelectorAll('.pt-picker-type-btn').forEach(function (b) {
+            b.className = 'pt-picker-type-btn';
+          });
+          btn.className = 'pt-picker-type-btn active';
+        });
+        variantToggle.appendChild(btn);
+      });
+
+      variantFieldWrapper.appendChild(variantToggle);
+    } else {
+      // Fallback: manual text input
+      var variantInput = document.createElement('input');
+      variantInput.type = 'text';
+      variantInput.id = 'pt-field-variant';
+      variantInput.value = '';
+      variantInput.placeholder = 'CSS-селектор (необязательно)';
+      variantFieldWrapper.appendChild(variantInput);
+    }
 
     body.appendChild(nameField);
     body.appendChild(urlField);
@@ -471,7 +594,7 @@
     body.appendChild(intervalField);
     body.appendChild(modeField);
     body.appendChild(groupField);
-    body.appendChild(variantField);
+    body.appendChild(variantFieldWrapper);
 
     // Footer
     var footer = document.createElement('div');
@@ -490,7 +613,7 @@
       var priceInput = document.getElementById('pt-field-price');
       var imgInput = document.getElementById('pt-field-image');
       var groupInput = document.getElementById('pt-field-group');
-      var variantInput = document.getElementById('pt-field-variant');
+      var variantManualInput = document.getElementById('pt-field-variant');
 
       var payload = {
         action: 'elementSelected',
@@ -503,7 +626,7 @@
         checkIntervalHours: currentInterval,
         checkMode: currentMode,
         productGroup: groupInput ? groupInput.value : '',
-        variantSelector: variantInput ? variantInput.value : '',
+        variantSelector: variantManualInput ? variantManualInput.value : selectedVariantSelector,
         contentValue: currentType === 'content' ? data.contentValue : undefined,
         excludedSelectors: data.excludedSelectors
       };
