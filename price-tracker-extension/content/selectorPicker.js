@@ -670,7 +670,7 @@
               // Select (multi)
               selectedVariants.push({
                 selector: item.selector,
-                label: item.label || item.value,
+                label: displayText,
                 attrs: item.allAttrs
               });
               btn.className = 'pt-picker-type-btn active';
@@ -784,6 +784,14 @@
           for (var k in basePayload) payload[k] = basePayload[k];
           payload.variantSelector = v.selector;
           payload.title = baseName + ' — ' + v.label;
+          // If variant has data-price, use it and force price tracking
+          if (v.attrs && v.attrs['data-price']) {
+            var vPrice = parsePrice(v.attrs['data-price']);
+            if (vPrice !== null) {
+              payload.price = vPrice;
+              payload.trackingType = 'price';
+            }
+          }
           chrome.runtime.sendMessage(payload);
         });
       }
