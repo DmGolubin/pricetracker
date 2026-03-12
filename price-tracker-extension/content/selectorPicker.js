@@ -1057,24 +1057,74 @@
         saveBtn.disabled = true;
         saveBtn.textContent = 'Сохранение...';
 
+        /**
+         * Read the current price from the page.
+         * First tries the given selector, then falls back to detectPriceSelector()
+         * to handle SPA re-renders where the old element was replaced.
+         */
         function readPriceFromPage(sel) {
-          // Try to read price from the detected price element
+          // Try the given selector first
           try {
             var priceEl = document.querySelector(sel);
             if (priceEl) {
               var txt = (priceEl.textContent || '').trim();
               var p = parsePrice(txt);
               if (p !== null && p > 0) return p;
-              // Try content attribute
               var content = priceEl.getAttribute('content');
               if (content) { p = parsePrice(content); if (p !== null && p > 0) return p; }
             }
           } catch (_) {}
+          // Fallback: re-detect price element (SPA may have re-rendered DOM)
+          var freshSel = detectPriceSelector();
+          if (freshSel && freshSel !== sel) {
+            try {
+              var freshEl = document.querySelector(freshSel);
+              if (freshEl) {
+                var ftxt = (freshEl.textContent || '').trim();
+                var fp = parsePrice(ftxt);
+                if (fp !== null && fp > 0) return fp;
+              }
+            } catch (_) {}
+          }
           return null;
         }
 
+        /**
+         * Wait for DOM to settle after a variant click.
+         * Uses MutationObserver to detect when the price element changes,
+         * with a maximum wait time as fallback.
+         */
+        function waitForDomSettle(callback) {
+          var MAX_WAIT = 3000;
+          var STABLE_DELAY = 500; // ms of no mutations = settled
+          var timer = null;
+          var maxTimer = null;
+          var observer = null;
+
+          function done() {
+            if (observer) { observer.disconnect(); observer = null; }
+            if (timer) { clearTimeout(timer); timer = null; }
+            if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
+            callback();
+          }
+
+          observer = new MutationObserver(function () {
+            // Reset the stable timer on each mutation
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(done, STABLE_DELAY);
+          });
+
+          observer.observe(document.body, {
+            childList: true, subtree: true, characterData: true
+          });
+
+          // Start the stable timer (in case no mutations happen)
+          timer = setTimeout(done, STABLE_DELAY);
+          // Max wait fallback
+          maxTimer = setTimeout(done, MAX_WAIT);
+        }
+
         var variantQueue = selectedVariants.slice();
-        var VARIANT_CLICK_DELAY = 1800; // ms to wait after clicking variant
 
         function processNextVariant() {
           if (variantQueue.length === 0) {
@@ -1099,13 +1149,11 @@
           }
 
           if (variantHref && variantHref !== payload.pageUrl) {
-            // Variant has its own URL — use it directly
             payload.pageUrl = variantHref;
             payload.variantSelector = '';
             chrome.runtime.sendMessage(payload);
             processNextVariant();
           } else if (v.attrs && v.attrs['data-price']) {
-            // Has data-price attribute — use it directly
             var vPrice = parsePrice(v.attrs['data-price']);
             if (vPrice !== null) {
               payload.price = vPrice;
@@ -1115,21 +1163,26 @@
             chrome.runtime.sendMessage(payload);
             processNextVariant();
           } else {
-            // Click-based: click the variant button, wait, read price
+            // Click-based: click the variant, wait for DOM settle, read price
             payload.variantSelector = v.selector;
             if (variantEl) {
               variantEl.click();
-              setTimeout(function () {
-                // Read the updated price from the page
+              waitForDomSettle(function () {
+                // After SPA navigation, capture the new URL and price
+                payload.pageUrl = window.location.href;
                 var newPrice = readPriceFromPage(priceCssSelector);
                 if (newPrice !== null) {
                   payload.price = newPrice;
                 }
+                // Re-detect price selector for this variant's tracker
+                var freshPriceSel = detectPriceSelector();
+                if (freshPriceSel) {
+                  payload.selector = freshPriceSel;
+                }
                 chrome.runtime.sendMessage(payload);
                 processNextVariant();
-              }, VARIANT_CLICK_DELAY);
+              });
             } else {
-              // Element not found — send with current price
               chrome.runtime.sendMessage(payload);
               processNextVariant();
             }
