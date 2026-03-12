@@ -43,18 +43,51 @@ function extractDomain(url) {
 }
 
 /**
+ * Clean up product name: remove marketplace suffixes, "купить по лучшей цене" etc.
+ * @param {string} name
+ * @returns {string}
+ */
+function cleanProductName(name) {
+  if (!name) return '';
+  return name
+    // Remove " - купить по лучшей цене в Украине | Makeup.ua" and similar
+    .replace(/\s*[-–—:]\s*(купить|купити).*$/i, '')
+    // Remove "купить на ▷ EVA.UA ◁" and similar
+    .replace(/\s*[-–—]\s*(купить|купити)\s+на\s+.*$/i, '')
+    // Remove "Большой ассортимент | notino.ua" and similar
+    .replace(/\s*Большой ассортимент.*$/i, '')
+    .replace(/\s*Великий асортимент.*$/i, '')
+    // Remove trailing " | domain.ua"
+    .replace(/\s*\|\s*[\w.]+\s*$/, '')
+    .trim();
+}
+
+/**
+ * Get short marketplace label from domain.
+ * @param {string} domain
+ * @returns {string}
+ */
+function getShopLabel(domain) {
+  if (!domain) return '';
+  if (domain.indexOf('makeup') !== -1) return 'Makeup';
+  if (domain.indexOf('eva.ua') !== -1) return 'EVA';
+  if (domain.indexOf('notino') !== -1) return 'Notino';
+  return domain;
+}
+
+/**
  * Format a single digest entry line as Telegram HTML.
  * @param {DigestEntry} entry
  * @returns {string}
  */
 function formatEntryHtml(entry) {
-  var name = escapeHtml(entry.productName);
+  var name = escapeHtml(cleanProductName(entry.productName));
   var sign = entry.percentChange >= 0 ? '+' : '';
   var percentStr = sign + entry.percentChange.toFixed(1) + '%';
-  var line = '<b>' + name + '</b>\n'
-    + '<s>' + entry.oldPrice + '</s> → <b>' + entry.newPrice + '</b> грн '
-    + '(' + percentStr + ')'
-    + ' — <a href="' + entry.pageUrl + '">' + escapeHtml(entry.domain) + '</a>';
+  var shop = getShopLabel(entry.domain);
+  var line = '• <a href="' + entry.pageUrl + '">' + name + '</a>'
+    + '\n   <s>' + entry.oldPrice + '</s> → <b>' + entry.newPrice + '</b> грн'
+    + ' (' + percentStr + ') · ' + escapeHtml(shop);
   return line;
 }
 
@@ -88,6 +121,7 @@ function formatDigestHtml(entries, unchangedCount) {
     var section = '<b>🏆 Исторический минимум!</b>\n';
     for (var i = 0; i < histMin.length; i++) {
       section += '\n' + formatEntryHtml(histMin[i]);
+      if (i < histMin.length - 1) section += '\n';
     }
     parts.push(section);
   }
@@ -96,6 +130,7 @@ function formatDigestHtml(entries, unchangedCount) {
     var section = '<b>📉 Цена снизилась</b>\n';
     for (var i = 0; i < decreased.length; i++) {
       section += '\n' + formatEntryHtml(decreased[i]);
+      if (i < decreased.length - 1) section += '\n';
     }
     parts.push(section);
   }
@@ -104,6 +139,7 @@ function formatDigestHtml(entries, unchangedCount) {
     var section = '<b>📈 Цена выросла</b>\n';
     for (var i = 0; i < increased.length; i++) {
       section += '\n' + formatEntryHtml(increased[i]);
+      if (i < increased.length - 1) section += '\n';
     }
     parts.push(section);
   }
@@ -228,6 +264,8 @@ var _digestComposer = {
   escapeHtml: escapeHtml,
   extractDomain: extractDomain,
   splitMessage: splitMessage,
+  cleanProductName: cleanProductName,
+  getShopLabel: getShopLabel,
 };
 
 if (typeof module !== 'undefined' && module.exports) {
