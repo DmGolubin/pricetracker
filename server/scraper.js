@@ -147,14 +147,67 @@ async function extractPrice(tracker) {
       ];
     }
 
-    // If tracker has a variant selector, click it and wait for price to update
+    // ─── Variant handling ────────────────────────────────────────────
+    // makeup.com.ua stores prices in data-price attributes on variant elements,
+    // so we can read the price directly without clicking.
+    // eva.ua requires clicking the variant button and reading the updated price.
     var variantClicked = false;
     if (tracker.variantSelector) {
+      // MAKEUP.COM.UA: read data-price attribute directly from the variant element
+      if (isMakeup) {
+        var dataPrice = await page.evaluate(function(sel) {
+          var el = document.querySelector(sel);
+          if (!el) return null;
+          // The variant element itself or a parent may have data-price
+          var dp = el.getAttribute('data-price');
+          if (dp) return dp;
+          // Walk up to find data-price on a parent (variant div wraps the clickable element)
+          var parent = el.closest('[data-price]');
+          if (parent) return parent.getAttribute('data-price');
+          // Also check if the selector targets a child inside the variant div
+          var variantDiv = el.closest('.variant');
+          if (variantDiv && variantDiv.getAttribute('data-price')) return variantDiv.getAttribute('data-price');
+          return null;
+        }, tracker.variantSelector);
+
+        if (dataPrice) {
+          var price = parsePrice(dataPrice);
+          if (price !== null && price > 0) {
+            var elapsed = Date.now() - pageStart;
+            console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (data-price attr, ' + elapsed + 'ms) — ' + shortName);
+            return { success: true, price: price };
+          }
+          console.log('[Scraper] #' + trackerId + ' data-price found but parse failed: "' + dataPrice + '"');
+        } else {
+          console.log('[Scraper] #' + trackerId + ' No data-price attr on variant element, falling back to click...');
+        }
+
+        // Fallback: try reading meta itemprop="price" content inside the variant
+        var metaPrice = await page.evaluate(function(sel) {
+          var el = document.querySelector(sel);
+          if (!el) return null;
+          var variantDiv = el.closest('[data-variant-id]') || el.closest('.variant');
+          if (!variantDiv) return null;
+          var meta = variantDiv.querySelector('meta[itemprop="price"]');
+          return meta ? meta.getAttribute('content') : null;
+        }, tracker.variantSelector);
+
+        if (metaPrice) {
+          var price = parsePrice(metaPrice);
+          if (price !== null && price > 0) {
+            var elapsed = Date.now() - pageStart;
+            console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (meta itemprop, ' + elapsed + 'ms) — ' + shortName);
+            return { success: true, price: price };
+          }
+        }
+      }
+
+      // EVA.UA and others: click the variant and read the updated price
       try {
         console.log('[Scraper] #' + trackerId + ' Clicking variant: ' + tracker.variantSelector);
         await page.waitForSelector(tracker.variantSelector, { timeout: 5000 });
 
-        // Capture the current price text BEFORE clicking the variant
+        // Capture the current price text BEFORE clicking
         var priceBeforeClick = await page.evaluate(function(selectors) {
           for (var i = 0; i < selectors.length; i++) {
             try {
@@ -170,14 +223,12 @@ async function extractPrice(tracker) {
 
         console.log('[Scraper] #' + trackerId + ' Price before click: ' + (priceBeforeClick || 'not found'));
 
-        // Click the variant
         await page.click(tracker.variantSelector);
         variantClicked = true;
 
-        // Wait for network to settle
+        // Wait for network + DOM to settle
         await page.waitForNetworkIdle({ timeout: 3000 }).catch(function() {});
 
-        // Wait for price element to change (up to 5 seconds)
         if (priceBeforeClick) {
           try {
             await page.waitForFunction(
@@ -202,14 +253,11 @@ async function extractPrice(tracker) {
             console.log('[Scraper] #' + trackerId + ' ⚠ Price did not change after click (same price or click failed)');
           }
         } else {
-          // No price detected before click — wait fixed time
           await new Promise(function(r) { setTimeout(r, 2500); });
         }
 
-        // Additional settle time
         await new Promise(function(r) { setTimeout(r, 500); });
 
-        // Log the price after variant click
         var priceAfterClick = await page.evaluate(function(selectors) {
           for (var i = 0; i < selectors.length; i++) {
             try {
@@ -232,13 +280,8 @@ async function extractPrice(tracker) {
     // Wait a bit for any remaining JS rendering
     await new Promise(r => setTimeout(r, 1500));
 
-    // For variant trackers: the cssSelector often points to a label (e.g. "30ml"),
-    // NOT a price element. After clicking the variant, we should read the price
-    // from the main price display element, not from the variant label.
-    // Strategy: if this is a variant tracker, try site-specific price selectors FIRST,
-    // then fall back to cssSelector only if those fail.
+    // For variant trackers that used click approach: read from price selectors
     if (variantClicked) {
-      // Try site-specific price selectors first (these are the actual price elements)
       var variantPrice = await readPriceFromSelectors(page, priceWatchSelectors);
       if (variantPrice !== null) {
         const elapsed = Date.now() - pageStart;
@@ -247,7 +290,6 @@ async function extractPrice(tracker) {
       }
       console.log('[Scraper] #' + trackerId + ' Site-specific selectors failed after variant click, trying auto-detect...');
 
-      // Try auto-detect as fallback
       var autoPrice = await autoDetectPriceOnPage(page);
       if (autoPrice !== null) {
         const elapsed = Date.now() - pageStart;
@@ -260,7 +302,7 @@ async function extractPrice(tracker) {
       return { success: false, error: 'Could not read price after variant click for: ' + tracker.variantSelector };
     }
 
-    // Non-variant trackers: try the CSS selector directly
+    // ─── Non-variant trackers: try the CSS selector directly ─────────
     const result = await page.evaluate((cssSelector, excludedSelectors) => {
       const el = document.querySelector(cssSelector);
       if (!el) return { found: false, text: null };
