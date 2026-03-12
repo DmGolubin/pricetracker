@@ -31,6 +31,23 @@ function cleanProductName(name) {
     .trim();
 }
 
+/**
+ * Extract variant label (volume, origin) from the raw product name.
+ * Looks for patterns like "— 100ml", "— 50ml — 5091", "— из UA — 7483", "— 30".
+ * @param {string} name — raw productName from DB
+ * @returns {string} — e.g. "100ml", "50ml", "из ЕС", "" if none
+ */
+function extractVariantLabel(name) {
+  if (!name) return '';
+  // Pattern: "— из UA [— price]" or "— из ЕС [— price]" (check first, before numbers)
+  var match = name.match(/\s*[-–—]\s*(из\s+\S+)\s*(?:[-–—]\s*\d+)?\s*$/i);
+  if (match) return match[1];
+  // Pattern: "— 100ml [— price]" or "— 30 [— price]"
+  match = name.match(/\s*[-–—]\s*(\d+(?:ml)?)\s*(?:[-–—]\s*\d+)?\s*$/i);
+  if (match) return match[1] + (/ml/i.test(match[1]) ? '' : 'ml');
+  return '';
+}
+
 function getShopLabel(domain) {
   if (!domain) return '';
   if (domain.indexOf('makeup') !== -1) return 'Makeup';
@@ -41,12 +58,14 @@ function getShopLabel(domain) {
 
 function formatEntryHtml(entry) {
   const name = escapeHtml(cleanProductName(entry.productName));
+  const variant = extractVariantLabel(entry.productName);
   const sign = entry.percentChange >= 0 ? '+' : '';
   const percentStr = sign + entry.percentChange.toFixed(1) + '%';
   const shop = getShopLabel(entry.domain);
+  const variantSuffix = variant ? ' · ' + escapeHtml(variant) : '';
   return '• <a href="' + entry.pageUrl + '">' + name + '</a>'
     + '\n   <s>' + entry.oldPrice + '</s> → <b>' + entry.newPrice + '</b> грн'
-    + ' (' + percentStr + ') · ' + escapeHtml(shop);
+    + ' (' + percentStr + ') · ' + escapeHtml(shop) + variantSuffix;
 }
 
 function formatDigestHtml(entries, unchangedCount) {
@@ -151,4 +170,5 @@ module.exports = {
   splitMessage,
   cleanProductName,
   getShopLabel,
+  extractVariantLabel,
 };
