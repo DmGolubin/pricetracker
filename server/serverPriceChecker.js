@@ -44,7 +44,7 @@ async function runCheckCycle(pool) {
   var trackers;
   try {
     var trackersResult = await pool.query(
-      "SELECT * FROM trackers WHERE status IN ('active', 'updated') ORDER BY id"
+      "SELECT * FROM trackers WHERE status IN ('active', 'updated', 'error') ORDER BY id"
     );
     trackers = trackersResult.rows;
   } catch (err) {
