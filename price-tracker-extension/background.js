@@ -342,6 +342,37 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   chrome.notifications.clear(notificationId);
 });
 
+// ─── Restore alarms on install/update/startup ──────────────────────
+
+/**
+ * Restore alarms for all active/updated trackers.
+ * Called on install, update, and browser startup to ensure
+ * periodic checks continue even after extension reload.
+ */
+async function rescheduleAllAlarms() {
+  try {
+    await initSettings();
+    const trackers = await apiClient.getTrackers();
+    if (!Array.isArray(trackers)) return;
+
+    for (const t of trackers) {
+      if (t.status === TrackerStatus.ACTIVE || t.status === TrackerStatus.UPDATED) {
+        alarmManager.scheduleTracker(t.id, t.checkIntervalHours || DEFAULT_CHECK_INTERVAL);
+      }
+    }
+  } catch (_) {
+    // Server may not be reachable yet
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  rescheduleAllAlarms();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  rescheduleAllAlarms();
+});
+
 // ─── Initialization ─────────────────────────────────────────────────
 
 initSettings();
@@ -362,6 +393,7 @@ var _bgExports = {
   handleResetBadge: handleResetBadge,
   getActiveTab: getActiveTab,
   initSettings: initSettings,
+  rescheduleAllAlarms: rescheduleAllAlarms,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

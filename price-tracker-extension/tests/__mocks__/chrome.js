@@ -41,6 +41,12 @@ const chrome = {
       addListener: jest.fn(),
       removeListener: jest.fn()
     },
+    onInstalled: {
+      addListener: jest.fn()
+    },
+    onStartup: {
+      addListener: jest.fn()
+    },
     getURL: jest.fn((path) => `chrome-extension://mock-id/${path}`)
   },
 
