@@ -498,10 +498,17 @@ const SettingsModal = (function () {
 
       // Fetch existing groups from API
       sendMessage({ action: 'getAllTrackers' }).then(function (response) {
-        var trackers = response && response.trackers ? response.trackers : (Array.isArray(response) ? response : []);
+        var trackers = [];
+        if (response && Array.isArray(response.data)) {
+          trackers = response.data;
+        } else if (response && Array.isArray(response.trackers)) {
+          trackers = response.trackers;
+        } else if (Array.isArray(response)) {
+          trackers = response;
+        }
         var groups = {};
         trackers.forEach(function (t) {
-          if (t.productGroup && t.status !== 'paused' && t.checkIntervalHours > 0) {
+          if (t.productGroup) {
             groups[t.productGroup] = true;
           }
         });
