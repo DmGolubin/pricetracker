@@ -29,6 +29,9 @@ async function getBrowser() {
     return browserInstance;
   }
 
+  console.log(`[Scraper] Launching Chromium from ${CHROMIUM_PATH}...`);
+  const launchStart = Date.now();
+
   browserInstance = await puppeteer.launch({
     executablePath: CHROMIUM_PATH,
     headless: 'new',
@@ -50,6 +53,9 @@ async function getBrowser() {
     ],
   });
 
+  const launchMs = Date.now() - launchStart;
+  console.log(`[Scraper] Chromium launched in ${launchMs}ms (PID: ${browserInstance.process()?.pid || 'unknown'})`);
+
   return browserInstance;
 }
 
@@ -59,8 +65,12 @@ async function getBrowser() {
 async function closeBrowser() {
   if (browserInstance) {
     try {
+      console.log('[Scraper] Closing Chromium...');
       await browserInstance.close();
-    } catch (_) {}
+      console.log('[Scraper] Chromium closed.');
+    } catch (err) {
+      console.warn('[Scraper] Error closing Chromium:', err.message);
+    }
     browserInstance = null;
   }
 }
@@ -75,6 +85,9 @@ async function closeBrowser() {
 async function extractPrice(tracker) {
   const browser = await getBrowser();
   let page;
+  const pageStart = Date.now();
+  const trackerId = tracker.id;
+  const shortName = (tracker.productName || '').substring(0, 50);
 
   try {
     page = await browser.newPage();
@@ -99,22 +112,25 @@ async function extractPrice(tracker) {
     await page.setViewport({ width: 1366, height: 768 });
 
     // Navigate to the page
+    console.log(`[Scraper] #${trackerId} Loading: ${tracker.pageUrl}`);
+    const navStart = Date.now();
     await page.goto(tracker.pageUrl, {
       waitUntil: 'networkidle2',
       timeout: PAGE_TIMEOUT_MS,
     });
+    console.log(`[Scraper] #${trackerId} Page loaded in ${Date.now() - navStart}ms`);
 
     // If tracker has a variant selector, click it and wait for DOM to settle
     if (tracker.variantSelector) {
       try {
+        console.log(`[Scraper] #${trackerId} Clicking variant: ${tracker.variantSelector}`);
         await page.waitForSelector(tracker.variantSelector, { timeout: 5000 });
         await page.click(tracker.variantSelector);
-        // Wait for DOM to settle after variant click
         await page.waitForNetworkIdle({ timeout: VARIANT_SETTLE_MS }).catch(() => {});
         await new Promise(r => setTimeout(r, 1000));
+        console.log(`[Scraper] #${trackerId} Variant clicked, DOM settled.`);
       } catch (variantErr) {
-        // Variant element not found — proceed without clicking
-        console.warn(`[Scraper] Variant selector not found for tracker ${tracker.id}: ${variantErr.message}`);
+        console.warn(`[Scraper] #${trackerId} ⚠ Variant selector not found: ${variantErr.message}`);
       }
     }
 
@@ -126,7 +142,6 @@ async function extractPrice(tracker) {
       const el = document.querySelector(cssSelector);
       if (!el) return { found: false, text: null };
 
-      // Clone and remove excluded selectors
       let target = el;
       if (excludedSelectors && excludedSelectors.length > 0) {
         target = el.cloneNode(true);
@@ -141,31 +156,45 @@ async function extractPrice(tracker) {
     if (result.found && result.text) {
       const price = parsePrice(result.text);
       if (price !== null && price > 0) {
+        const elapsed = Date.now() - pageStart;
+        console.log(`[Scraper] #${trackerId} ✅ Price: ${price} (from selector, ${elapsed}ms) — ${shortName}`);
         return { success: true, price };
       }
+      console.log(`[Scraper] #${trackerId} Selector found but parse failed: "${result.text.substring(0, 80)}"`);
+    } else {
+      console.log(`[Scraper] #${trackerId} Selector not found: ${tracker.cssSelector}`);
     }
 
     // Fallback: try auto-detecting price on the page
+    console.log(`[Scraper] #${trackerId} Trying auto-detect fallback...`);
     const fallbackPrice = await autoDetectPriceOnPage(page);
     if (fallbackPrice !== null) {
+      const elapsed = Date.now() - pageStart;
+      console.log(`[Scraper] #${trackerId} ✅ Price: ${fallbackPrice} (auto-detect, ${elapsed}ms) — ${shortName}`);
       return { success: true, price: fallbackPrice };
     }
 
     // CSS selector element not found — try fallback selectors
     if (!result.found) {
+      console.log(`[Scraper] #${trackerId} Trying fallback selectors...`);
       const fallbackResult = await tryFallbackSelectors(page, tracker.cssSelector);
       if (fallbackResult !== null) {
+        const elapsed = Date.now() - pageStart;
+        console.log(`[Scraper] #${trackerId} ✅ Price: ${fallbackResult} (fallback selector, ${elapsed}ms) — ${shortName}`);
         return { success: true, price: fallbackResult };
       }
     }
 
-    return {
-      success: false,
-      error: result.found
-        ? `Could not parse price from text: "${result.text}"`
-        : `Element not found: ${tracker.cssSelector}`,
-    };
+    const elapsed = Date.now() - pageStart;
+    const errorMsg = result.found
+      ? `Could not parse price from text: "${result.text}"`
+      : `Element not found: ${tracker.cssSelector}`;
+    console.log(`[Scraper] #${trackerId} ❌ Failed (${elapsed}ms): ${errorMsg} — ${shortName}`);
+
+    return { success: false, error: errorMsg };
   } catch (err) {
+    const elapsed = Date.now() - pageStart;
+    console.error(`[Scraper] #${trackerId} ❌ Error (${elapsed}ms): ${err.message} — ${shortName}`);
     return { success: false, error: err.message };
   } finally {
     if (page) {

@@ -376,7 +376,7 @@ app.post('/server-check', async (req, res) => {
 });
 
 app.get('/server-check/status', (req, res) => {
-  res.json({ running: scheduler.getIsRunning() });
+  res.json(scheduler.getStatus());
 });
 
 // ─── Server Start ───────────────────────────────────────────────────
@@ -384,7 +384,13 @@ app.get('/server-check/status', (req, res) => {
 initDB()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log('═══════════════════════════════════════════════');
+      console.log('🚀 Server running on port ' + PORT);
+      console.log('   Node.js: ' + process.version);
+      console.log('   Environment: ' + (process.env.NODE_ENV || 'development'));
+      console.log('   Database: ' + (process.env.DATABASE_URL ? 'configured' : 'NOT configured'));
+      console.log('   Chromium: ' + (process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium'));
+      console.log('═══════════════════════════════════════════════');
 
       // Start the cron scheduler for background price checks
       // Default: every 3 hours. Override with CRON_SCHEDULE env var.
@@ -393,6 +399,6 @@ initDB()
     });
   })
   .catch((err) => {
-    console.error('Failed to initialize database:', err);
+    console.error('❌ Failed to initialize database:', err);
     process.exit(1);
   });

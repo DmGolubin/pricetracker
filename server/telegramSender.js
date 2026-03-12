@@ -10,9 +10,14 @@
  * @returns {Promise<boolean>} — true if sent successfully
  */
 async function sendMessage(botToken, chatId, html) {
-  if (!botToken || !chatId) return false;
+  if (!botToken || !chatId) {
+    console.warn('[Telegram] Cannot send — botToken or chatId missing.');
+    return false;
+  }
 
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  const msgPreview = html.substring(0, 100).replace(/\n/g, ' ');
+  console.log('[Telegram] Sending message (' + html.length + ' chars): "' + msgPreview + '..."');
 
   try {
     const res = await fetch(url, {
@@ -27,13 +32,14 @@ async function sendMessage(botToken, chatId, html) {
 
     if (!res.ok) {
       const body = await res.text();
-      console.error(`[Telegram] Send failed (${res.status}):`, body);
+      console.error('[Telegram] ❌ Send failed (HTTP ' + res.status + '): ' + body);
       return false;
     }
 
+    console.log('[Telegram] ✅ Message sent successfully.');
     return true;
   } catch (err) {
-    console.error('[Telegram] Send error:', err.message);
+    console.error('[Telegram] ❌ Send error: ' + err.message);
     return false;
   }
 }
