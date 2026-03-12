@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
 const autoGrouper = require('./autoGrouper.js');
+const scheduler = require('./scheduler.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -362,10 +363,33 @@ app.put('/settings/global', async (req, res) => {
 
 // ─── Start ──────────────────────────────────────────────────────────
 
+// ─── Server-side Price Check (Scheduler) ────────────────────────────
+
+app.post('/server-check', async (req, res) => {
+  try {
+    const result = await scheduler.triggerManualCheck(pool);
+    res.json(result);
+  } catch (err) {
+    console.error('POST /server-check error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/server-check/status', (req, res) => {
+  res.json({ running: scheduler.getIsRunning() });
+});
+
+// ─── Server Start ───────────────────────────────────────────────────
+
 initDB()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
+
+      // Start the cron scheduler for background price checks
+      // Default: every 3 hours. Override with CRON_SCHEDULE env var.
+      const cronExpr = process.env.CRON_SCHEDULE || '0 */3 * * *';
+      scheduler.start(pool, cronExpr);
     });
   })
   .catch((err) => {
