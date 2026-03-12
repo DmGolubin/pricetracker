@@ -120,17 +120,105 @@ async function extractPrice(tracker) {
     });
     console.log(`[Scraper] #${trackerId} Page loaded in ${Date.now() - navStart}ms`);
 
-    // If tracker has a variant selector, click it and wait for DOM to settle
+    // If tracker has a variant selector, click it and wait for price to update
     if (tracker.variantSelector) {
       try {
-        console.log(`[Scraper] #${trackerId} Clicking variant: ${tracker.variantSelector}`);
+        console.log('[Scraper] #' + trackerId + ' Clicking variant: ' + tracker.variantSelector);
         await page.waitForSelector(tracker.variantSelector, { timeout: 5000 });
+
+        // Capture the current price text BEFORE clicking the variant
+        // so we can detect when it changes after the click
+        var priceBeforeClick = await page.evaluate(function() {
+          // Try common price selectors to get current displayed price
+          var selectors = [
+            '[data-testid="product-price"]',
+            '[itemprop="price"]',
+            '.product-price__big',
+            '.product__price',
+            '.price-current',
+            '.product-price',
+          ];
+          for (var i = 0; i < selectors.length; i++) {
+            try {
+              var el = document.querySelector(selectors[i]);
+              if (el) return (el.textContent || '').trim();
+            } catch(e) {}
+          }
+          return null;
+        });
+
+        console.log('[Scraper] #' + trackerId + ' Price before variant click: ' + (priceBeforeClick || 'unknown'));
+
+        // Click the variant
         await page.click(tracker.variantSelector);
-        await page.waitForNetworkIdle({ timeout: VARIANT_SETTLE_MS }).catch(() => {});
-        await new Promise(r => setTimeout(r, 1000));
-        console.log(`[Scraper] #${trackerId} Variant clicked, DOM settled.`);
+
+        // Wait for DOM to settle using a smart approach:
+        // 1. First wait for any network activity to finish
+        // 2. Then wait for the price element to change (or timeout)
+        await page.waitForNetworkIdle({ timeout: 3000 }).catch(function() {});
+
+        // Wait for price to change on the page (up to 4 seconds)
+        if (priceBeforeClick) {
+          try {
+            await page.waitForFunction(
+              function(oldPrice) {
+                var selectors = [
+                  '[data-testid="product-price"]',
+                  '[itemprop="price"]',
+                  '.product-price__big',
+                  '.product__price',
+                  '.price-current',
+                  '.product-price',
+                ];
+                for (var i = 0; i < selectors.length; i++) {
+                  try {
+                    var el = document.querySelector(selectors[i]);
+                    if (el) {
+                      var current = (el.textContent || '').trim();
+                      if (current && current !== oldPrice) return true;
+                    }
+                  } catch(e) {}
+                }
+                return false;
+              },
+              { timeout: 4000 },
+              priceBeforeClick
+            );
+            console.log('[Scraper] #' + trackerId + ' Price changed after variant click.');
+          } catch (waitErr) {
+            // Price didn't change — might be same price for this variant, or click didn't work
+            console.log('[Scraper] #' + trackerId + ' Price did not change after variant click (may be same price or click failed).');
+          }
+        } else {
+          // No price detected before click — just wait a fixed time
+          await new Promise(function(r) { setTimeout(r, 2000); });
+        }
+
+        // Additional settle time for any animations/transitions
+        await new Promise(function(r) { setTimeout(r, 500); });
+
+        // Log the price after variant click
+        var priceAfterClick = await page.evaluate(function() {
+          var selectors = [
+            '[data-testid="product-price"]',
+            '[itemprop="price"]',
+            '.product-price__big',
+            '.product__price',
+            '.price-current',
+            '.product-price',
+          ];
+          for (var i = 0; i < selectors.length; i++) {
+            try {
+              var el = document.querySelector(selectors[i]);
+              if (el) return (el.textContent || '').trim();
+            } catch(e) {}
+          }
+          return null;
+        });
+        console.log('[Scraper] #' + trackerId + ' Price after variant click: ' + (priceAfterClick || 'unknown'));
+
       } catch (variantErr) {
-        console.warn(`[Scraper] #${trackerId} ⚠ Variant selector not found: ${variantErr.message}`);
+        console.warn('[Scraper] #' + trackerId + ' ⚠ Variant click failed: ' + variantErr.message);
       }
     }
 
@@ -212,7 +300,13 @@ async function extractPrice(tracker) {
 async function autoDetectPriceOnPage(page) {
   const priceText = await page.evaluate(() => {
     const PRICE_SELECTORS = [
+      // Makeup.ua specific
+      '.product-item__price .product-item__price-current',
+      '.product-item__price',
+      '.price-block__price',
+      // EVA.ua specific
       '[data-testid="product-price"]', '[data-testid="price"]',
+      // Generic
       '[itemprop="price"]', '[data-price]',
       '.product-price__big', '.product__price', '.price-current',
       '.product-price', '.price__value', '.price-value',
