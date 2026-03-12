@@ -393,9 +393,45 @@
     var VARIANT_LABEL_RE = /об[ъ'є]м|размер|розмір|цвет|колір|color|size|volume|weight|вес|вага|тип|type|варіант|вариант|variant|option|опция|опція/i;
 
     // Pattern for text that looks like a product variant value
-    var VARIANT_VALUE_RE = /^\d+\s*(мл|ml|г|g|кг|kg|л|l|шт|pcs|oz|мм|mm|см|cm|м|m|%)\b/i;
+    // No end-of-string anchor — allows trailing badge/icon text
+    var VARIANT_VALUE_RE = /\d+\s*(мл|ml|г|g|кг|kg|л|l|шт|pcs|oz|мм|mm|см|cm|м|m|%)/i;
     var SIZE_RE = /^(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|\d{2,3})\s*[-\/]?\s*(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|\d{2,3})?$/i;
     var COLOR_RE = /^(#[0-9a-f]{3,8}|rgb|красн|синий|зелен|черн|бел|серый|жёлт|оранж|розов|фиолет|голуб|коричн|бежев|червон|синій|зелен|чорн|біл|сір|жовт|рожев|блакит)/i;
+
+    /**
+     * Extract clean text from a variant element, stripping badge/icon
+     * children (spans with single special chars like %, ★, etc.)
+     */
+    function getCleanVariantText(el) {
+      // Try title attribute first (eva.ua buttons have title="30 (1017515)")
+      var title = el.getAttribute('title');
+      if (title) {
+        // Strip parenthesized IDs: "30 (1017515)" -> "30"
+        var cleaned = title.replace(/\s*\([\d\s]+\)\s*$/, '').trim();
+        if (cleaned.length > 0 && cleaned.length <= 40) return cleaned;
+      }
+      // Try aria-label
+      var ariaLabel = el.getAttribute('aria-label');
+      if (ariaLabel) {
+        var cleanedAria = ariaLabel.replace(/\s*\([\d\s]+\)\s*$/, '').trim();
+        if (cleanedAria.length > 0 && cleanedAria.length <= 40) return cleanedAria;
+      }
+      // Clone and strip badge/icon children before reading textContent
+      var clone = el.cloneNode(true);
+      var badges = clone.querySelectorAll('span, i, svg, img');
+      for (var bi = 0; bi < badges.length; bi++) {
+        var badgeText = (badges[bi].textContent || '').trim();
+        // Remove spans with very short non-alphanumeric content (badges like %, ★, ●)
+        if (badgeText.length <= 2 && !/[a-zA-Zа-яА-ЯіІїЇєЄґҐ0-9]/.test(badgeText)) {
+          badges[bi].remove();
+        }
+        // Remove SVG/img icons
+        if (badges[bi].tagName === 'SVG' || badges[bi].tagName === 'IMG') {
+          badges[bi].remove();
+        }
+      }
+      return (clone.textContent || '').trim().replace(/\s+/g, ' ');
+    }
 
     function looksLikeVariantValue(text) {
       if (VARIANT_VALUE_RE.test(text)) return true;
@@ -424,7 +460,7 @@
       var allShort = true;
       var texts = [];
       for (var ch = 0; ch < children.length; ch++) {
-        var txt = (children[ch].textContent || '').trim().replace(/\s+/g, ' ');
+        var txt = getCleanVariantText(children[ch]);
         if (txt.length === 0 || txt.length > 30) { allShort = false; break; }
         texts.push(txt);
       }
@@ -498,7 +534,7 @@
         if (!vSel || seen[vSel]) continue;
         seen[vSel] = true;
 
-        var vLabel = (vEl.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        var vLabel = getCleanVariantText(vEl).slice(0, 40);
         if (!paramGroups[groupName]) paramGroups[groupName] = [];
         paramGroups[groupName].push({
           label: vLabel, value: vLabel,

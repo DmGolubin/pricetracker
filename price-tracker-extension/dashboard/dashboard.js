@@ -307,6 +307,10 @@ const Dashboard = (function () {
       card.addEventListener('click', function (e) {
         if (e.target.closest('.tracker-card-checkbox')) return;
         if (e.target.closest('.tracker-card-refresh')) return;
+        if (e.ctrlKey || e.metaKey) {
+          window.open(tracker.pageUrl, '_blank');
+          return;
+        }
         onCardClick(tracker);
       });
       // Wire per-card refresh button
@@ -367,10 +371,20 @@ const Dashboard = (function () {
         '<p class="tracker-card-price">' + formatPrice(tracker.currentPrice) + '</p>' +
       '</div>';
 
-    card.addEventListener('click', () => onCardClick(tracker));
+    card.addEventListener('click', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        window.open(tracker.pageUrl, '_blank');
+        return;
+      }
+      onCardClick(tracker);
+    });
     card.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
+        if (e.ctrlKey || e.metaKey) {
+          window.open(tracker.pageUrl, '_blank');
+          return;
+        }
         onCardClick(tracker);
       }
     });
