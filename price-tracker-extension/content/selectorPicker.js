@@ -1049,21 +1049,49 @@
       if (selectedVariants.length === 0) {
         // No variants selected — single tracker ("Текущий")
         chrome.runtime.sendMessage(basePayload);
+        cleanup();
       } else {
-        // Multi-variant: create one tracker per selected variant
-        selectedVariants.forEach(function (v) {
+        // Multi-variant: sequentially click each variant button,
+        // wait for DOM to update, read the actual price, then send.
+        // This ensures each variant gets its own correct price.
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Сохранение...';
+
+        function readPriceFromPage(sel) {
+          // Try to read price from the detected price element
+          try {
+            var priceEl = document.querySelector(sel);
+            if (priceEl) {
+              var txt = (priceEl.textContent || '').trim();
+              var p = parsePrice(txt);
+              if (p !== null && p > 0) return p;
+              // Try content attribute
+              var content = priceEl.getAttribute('content');
+              if (content) { p = parsePrice(content); if (p !== null && p > 0) return p; }
+            }
+          } catch (_) {}
+          return null;
+        }
+
+        var variantQueue = selectedVariants.slice();
+        var VARIANT_CLICK_DELAY = 1800; // ms to wait after clicking variant
+
+        function processNextVariant() {
+          if (variantQueue.length === 0) {
+            cleanup();
+            return;
+          }
+
+          var v = variantQueue.shift();
           var payload = {};
           for (var k in basePayload) payload[k] = basePayload[k];
           payload.title = baseName + ' — ' + v.label;
 
-          // Check if the variant element is a link — if so, use its URL
-          // directly instead of clicking. This handles SPAs like eva.ua
-          // where variant clicks cause hash navigation.
+          // Check if the variant element is a link
           var variantEl = null;
           try { variantEl = document.querySelector(v.selector); } catch (_) {}
           var variantHref = '';
           if (variantEl) {
-            // Check the element itself or its closest <a> ancestor/child
             var linkEl = variantEl.closest('a') || variantEl.querySelector('a') || (variantEl.tagName === 'A' ? variantEl : null);
             if (linkEl && linkEl.href) {
               variantHref = linkEl.href;
@@ -1071,26 +1099,45 @@
           }
 
           if (variantHref && variantHref !== payload.pageUrl) {
-            // Variant has its own URL — use it directly, no click needed
+            // Variant has its own URL — use it directly
             payload.pageUrl = variantHref;
             payload.variantSelector = '';
-          } else {
-            // No link — use click-based variant extraction
-            payload.variantSelector = v.selector;
-          }
-
-          // If variant has data-price, use it and force price tracking
-          if (v.attrs && v.attrs['data-price']) {
+            chrome.runtime.sendMessage(payload);
+            processNextVariant();
+          } else if (v.attrs && v.attrs['data-price']) {
+            // Has data-price attribute — use it directly
             var vPrice = parsePrice(v.attrs['data-price']);
             if (vPrice !== null) {
               payload.price = vPrice;
               payload.trackingType = 'price';
             }
+            payload.variantSelector = v.selector;
+            chrome.runtime.sendMessage(payload);
+            processNextVariant();
+          } else {
+            // Click-based: click the variant button, wait, read price
+            payload.variantSelector = v.selector;
+            if (variantEl) {
+              variantEl.click();
+              setTimeout(function () {
+                // Read the updated price from the page
+                var newPrice = readPriceFromPage(priceCssSelector);
+                if (newPrice !== null) {
+                  payload.price = newPrice;
+                }
+                chrome.runtime.sendMessage(payload);
+                processNextVariant();
+              }, VARIANT_CLICK_DELAY);
+            } else {
+              // Element not found — send with current price
+              chrome.runtime.sendMessage(payload);
+              processNextVariant();
+            }
           }
-          chrome.runtime.sendMessage(payload);
-        });
+        }
+
+        processNextVariant();
       }
-      cleanup();
     });
 
     footer.appendChild(cancelBtn);
