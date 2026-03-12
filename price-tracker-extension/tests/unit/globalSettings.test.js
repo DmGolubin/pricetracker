@@ -309,12 +309,12 @@ describe('GlobalSettings', () => {
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'saveSettings',
-          settings: {
+          settings: expect.objectContaining({
             apiBaseUrl: 'https://new-api.test',
             telegramBotToken: 'new-token',
             telegramChatId: '999',
             permanentPinTab: true,
-          },
+          }),
         }),
         expect.any(Function)
       );

@@ -105,6 +105,33 @@ var BadgeColor = {
   ERROR: '#F44336',
 };
 
+// Threshold modes for notification significance
+var ThresholdMode = {
+  ADAPTIVE: 'adaptive',
+  ABSOLUTE: 'absolute',
+  PERCENTAGE: 'percentage',
+};
+
+// Default adaptive tiers for threshold calculation
+var DEFAULT_ADAPTIVE_TIERS = [
+  { min: 0, max: 1000, percent: 8 },
+  { min: 1001, max: 5000, percent: 5 },
+  { min: 5001, max: 20000, percent: 4 },
+  { min: 20001, max: 50000, percent: 3 },
+  { min: 50001, max: 999999999, percent: 2 },
+];
+
+// Sort options for dashboard
+var SortOption = {
+  DISCOUNT: 'discount',
+  PRICE_CHANGE: 'priceChange',
+  LAST_UPDATED: 'lastUpdated',
+  MIN_PRICE: 'minPrice',
+  PRICE_ASC: 'priceAsc',
+  PRICE_DESC: 'priceDesc',
+  NAME: 'name',
+};
+
 // Export object
 var _constants = {
   MessageToSW: MessageToSW,
@@ -124,6 +151,9 @@ var _constants = {
   CURRENCY_SYMBOLS: CURRENCY_SYMBOLS,
   INTERNAL_URL_SCHEMES: INTERNAL_URL_SCHEMES,
   BadgeColor: BadgeColor,
+  ThresholdMode: ThresholdMode,
+  DEFAULT_ADAPTIVE_TIERS: DEFAULT_ADAPTIVE_TIERS,
+  SortOption: SortOption,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

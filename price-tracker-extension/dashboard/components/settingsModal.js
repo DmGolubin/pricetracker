@@ -22,6 +22,32 @@ const SettingsModal = (function () {
   var _Icons = (typeof Icons !== 'undefined') ? Icons
              : (typeof require === 'function' ? require('../../shared/icons') : null);
 
+  // ─── Constants helpers (same pattern as globalSettings.js) ──────
+  function getConstants() {
+    if (typeof self !== 'undefined' && self.PriceTracker && self.PriceTracker.constants) {
+      return self.PriceTracker.constants;
+    }
+    try { return require('../../shared/constants'); } catch (e) { return null; }
+  }
+
+  function getDefaultTiers() {
+    var c = getConstants();
+    if (c && c.DEFAULT_ADAPTIVE_TIERS) return c.DEFAULT_ADAPTIVE_TIERS;
+    return [
+      { min: 0, max: 1000, percent: 8 },
+      { min: 1001, max: 5000, percent: 5 },
+      { min: 5001, max: 20000, percent: 4 },
+      { min: 20001, max: 50000, percent: 3 },
+      { min: 50001, max: 999999999, percent: 2 },
+    ];
+  }
+
+  function getThresholdModes() {
+    var c = getConstants();
+    if (c && c.ThresholdMode) return c.ThresholdMode;
+    return { ADAPTIVE: 'adaptive', ABSOLUTE: 'absolute', PERCENTAGE: 'percentage' };
+  }
+
   var currentTracker = null;
   var currentContainer = null;
   var currentCallbacks = null;
@@ -49,6 +75,200 @@ const SettingsModal = (function () {
         resolve(response);
       });
     });
+  }
+
+  // ─── Threshold override section builder ─────────────────────────
+
+  function buildThresholdOverrideSection(notificationThreshold) {
+    var modes = getThresholdModes();
+    var hasOverride = notificationThreshold != null;
+    var config = notificationThreshold || { mode: modes.ADAPTIVE, absoluteValue: 50, percentageValue: 5, adaptiveTiers: getDefaultTiers() };
+    var currentMode = config.mode || modes.ADAPTIVE;
+
+    var section = document.createElement('div');
+    section.className = 'form-group threshold-override-section';
+    section.setAttribute('data-section', 'threshold-override');
+
+    var sectionLabel = document.createElement('label');
+    sectionLabel.textContent = 'Порог уведомлень (override)';
+    sectionLabel.className = 'section-label';
+    section.appendChild(sectionLabel);
+
+    // Toggle: "Використовувати свій поріг"
+    var toggleWrapper = document.createElement('div');
+    toggleWrapper.className = 'threshold-override-toggle-wrapper';
+
+    var toggleLabel = document.createElement('label');
+    toggleLabel.className = 'toggle';
+    var toggleCheckbox = document.createElement('input');
+    toggleCheckbox.type = 'checkbox';
+    toggleCheckbox.checked = hasOverride;
+    toggleCheckbox.setAttribute('data-field', 'thresholdOverrideEnabled');
+    var slider = document.createElement('span');
+    slider.className = 'toggle-slider';
+    toggleLabel.appendChild(toggleCheckbox);
+    toggleLabel.appendChild(slider);
+
+    var toggleText = document.createElement('span');
+    toggleText.className = 'threshold-override-toggle-text';
+    toggleText.textContent = 'Використовувати свій поріг';
+    toggleText.style.marginLeft = '8px';
+
+    toggleWrapper.appendChild(toggleLabel);
+    toggleWrapper.appendChild(toggleText);
+    section.appendChild(toggleWrapper);
+
+    // Content area (shown/hidden based on toggle)
+    var contentArea = document.createElement('div');
+    contentArea.className = 'threshold-override-content';
+    contentArea.setAttribute('data-area', 'threshold-override-content');
+
+    // Global fallback message (shown when toggle is OFF)
+    var globalMsg = document.createElement('p');
+    globalMsg.className = 'threshold-global-msg';
+    globalMsg.textContent = 'Використовуються глобальні налаштування';
+    globalMsg.style.cssText = 'color:var(--text-muted);font-style:italic;margin:8px 0 0 0;font-size:13px';
+    globalMsg.style.display = hasOverride ? 'none' : '';
+
+    // Override controls (shown when toggle is ON)
+    var overrideControls = document.createElement('div');
+    overrideControls.className = 'threshold-override-controls';
+    overrideControls.style.display = hasOverride ? '' : 'none';
+
+    // Radio buttons for mode selection
+    var radioGroup = document.createElement('div');
+    radioGroup.className = 'threshold-mode-group';
+    radioGroup.setAttribute('role', 'radiogroup');
+    radioGroup.setAttribute('aria-label', 'Режим порогу уведомлень (override)');
+
+    var modeOptions = [
+      { value: modes.ADAPTIVE, label: 'Адаптивний' },
+      { value: modes.ABSOLUTE, label: 'Абсолютний' },
+      { value: modes.PERCENTAGE, label: 'Відсотковий' },
+    ];
+
+    for (var i = 0; i < modeOptions.length; i++) {
+      var opt = modeOptions[i];
+      var radioLabel = document.createElement('label');
+      radioLabel.className = 'threshold-radio-label';
+
+      var radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'thresholdOverrideMode';
+      radio.value = opt.value;
+      radio.checked = currentMode === opt.value;
+      radio.setAttribute('data-field', 'thresholdOverrideMode');
+
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = opt.label;
+
+      radioLabel.appendChild(radio);
+      radioLabel.appendChild(labelSpan);
+      radioGroup.appendChild(radioLabel);
+    }
+
+    overrideControls.appendChild(radioGroup);
+
+    // Absolute value panel
+    var absolutePanel = document.createElement('div');
+    absolutePanel.className = 'threshold-panel threshold-absolute-panel';
+    absolutePanel.setAttribute('data-panel', 'override-absolute');
+    absolutePanel.style.display = currentMode === modes.ABSOLUTE ? '' : 'none';
+
+    var absLabel = document.createElement('label');
+    absLabel.textContent = 'Порогове значення (UAH)';
+    var absInput = document.createElement('input');
+    absInput.type = 'number';
+    absInput.className = 'input';
+    absInput.min = '0';
+    absInput.step = '1';
+    absInput.value = config.absoluteValue != null ? config.absoluteValue : 50;
+    absInput.setAttribute('data-field', 'thresholdOverrideAbsoluteValue');
+    absInput.setAttribute('aria-label', 'Порогове значення override (UAH)');
+    absolutePanel.appendChild(absLabel);
+    absolutePanel.appendChild(absInput);
+    overrideControls.appendChild(absolutePanel);
+
+    // Percentage value panel
+    var percentagePanel = document.createElement('div');
+    percentagePanel.className = 'threshold-panel threshold-percentage-panel';
+    percentagePanel.setAttribute('data-panel', 'override-percentage');
+    percentagePanel.style.display = currentMode === modes.PERCENTAGE ? '' : 'none';
+
+    var pctLabel = document.createElement('label');
+    pctLabel.textContent = 'Порогове значення (%)';
+    var pctInput = document.createElement('input');
+    pctInput.type = 'number';
+    pctInput.className = 'input';
+    pctInput.min = '0';
+    pctInput.step = '0.1';
+    pctInput.value = config.percentageValue != null ? config.percentageValue : 5;
+    pctInput.setAttribute('data-field', 'thresholdOverridePercentageValue');
+    pctInput.setAttribute('aria-label', 'Порогове значення override (%)');
+    percentagePanel.appendChild(pctLabel);
+    percentagePanel.appendChild(pctInput);
+    overrideControls.appendChild(percentagePanel);
+
+    // Adaptive tiers description panel
+    var adaptivePanel = document.createElement('div');
+    adaptivePanel.className = 'threshold-panel threshold-adaptive-panel';
+    adaptivePanel.setAttribute('data-panel', 'override-adaptive');
+    adaptivePanel.style.display = currentMode === modes.ADAPTIVE ? '' : 'none';
+
+    var tiers = config.adaptiveTiers || getDefaultTiers();
+    var table = document.createElement('table');
+    table.className = 'adaptive-tiers-table';
+    var thead = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    var headers = ['Діапазон цін (UAH)', 'Поріг (%)'];
+    for (var h = 0; h < headers.length; h++) {
+      var th = document.createElement('th');
+      th.textContent = headers[h];
+      headRow.appendChild(th);
+    }
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    for (var t = 0; t < tiers.length; t++) {
+      var tier = tiers[t];
+      var row = document.createElement('tr');
+      var rangeCell = document.createElement('td');
+      var maxLabel = tier.max >= 999999999 ? '∞' : tier.max.toLocaleString();
+      rangeCell.textContent = tier.min.toLocaleString() + ' — ' + maxLabel;
+      var pctCell = document.createElement('td');
+      pctCell.textContent = tier.percent + '%';
+      row.appendChild(rangeCell);
+      row.appendChild(pctCell);
+      tbody.appendChild(row);
+    }
+    table.appendChild(tbody);
+    adaptivePanel.appendChild(table);
+    overrideControls.appendChild(adaptivePanel);
+
+    // Wire radio change events for mode panels
+    var radios = radioGroup.querySelectorAll('input[name="thresholdOverrideMode"]');
+    for (var r = 0; r < radios.length; r++) {
+      radios[r].addEventListener('change', function () {
+        var selected = this.value;
+        absolutePanel.style.display = selected === modes.ABSOLUTE ? '' : 'none';
+        percentagePanel.style.display = selected === modes.PERCENTAGE ? '' : 'none';
+        adaptivePanel.style.display = selected === modes.ADAPTIVE ? '' : 'none';
+      });
+    }
+
+    contentArea.appendChild(globalMsg);
+    contentArea.appendChild(overrideControls);
+    section.appendChild(contentArea);
+
+    // Wire toggle change event
+    toggleCheckbox.addEventListener('change', function () {
+      var isOn = toggleCheckbox.checked;
+      globalMsg.style.display = isOn ? 'none' : '';
+      overrideControls.style.display = isOn ? '' : 'none';
+    });
+
+    return section;
   }
 
   // ─── Render ───────────────────────────────────────────────────────
@@ -493,6 +713,12 @@ const SettingsModal = (function () {
     filterGroup.appendChild(filterValueInput);
     body.appendChild(filterGroup);
 
+    // Divider after notification filter
+    body.appendChild(createSectionDivider());
+
+    // Threshold override section (Req 1.11)
+    body.appendChild(buildThresholdOverrideSection(tracker.notificationThreshold));
+
     // Price History section
     if (typeof PriceHistory !== 'undefined' && PriceHistory.render) {
       var historySection = document.createElement('div');
@@ -621,6 +847,29 @@ const SettingsModal = (function () {
       }
     }
 
+    // Threshold override
+    var thresholdOverrideEnabled = modal.querySelector('[data-field="thresholdOverrideEnabled"]');
+    var notificationThreshold = null;
+
+    if (thresholdOverrideEnabled && thresholdOverrideEnabled.checked) {
+      var modes = getThresholdModes();
+      var selectedModeRadio = modal.querySelector('input[name="thresholdOverrideMode"]:checked');
+      var selectedMode = selectedModeRadio ? selectedModeRadio.value : modes.ADAPTIVE;
+
+      var overrideAbsInput = modal.querySelector('[data-field="thresholdOverrideAbsoluteValue"]');
+      var overrideAbsoluteValue = overrideAbsInput ? parseFloat(overrideAbsInput.value) || 50 : 50;
+
+      var overridePctInput = modal.querySelector('[data-field="thresholdOverridePercentageValue"]');
+      var overridePercentageValue = overridePctInput ? parseFloat(overridePctInput.value) || 5 : 5;
+
+      notificationThreshold = {
+        mode: selectedMode,
+        absoluteValue: overrideAbsoluteValue,
+        percentageValue: overridePercentageValue,
+        adaptiveTiers: selectedMode === modes.ADAPTIVE ? getDefaultTiers() : null,
+      };
+    }
+
     return {
       notificationsEnabled: notificationsEnabled,
       checkIntervalHours: checkIntervalHours,
@@ -630,6 +879,7 @@ const SettingsModal = (function () {
       checkMode: checkMode,
       productGroup: productGroup,
       notificationFilter: notificationFilter,
+      notificationThreshold: notificationThreshold,
     };
   }
 

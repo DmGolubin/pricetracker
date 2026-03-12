@@ -17,6 +17,21 @@ const Dashboard = (function () {
   let selectedIds = new Set();
   let selectMode = false;
 
+  // Sort state — persisted in localStorage
+  var SORT_STORAGE_KEY = 'priceTracker_sortBy';
+  let sortBy = (function () {
+    try { return localStorage.getItem(SORT_STORAGE_KEY) || 'name'; } catch (e) { return 'name'; }
+  })();
+
+  // ─── Module references (browser globals or Node requires) ──────────
+  var _sortEngine = (typeof self !== 'undefined' && self.PriceTracker && self.PriceTracker.sortEngine)
+    ? self.PriceTracker.sortEngine
+    : (typeof require === 'function' ? (function () { try { return require('./components/sortEngine'); } catch (e) { return null; } })() : null);
+
+  var _comparisonTable = (typeof self !== 'undefined' && self.PriceTracker && self.PriceTracker.comparisonTable)
+    ? self.PriceTracker.comparisonTable
+    : (typeof require === 'function' ? (function () { try { return require('./components/comparisonTable'); } catch (e) { return null; } })() : null);
+
   // ─── DOM references ─────────────────────────────────────────────────
   const trackerGrid = document.getElementById('tracker-grid');
   const emptyState = document.getElementById('empty-state');
@@ -152,7 +167,8 @@ const Dashboard = (function () {
   // ─── Filtering logic ───────────────────────────────────────────────
 
   /**
-   * Apply search query and price filter to the full tracker list.
+   * Apply search query and price filter to the full tracker list,
+   * then sort using the current sortBy criterion.
    */
   function applyFilters() {
     filteredTrackers = allTrackers.filter((tracker) => {
@@ -174,6 +190,11 @@ const Dashboard = (function () {
 
       return true;
     });
+
+    // Apply sorting after filtering
+    if (_sortEngine && sortBy) {
+      filteredTrackers = _sortEngine.sortTrackers(filteredTrackers, sortBy);
+    }
   }
 
   // ─── Rendering ─────────────────────────────────────────────────────
@@ -208,7 +229,7 @@ const Dashboard = (function () {
 
     filteredTrackers.forEach((tracker, index) => {
       const cardEl = renderTrackerCard(tracker);
-      cardEl.classList.add('tracker-card-enter');
+      cardEl.classList.add('tracker-card-enter', 'sort-transition');
       trackerGrid.appendChild(cardEl);
 
       requestAnimationFrame(function () {
@@ -221,7 +242,7 @@ const Dashboard = (function () {
 
   /**
    * Render trackers grouped by productGroup field.
-   * Shows comparison table for each group.
+   * Uses ComparisonTable for groups with >1 tracker, single card for groups with 1 tracker.
    */
   function renderGroupedView() {
     var groups = {};
@@ -239,28 +260,60 @@ const Dashboard = (function () {
     var groupNames = Object.keys(groups).sort();
 
     groupNames.forEach(function (name) {
-      var section = document.createElement('div');
-      section.className = 'product-group-section';
-      section.style.cssText = 'grid-column:1/-1;margin-bottom:var(--spacing-lg)';
+      var trackersInGroup = groups[name];
 
-      var header = document.createElement('h3');
-      header.className = 'product-group-title';
-      header.textContent = name;
-      header.style.cssText = 'color:var(--text-primary);margin-bottom:var(--spacing-sm);font-size:var(--font-lg)';
-      section.appendChild(header);
-
-      var table = document.createElement('div');
-      table.className = 'product-group-table';
-      table.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:var(--spacing-sm)';
-
-      groups[name].forEach(function (tracker) {
-        var cardEl = renderTrackerCard(tracker);
+      if (trackersInGroup.length === 1) {
+        // Single tracker in group — render as a regular card
+        var cardEl = renderTrackerCard(trackersInGroup[0]);
         cardEl.classList.add('tracker-card-enter', 'visible');
-        table.appendChild(cardEl);
-      });
+        trackerGrid.appendChild(cardEl);
+        return;
+      }
 
-      section.appendChild(table);
-      trackerGrid.appendChild(section);
+      // Multiple trackers — use ComparisonTable
+      if (_comparisonTable && _comparisonTable.create) {
+        var section = document.createElement('div');
+        section.className = 'product-group-section';
+        section.style.cssText = 'grid-column:1/-1;margin-bottom:var(--spacing-lg)';
+
+        var header = document.createElement('h3');
+        header.className = 'product-group-title';
+        header.textContent = name;
+        header.style.cssText = 'color:var(--text-primary);margin-bottom:var(--spacing-sm);font-size:var(--font-lg)';
+        section.appendChild(header);
+
+        var tableEl = _comparisonTable.create(name, trackersInGroup, {
+          onRowClick: function (tracker) {
+            onCardClick(tracker);
+          }
+        });
+        section.appendChild(tableEl);
+        trackerGrid.appendChild(section);
+      } else {
+        // Fallback: render as card grid (same as before)
+        var section = document.createElement('div');
+        section.className = 'product-group-section';
+        section.style.cssText = 'grid-column:1/-1;margin-bottom:var(--spacing-lg)';
+
+        var header = document.createElement('h3');
+        header.className = 'product-group-title';
+        header.textContent = name;
+        header.style.cssText = 'color:var(--text-primary);margin-bottom:var(--spacing-sm);font-size:var(--font-lg)';
+        section.appendChild(header);
+
+        var table = document.createElement('div');
+        table.className = 'product-group-table';
+        table.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:var(--spacing-sm)';
+
+        trackersInGroup.forEach(function (tracker) {
+          var cardEl = renderTrackerCard(tracker);
+          cardEl.classList.add('tracker-card-enter', 'visible');
+          table.appendChild(cardEl);
+        });
+
+        section.appendChild(table);
+        trackerGrid.appendChild(section);
+      }
     });
 
     // Ungrouped trackers
@@ -473,6 +526,19 @@ const Dashboard = (function () {
    */
   function onFilterChange(filter) {
     priceFilter = filter;
+    applyFilters();
+    animateFilterChange(function () {
+      renderGrid();
+    });
+  }
+
+  /**
+   * Called by Toolbar when sort option changes.
+   * Saves to localStorage and re-renders with transition animation.
+   */
+  function onSortChange(newSortBy) {
+    sortBy = newSortBy;
+    try { localStorage.setItem(SORT_STORAGE_KEY, sortBy); } catch (e) { /* noop */ }
     applyFilters();
     animateFilterChange(function () {
       renderGrid();
@@ -819,6 +885,7 @@ const Dashboard = (function () {
       Toolbar.init(toolbarContainer, {
         onSearch: onSearchChange,
         onFilter: onFilterChange,
+        onSort: onSortChange,
         onRefreshAll: () => {
           sendMessage({ action: 'checkAllPrices' }).catch(() => {});
         },
@@ -866,6 +933,7 @@ const Dashboard = (function () {
     loadTrackers,
     onSearchChange,
     onFilterChange,
+    onSortChange,
     onCardClick,
     onTrackerUpdated,
     onTrackerDeleted,
@@ -883,10 +951,12 @@ const Dashboard = (function () {
     getFilteredTrackers: () => filteredTrackers,
     getSearchQuery: () => searchQuery,
     getPriceFilter: () => priceFilter,
+    getSortBy: () => sortBy,
     // Allow setting state for testing
     _setTrackers: (trackers) => { allTrackers = trackers; },
     _setSearchQuery: (q) => { searchQuery = q; },
     _setPriceFilter: (f) => { priceFilter = f; },
+    _setSortBy: (s) => { sortBy = s; },
     toggleSelectMode,
     bulkAction,
   };

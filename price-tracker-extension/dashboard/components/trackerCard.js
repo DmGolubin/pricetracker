@@ -210,6 +210,9 @@ const TrackerCard = (function () {
       html += '<span class="tracker-card-direction ' + getDirectionClass(direction) + '"'
             + ' role="img" aria-label="' + getDirectionLabel(direction) + '">'
             + getDirectionSymbol(direction) + '</span>';
+      if (tracker.currentPrice === tracker.minPrice && tracker.currentPrice < tracker.initialPrice) {
+        html += '<span class="hist-min-badge" title="Історичний мінімум!" aria-label="Historical minimum price">🏆</span>';
+      }
       html += '</div>';
 
       // Price range bar (visual min–max indicator)

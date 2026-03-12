@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const autoGrouper = require('./autoGrouper.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -130,6 +131,26 @@ async function initDB() {
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "variantPriceVerified" BOOLEAN DEFAULT false;
   `);
 
+  // Migration: add thresholdConfig JSONB to settings for smart notification thresholds
+  await pool.query(`
+    ALTER TABLE settings ADD COLUMN IF NOT EXISTS "thresholdConfig" JSONB DEFAULT '{"mode":"adaptive","absoluteValue":50,"percentageValue":5,"adaptiveTiers":[{"min":0,"max":1000,"percent":8},{"min":1001,"max":5000,"percent":5},{"min":5001,"max":20000,"percent":4},{"min":20001,"max":50000,"percent":3},{"min":50001,"max":999999999,"percent":2}]}';
+  `);
+
+  // Migration: add telegramDigestEnabled to settings for digest mode toggle
+  await pool.query(`
+    ALTER TABLE settings ADD COLUMN IF NOT EXISTS "telegramDigestEnabled" BOOLEAN DEFAULT true;
+  `);
+
+  // Migration: add per-tracker notification threshold override
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "notificationThreshold" JSONB DEFAULT NULL;
+  `);
+
+  // Migration: add lastCheckedAt for sorting by last check date
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "lastCheckedAt" TIMESTAMP DEFAULT NULL;
+  `);
+
   console.log('Database tables initialized');
 }
 
@@ -200,11 +221,13 @@ app.put('/trackers/:id', async (req, res) => {
       'productGroup',
       'variantSelector',
       'variantPriceVerified',
+      'notificationThreshold',
+      'lastCheckedAt',
     ];
 
     for (const key of allowed) {
       if (d[key] !== undefined) {
-        const val = (key === 'notificationFilter' || key === 'excludedSelectors')
+        const val = (key === 'notificationFilter' || key === 'excludedSelectors' || key === 'notificationThreshold')
           ? JSON.stringify(d[key]) : d[key];
         fields.push(`"${key}" = $${idx}`);
         values.push(val);
@@ -238,6 +261,16 @@ app.delete('/trackers/:id', async (req, res) => {
     res.status(204).end();
   } catch (err) {
     console.error(`DELETE /trackers/${req.params.id} error:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/trackers/auto-group', async (req, res) => {
+  try {
+    const result = await autoGrouper.autoGroupAll(pool);
+    res.json({ grouped: result.grouped, total: result.total });
+  } catch (err) {
+    console.error('POST /trackers/auto-group error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -288,21 +321,37 @@ app.get('/settings/global', async (req, res) => {
 app.put('/settings/global', async (req, res) => {
   try {
     const d = req.body;
+    // Build dynamic SET clause from provided fields
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    const allowed = [
+      'apiBaseUrl', 'notificationsEnabled', 'telegramBotToken',
+      'telegramChatId', 'persistentPinTab',
+      'thresholdConfig', 'telegramDigestEnabled',
+    ];
+
+    const jsonbFields = ['thresholdConfig'];
+
+    for (const key of allowed) {
+      if (d[key] !== undefined) {
+        const val = jsonbFields.includes(key) ? JSON.stringify(d[key]) : d[key];
+        fields.push(`"${key}" = $${idx}`);
+        values.push(val);
+        idx++;
+      }
+    }
+
+    if (fields.length === 0) {
+      const { rows } = await pool.query("SELECT * FROM settings WHERE id = 'global'");
+      return res.json(rows[0]);
+    }
+
+    values.push('global');
     const { rows } = await pool.query(
-      `UPDATE settings SET
-        "apiBaseUrl" = $1,
-        "notificationsEnabled" = $2,
-        "telegramBotToken" = $3,
-        "telegramChatId" = $4,
-        "persistentPinTab" = $5
-       WHERE id = 'global' RETURNING *`,
-      [
-        d.apiBaseUrl || '',
-        d.notificationsEnabled !== false,
-        d.telegramBotToken || '',
-        d.telegramChatId || '',
-        d.persistentPinTab || false,
-      ]
+      `UPDATE settings SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
+      values
     );
     res.json(rows[0]);
   } catch (err) {

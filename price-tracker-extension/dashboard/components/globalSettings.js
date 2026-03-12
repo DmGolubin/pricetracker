@@ -43,6 +43,195 @@ const GlobalSettings = (function () {
     return group;
   }
 
+  // ─── Threshold helpers ──────────────────────────────────────────
+
+  function getConstants() {
+    if (typeof self !== 'undefined' && self.PriceTracker && self.PriceTracker.constants) {
+      return self.PriceTracker.constants;
+    }
+    try { return require('../../shared/constants'); } catch (e) { return null; }
+  }
+
+  function getDefaultTiers() {
+    var c = getConstants();
+    if (c && c.DEFAULT_ADAPTIVE_TIERS) return c.DEFAULT_ADAPTIVE_TIERS;
+    return [
+      { min: 0, max: 1000, percent: 8 },
+      { min: 1001, max: 5000, percent: 5 },
+      { min: 5001, max: 20000, percent: 4 },
+      { min: 20001, max: 50000, percent: 3 },
+      { min: 50001, max: 999999999, percent: 2 },
+    ];
+  }
+
+  function getThresholdModes() {
+    var c = getConstants();
+    if (c && c.ThresholdMode) return c.ThresholdMode;
+    return { ADAPTIVE: 'adaptive', ABSOLUTE: 'absolute', PERCENTAGE: 'percentage' };
+  }
+
+  function buildThresholdSection(thresholdConfig) {
+    var modes = getThresholdModes();
+    var config = thresholdConfig || { mode: modes.ADAPTIVE, absoluteValue: 50, percentageValue: 5, adaptiveTiers: getDefaultTiers() };
+    var currentMode = config.mode || modes.ADAPTIVE;
+
+    var section = document.createElement('div');
+    section.className = 'form-group threshold-section';
+    section.setAttribute('data-section', 'threshold');
+
+    var sectionLabel = document.createElement('label');
+    sectionLabel.textContent = 'Порог уведомлень';
+    sectionLabel.className = 'section-label';
+    section.appendChild(sectionLabel);
+
+    // Radio buttons for mode selection
+    var radioGroup = document.createElement('div');
+    radioGroup.className = 'threshold-mode-group';
+    radioGroup.setAttribute('role', 'radiogroup');
+    radioGroup.setAttribute('aria-label', 'Режим порогу уведомлень');
+
+    var modeOptions = [
+      { value: modes.ADAPTIVE, label: 'Адаптивний' },
+      { value: modes.ABSOLUTE, label: 'Абсолютний' },
+      { value: modes.PERCENTAGE, label: 'Відсотковий' },
+    ];
+
+    for (var i = 0; i < modeOptions.length; i++) {
+      var opt = modeOptions[i];
+      var radioLabel = document.createElement('label');
+      radioLabel.className = 'threshold-radio-label';
+
+      var radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'thresholdMode';
+      radio.value = opt.value;
+      radio.checked = currentMode === opt.value;
+      radio.setAttribute('data-field', 'thresholdMode');
+
+      var labelText = document.createElement('span');
+      labelText.textContent = opt.label;
+
+      radioLabel.appendChild(radio);
+      radioLabel.appendChild(labelText);
+      radioGroup.appendChild(radioLabel);
+    }
+
+    section.appendChild(radioGroup);
+
+    // Conditional panels
+    var absolutePanel = document.createElement('div');
+    absolutePanel.className = 'threshold-panel threshold-absolute-panel';
+    absolutePanel.setAttribute('data-panel', 'absolute');
+    absolutePanel.style.display = currentMode === modes.ABSOLUTE ? '' : 'none';
+
+    var absLabel = document.createElement('label');
+    absLabel.textContent = 'Порогове значення (UAH)';
+    var absInput = document.createElement('input');
+    absInput.type = 'number';
+    absInput.className = 'input';
+    absInput.min = '0';
+    absInput.step = '1';
+    absInput.value = config.absoluteValue != null ? config.absoluteValue : 50;
+    absInput.setAttribute('data-field', 'thresholdAbsoluteValue');
+    absInput.setAttribute('aria-label', 'Порогове значення (UAH)');
+    absolutePanel.appendChild(absLabel);
+    absolutePanel.appendChild(absInput);
+    section.appendChild(absolutePanel);
+
+    var percentagePanel = document.createElement('div');
+    percentagePanel.className = 'threshold-panel threshold-percentage-panel';
+    percentagePanel.setAttribute('data-panel', 'percentage');
+    percentagePanel.style.display = currentMode === modes.PERCENTAGE ? '' : 'none';
+
+    var pctLabel = document.createElement('label');
+    pctLabel.textContent = 'Порогове значення (%)';
+    var pctInput = document.createElement('input');
+    pctInput.type = 'number';
+    pctInput.className = 'input';
+    pctInput.min = '0';
+    pctInput.step = '0.1';
+    pctInput.value = config.percentageValue != null ? config.percentageValue : 5;
+    pctInput.setAttribute('data-field', 'thresholdPercentageValue');
+    pctInput.setAttribute('aria-label', 'Порогове значення (%)');
+    percentagePanel.appendChild(pctLabel);
+    percentagePanel.appendChild(pctInput);
+    section.appendChild(percentagePanel);
+
+    var adaptivePanel = document.createElement('div');
+    adaptivePanel.className = 'threshold-panel threshold-adaptive-panel';
+    adaptivePanel.setAttribute('data-panel', 'adaptive');
+    adaptivePanel.style.display = currentMode === modes.ADAPTIVE ? '' : 'none';
+
+    var tiers = config.adaptiveTiers || getDefaultTiers();
+    var table = document.createElement('table');
+    table.className = 'adaptive-tiers-table';
+    var thead = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    var headers = ['Діапазон цін (UAH)', 'Поріг (%)'];
+    for (var h = 0; h < headers.length; h++) {
+      var th = document.createElement('th');
+      th.textContent = headers[h];
+      headRow.appendChild(th);
+    }
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    for (var t = 0; t < tiers.length; t++) {
+      var tier = tiers[t];
+      var row = document.createElement('tr');
+      var rangeCell = document.createElement('td');
+      var maxLabel = tier.max >= 999999999 ? '∞' : tier.max.toLocaleString();
+      rangeCell.textContent = tier.min.toLocaleString() + ' — ' + maxLabel;
+      var pctCell = document.createElement('td');
+      pctCell.textContent = tier.percent + '%';
+      row.appendChild(rangeCell);
+      row.appendChild(pctCell);
+      tbody.appendChild(row);
+    }
+    table.appendChild(tbody);
+    adaptivePanel.appendChild(table);
+    section.appendChild(adaptivePanel);
+
+    // Wire radio change events
+    var radios = radioGroup.querySelectorAll('input[name="thresholdMode"]');
+    for (var r = 0; r < radios.length; r++) {
+      radios[r].addEventListener('change', function () {
+        var selected = this.value;
+        absolutePanel.style.display = selected === modes.ABSOLUTE ? '' : 'none';
+        percentagePanel.style.display = selected === modes.PERCENTAGE ? '' : 'none';
+        adaptivePanel.style.display = selected === modes.ADAPTIVE ? '' : 'none';
+      });
+    }
+
+    return section;
+  }
+
+  function buildDigestToggle(enabled) {
+    var group = document.createElement('div');
+    group.className = 'form-group digest-section';
+    group.setAttribute('data-section', 'digest');
+
+    var label = document.createElement('label');
+    label.textContent = 'Telegram дайджест';
+    label.className = 'section-label';
+    group.appendChild(label);
+
+    var toggleLabel = document.createElement('label');
+    toggleLabel.className = 'toggle';
+    var checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = enabled !== false; // default: enabled
+    checkbox.setAttribute('data-field', 'telegramDigestEnabled');
+    var slider = document.createElement('span');
+    slider.className = 'toggle-slider';
+    toggleLabel.appendChild(checkbox);
+    toggleLabel.appendChild(slider);
+    group.appendChild(toggleLabel);
+
+    return group;
+  }
+
   // ─── Render ───────────────────────────────────────────────────────
 
   function buildModal(settings) {
@@ -139,6 +328,12 @@ const GlobalSettings = (function () {
     pinGroup.appendChild(toggleLabel);
     body.appendChild(pinGroup);
 
+    // ── Threshold section (Req 1.10) ──
+    body.appendChild(buildThresholdSection(s.thresholdConfig));
+
+    // ── Telegram digest toggle (Req 2.9) ──
+    body.appendChild(buildDigestToggle(s.telegramDigestEnabled));
+
     // ── Footer ──
     var footer = document.createElement('div');
     footer.className = 'modal-footer';
@@ -187,11 +382,35 @@ const GlobalSettings = (function () {
     var pinCheckbox = modal.querySelector('[data-field="permanentPinTab"]');
     var permanentPinTab = pinCheckbox ? pinCheckbox.checked : false;
 
+    // Threshold config
+    var modes = getThresholdModes();
+    var selectedModeRadio = modal.querySelector('input[name="thresholdMode"]:checked');
+    var selectedMode = selectedModeRadio ? selectedModeRadio.value : modes.ADAPTIVE;
+
+    var absInput = modal.querySelector('[data-field="thresholdAbsoluteValue"]');
+    var absoluteValue = absInput ? parseFloat(absInput.value) || 50 : 50;
+
+    var pctInput = modal.querySelector('[data-field="thresholdPercentageValue"]');
+    var percentageValue = pctInput ? parseFloat(pctInput.value) || 5 : 5;
+
+    var thresholdConfig = {
+      mode: selectedMode,
+      absoluteValue: absoluteValue,
+      percentageValue: percentageValue,
+      adaptiveTiers: getDefaultTiers(),
+    };
+
+    // Telegram digest toggle
+    var digestCheckbox = modal.querySelector('[data-field="telegramDigestEnabled"]');
+    var telegramDigestEnabled = digestCheckbox ? digestCheckbox.checked : true;
+
     return {
       apiBaseUrl: apiBaseUrl,
       telegramBotToken: telegramBotToken,
       telegramChatId: telegramChatId,
       permanentPinTab: permanentPinTab,
+      thresholdConfig: thresholdConfig,
+      telegramDigestEnabled: telegramDigestEnabled,
     };
   }
 

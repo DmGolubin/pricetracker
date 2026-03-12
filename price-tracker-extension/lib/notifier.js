@@ -9,6 +9,13 @@ var _constants = (typeof self !== 'undefined' && self.PriceTracker && self.Price
   : require('../shared/constants');
 var NotificationFilterType = _constants.NotificationFilterType;
 
+var _thresholdEngine;
+if (typeof require !== 'undefined') {
+  _thresholdEngine = require('./thresholdEngine');
+} else if (typeof self !== 'undefined' && self.PriceTracker && self.PriceTracker.thresholdEngine) {
+  _thresholdEngine = self.PriceTracker.thresholdEngine;
+}
+
 // ─── Inline LCS diff for Telegram formatting ────────────────────
 
 function buildLCSTable(oldArr, newArr) {
@@ -157,14 +164,18 @@ function evaluateFilter(tracker, newPrice, previousPrice) {
 
 /**
  * Determine whether Chrome and Telegram notifications should be sent.
+ * Integrates threshold engine: suppresses notifications when price change
+ * is below the configured threshold (unless it's a historical minimum).
  *
  * @param {object} tracker - The tracker object
  * @param {number} newPrice - The new price
  * @param {number} previousPrice - The previous price
  * @param {object} settings - Global settings
+ * @param {object} [options] - Additional options
+ * @param {boolean} [options.isHistoricalMinimum] - Whether this is a historical minimum
  * @returns {{ chrome: boolean, telegram: boolean }}
  */
-function shouldNotify(tracker, newPrice, previousPrice, settings) {
+function shouldNotify(tracker, newPrice, previousPrice, settings, options) {
   const filterPassed = evaluateFilter(tracker, newPrice, previousPrice);
 
   const chromeEnabled =
@@ -174,6 +185,24 @@ function shouldNotify(tracker, newPrice, previousPrice, settings) {
     filterPassed &&
     Boolean(settings.telegramBotToken) &&
     Boolean(settings.telegramChatId);
+
+  // If filter didn't pass, no notification regardless
+  if (!chromeEnabled && !telegramEnabled) {
+    return { chrome: false, telegram: false };
+  }
+
+  var isHistMin = options && options.isHistoricalMinimum;
+
+  // Check threshold significance (only for price tracking, not content)
+  if (_thresholdEngine && tracker.trackingType !== 'content') {
+    var thresholdConfig = _thresholdEngine.resolveThresholdConfig(tracker, settings);
+    var significant = _thresholdEngine.isSignificant(previousPrice, newPrice, thresholdConfig);
+
+    // Historical minimum always bypasses threshold
+    if (!significant && !isHistMin) {
+      return { chrome: false, telegram: false };
+    }
+  }
 
   return { chrome: chromeEnabled, telegram: telegramEnabled };
 }
@@ -217,20 +246,46 @@ function sendChromeNotification(tracker, oldPrice, newPrice) {
 }
 
 /**
+ * Send a special Chrome desktop notification for historical minimum price.
+ *
+ * @param {object} tracker - The tracker object
+ */
+function sendHistoricalMinNotification(tracker) {
+  const notificationId = `price-tracker-histmin-${tracker.id}`;
+
+  chrome.notifications.create(notificationId, {
+    type: 'basic',
+    iconUrl: tracker.imageUrl || chrome.runtime.getURL('icons/icon128.png'),
+    title: '\uD83C\uDFC6 Исторический минимум!',
+    message: `${tracker.productName}\nЦена: ${tracker.currentPrice}`,
+  });
+}
+
+/**
  * Send a Telegram notification via Bot API.
  *
  * @param {object} tracker - The tracker object
  * @param {number} oldPrice - The old price
  * @param {number} newPrice - The new price
  * @param {object} settings - Global settings (telegramBotToken, telegramChatId)
+ * @param {object} [options] - Additional options
+ * @param {boolean} [options.isHistoricalMinimum] - Whether this is a historical minimum
  * @returns {Promise<void>}
  */
-async function sendTelegramNotification(tracker, oldPrice, newPrice, settings) {
+async function sendTelegramNotification(tracker, oldPrice, newPrice, settings, options) {
   if (!settings.telegramBotToken || !settings.telegramChatId) {
     return;
   }
 
+  // When digest mode is enabled, skip individual Telegram messages
+  // (the digest will be sent by priceChecker after the cycle)
+  if (settings.telegramDigestEnabled) {
+    return;
+  }
+
   const url = `https://api.telegram.org/bot${settings.telegramBotToken}/sendMessage`;
+
+  var isHistMin = options && options.isHistoricalMinimum;
 
   var priceText;
   if (tracker.trackingType === 'content') {
@@ -245,8 +300,9 @@ async function sendTelegramNotification(tracker, oldPrice, newPrice, settings) {
     priceText = `Цена: ${oldPrice} → ${newPrice}`;
   }
 
+  var titlePrefix = isHistMin ? '\uD83C\uDFC6 ' : '';
   const text =
-    `<b>${escapeHtml(tracker.productName)}</b>\n` +
+    `<b>${titlePrefix}${escapeHtml(tracker.productName)}</b>\n` +
     priceText + `\n` +
     `<a href="${tracker.pageUrl}">Открыть страницу</a>`;
 
@@ -280,18 +336,26 @@ async function sendTelegramNotification(tracker, oldPrice, newPrice, settings) {
  * @param {number} oldPrice - The old price
  * @param {number} newPrice - The new price
  * @param {object} settings - Global settings
+ * @param {object} [options] - Additional options
+ * @param {boolean} [options.isHistoricalMinimum] - Whether this is a historical minimum
  * @returns {Promise<void>}
  */
-async function notify(tracker, oldPrice, newPrice, settings) {
+async function notify(tracker, oldPrice, newPrice, settings, options) {
   const previousPrice = oldPrice;
-  const decision = shouldNotify(tracker, newPrice, previousPrice, settings);
+  const decision = shouldNotify(tracker, newPrice, previousPrice, settings, options);
+
+  var isHistMin = options && options.isHistoricalMinimum;
 
   if (decision.chrome) {
     sendChromeNotification(tracker, oldPrice, newPrice);
+    // Also send the special historical minimum Chrome notification
+    if (isHistMin) {
+      sendHistoricalMinNotification(tracker);
+    }
   }
 
   if (decision.telegram) {
-    await sendTelegramNotification(tracker, oldPrice, newPrice, settings);
+    await sendTelegramNotification(tracker, oldPrice, newPrice, settings, options);
   }
 }
 
@@ -315,6 +379,7 @@ const _notifier = {
   evaluateFilter,
   shouldNotify,
   sendChromeNotification,
+  sendHistoricalMinNotification,
   sendTelegramNotification,
   notify,
   registerNotificationClickHandler,

@@ -286,6 +286,17 @@
   font-size: var(--font-sm);
 }
 
+/* Historical minimum badge */
+.hist-min-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  cursor: default;
+  flex-shrink: 0;
+}
+
 /* Price range bar */
 .tracker-card-range-bar {
   display: flex;
@@ -720,3 +731,180 @@
   padding: var(--spacing-xs) var(--spacing-sm);
 }
 
+
+/* ===== Comparison Table ===== */
+/* Requirements: 4.2, 4.3, 4.4, 4.6, 6.5, 6.6 */
+
+.comparison-table {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  margin-bottom: var(--spacing-lg);
+}
+
+.best-price-summary {
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--accent-primary);
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.comparison-table-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+
+.comparison-table-grid th {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-muted);
+  background-color: var(--bg-input);
+  border-bottom: 1px solid var(--border-primary);
+  white-space: nowrap;
+}
+
+.comparison-table-grid td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.comparison-table-grid tbody tr {
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.comparison-table-grid tbody tr:hover {
+  background-color: var(--bg-card-hover);
+}
+
+.comparison-table-grid tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Best price row highlight */
+.best-price-row {
+  background-color: rgba(79, 140, 255, 0.1);
+}
+
+.best-price-row td {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.best-price-row:hover {
+  background-color: rgba(79, 140, 255, 0.18) !important;
+}
+
+/* ===== Trend Icons ===== */
+.trend-icon {
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-bold);
+}
+
+.trend-up {
+  color: var(--accent-red);
+}
+
+.trend-down {
+  color: var(--accent-green);
+}
+
+.trend-neutral {
+  color: var(--text-muted);
+}
+
+/* ===== Sort Dropdown in Toolbar ===== */
+.toolbar-sort-select {
+  width: auto;
+  min-width: 160px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  padding-right: 28px;
+  font-size: var(--font-sm);
+}
+
+/* ===== Threshold Settings Sections (Modals) ===== */
+.threshold-section,
+.threshold-override-section {
+  margin-top: var(--spacing-sm);
+}
+
+.threshold-mode-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.threshold-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.threshold-radio-label:hover {
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
+.threshold-radio-label input[type='radio'] {
+  accent-color: var(--accent-primary);
+}
+
+.threshold-panel {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+}
+
+.threshold-panel label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.threshold-panel .input {
+  margin-top: var(--spacing-xs);
+}
+
+/* Override toggle wrapper */
+.threshold-override-toggle-wrapper {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.threshold-override-toggle-text {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.threshold-override-content {
+  margin-top: var(--spacing-sm);
+}
+
+.threshold-override-controls {
+  margin-top: var(--spacing-sm);
+}
+
+.threshold-global-msg {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-sm);
+  margin: var(--spacing-sm) 0 0 0;
+}

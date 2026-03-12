@@ -24,6 +24,20 @@ var CheckMode = _constants.CheckMode;
 var TrackingType = _constants.TrackingType;
 var MessageFromCS = _constants.MessageFromCS;
 
+var _thresholdEngine;
+if (typeof require !== 'undefined') {
+  _thresholdEngine = require('./thresholdEngine');
+} else if (typeof self !== 'undefined' && self.PriceTracker && self.PriceTracker.thresholdEngine) {
+  _thresholdEngine = self.PriceTracker.thresholdEngine;
+}
+
+var _digestComposer;
+if (typeof require !== 'undefined') {
+  _digestComposer = require('./digestComposer');
+} else if (typeof self !== 'undefined' && self.PriceTracker && self.PriceTracker.digestComposer) {
+  _digestComposer = self.PriceTracker.digestComposer;
+}
+
 /**
  * Wait for a tab to finish loading (status === 'complete').
  * Resolves when the tab's status becomes 'complete', or rejects on timeout.
@@ -213,6 +227,12 @@ async function handlePriceResult(tracker, newPrice, deps) {
 
   await apiClient.updateTracker(tracker.id, updateData);
 
+  // Check if this is a historical minimum
+  var isHistMin = false;
+  if (_thresholdEngine && priceChanged && !isFirstVariantCheck) {
+    isHistMin = _thresholdEngine.isHistoricalMinimum(newPrice, tracker.minPrice);
+  }
+
   // Notify on change (but not on first variant price correction)
   if (priceChanged && !isFirstVariantCheck && badgeManager) {
     badgeManager.incrementUnread();
@@ -222,9 +242,19 @@ async function handlePriceResult(tracker, newPrice, deps) {
     try {
       var settings = {};
       try { settings = await deps.apiClient.getSettings(); } catch (_s) {}
-      await notifier.notify(tracker, tracker.currentPrice, newPrice, settings);
+      var notifyOptions = isHistMin ? { isHistoricalMinimum: true } : undefined;
+      await notifier.notify(tracker, tracker.currentPrice, newPrice, settings, notifyOptions);
     } catch (_) {
       // Notification errors should not break the check
+    }
+  }
+
+  // Feed the digest collector
+  if (deps.digestCollector) {
+    if (priceChanged && !isFirstVariantCheck) {
+      deps.digestCollector.addChange(tracker, tracker.currentPrice, newPrice, isHistMin);
+    } else {
+      deps.digestCollector.addUnchanged();
     }
   }
 }
@@ -413,6 +443,17 @@ async function checkAllPrices(deps) {
     (t) => t.status === TrackerStatus.ACTIVE || t.status === TrackerStatus.UPDATED
   );
 
+  // Create digest collector for this check cycle
+  var collector = _digestComposer ? _digestComposer.createCollector() : null;
+  var checkDeps = Object.assign({}, deps);
+  if (collector) {
+    checkDeps.digestCollector = collector;
+  }
+
+  // Fetch settings once for digest sending later
+  var settings = {};
+  try { settings = await apiClient.getSettings(); } catch (_s) {}
+
   // Check in parallel with concurrency limit
   const CONCURRENCY = 3;
   var i = 0;
@@ -420,7 +461,7 @@ async function checkAllPrices(deps) {
   async function next() {
     while (i < activeTrackers.length) {
       var tracker = activeTrackers[i++];
-      await checkPrice(tracker.id, deps);
+      await checkPrice(tracker.id, checkDeps);
     }
   }
 
@@ -429,6 +470,44 @@ async function checkAllPrices(deps) {
     workers.push(next());
   }
   await Promise.all(workers);
+
+  // Send digest via Telegram if there are changes and digest is enabled
+  if (collector && collector.hasChanges() && settings.telegramDigestEnabled) {
+    try {
+      var messages = collector.compose();
+      if (messages.length > 0 && settings.telegramBotToken && settings.telegramChatId) {
+        var telegramUrl = 'https://api.telegram.org/bot' + settings.telegramBotToken + '/sendMessage';
+        for (var m = 0; m < messages.length; m++) {
+          await fetch(telegramUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: settings.telegramChatId,
+              text: messages[m],
+              parse_mode: 'HTML',
+            }),
+          });
+        }
+      }
+    } catch (err) {
+      // Digest send errors should not break the check cycle
+      console.error('Digest send error:', err);
+    }
+  }
+
+  // Attempt auto-grouping of ungrouped trackers after check cycle
+  try {
+    if (apiClient.getBaseUrl) {
+      var autoGroupUrl = apiClient.getBaseUrl() + '/trackers/auto-group';
+      await fetch(autoGroupUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  } catch (err) {
+    // Auto-group errors should not break the check cycle
+    console.error('Auto-group error:', err);
+  }
 }
 
 const _priceChecker = {

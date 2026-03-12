@@ -19,6 +19,13 @@ const Toolbar = (function () {
   var _Icons = (typeof Icons !== 'undefined') ? Icons
              : (typeof require === 'function' ? require('../../shared/icons') : null);
 
+  // ─── SortEngine reference (global in browser, require in Node/Jest) ──
+  var _sortEngine = (typeof self !== 'undefined' && self.PriceTracker && self.PriceTracker.sortEngine)
+    ? self.PriceTracker.sortEngine
+    : (typeof require === 'function' ? require('./sortEngine') : null);
+
+  var SORT_STORAGE_KEY = 'priceTracker_sortBy';
+
   /**
    * Initialise the toolbar inside the given container element.
    * @param {HTMLElement} container - Parent element to render into
@@ -120,6 +127,42 @@ const Toolbar = (function () {
 
     centerGroup.appendChild(searchWrapper);
     centerGroup.appendChild(filterSelect);
+
+    // Sort select
+    var sortSelect = document.createElement('select');
+    sortSelect.className = 'input toolbar-sort-select';
+    sortSelect.setAttribute('aria-label', 'Сортировка трекеров');
+
+    var sortOptions = _sortEngine ? _sortEngine.getSortOptions() : [];
+    sortOptions.forEach(function (opt) {
+      var option = document.createElement('option');
+      option.value = opt.value;
+      option.textContent = opt.label;
+      sortSelect.appendChild(option);
+    });
+
+    // Restore selected sort from localStorage
+    try {
+      var savedSort = localStorage.getItem(SORT_STORAGE_KEY);
+      if (savedSort) {
+        sortSelect.value = savedSort;
+      }
+    } catch (e) {
+      // localStorage may be unavailable
+    }
+
+    sortSelect.addEventListener('change', function () {
+      try {
+        localStorage.setItem(SORT_STORAGE_KEY, sortSelect.value);
+      } catch (e) {
+        // localStorage may be unavailable
+      }
+      if (typeof cb.onSort === 'function') {
+        cb.onSort(sortSelect.value);
+      }
+    });
+
+    centerGroup.appendChild(sortSelect);
 
     // ─── Right group: Import/Export + Settings ────────────────────
     var rightGroup = document.createElement('div');
