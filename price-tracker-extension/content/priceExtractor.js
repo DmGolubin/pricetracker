@@ -324,8 +324,38 @@
     // Click the variant element
     variantEl.click();
 
-    // Wait for DOM to settle after the click
-    setTimeout(callback, VARIANT_SETTLE_DELAY);
+    // Wait for DOM to settle using MutationObserver.
+    // SPA pages (like eva.ua) may re-render the entire page after
+    // a variant click, so we wait until mutations stop for 600ms.
+    var MAX_WAIT = 4000;
+    var STABLE_DELAY = 600;
+    var timer = null;
+    var maxTimer = null;
+    var observer = null;
+    var called = false;
+
+    function done() {
+      if (called) return;
+      called = true;
+      if (observer) { observer.disconnect(); observer = null; }
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
+      callback();
+    }
+
+    observer = new MutationObserver(function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(done, STABLE_DELAY);
+    });
+
+    observer.observe(document.body, {
+      childList: true, subtree: true, characterData: true
+    });
+
+    // Initial stable timer (in case no mutations happen)
+    timer = setTimeout(done, STABLE_DELAY);
+    // Max wait fallback
+    maxTimer = setTimeout(done, MAX_WAIT);
   }
 
   function tryExtract(attempt) {

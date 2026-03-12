@@ -20,6 +20,11 @@ var MessageToSW = {
   RESET_BADGE: 'resetBadge',
 };
 
+// Message types from service worker to popup/dashboard (broadcast)
+var MessageFromSW = {
+  TRACKER_UPDATED: 'trackerUpdated',
+};
+
 // Message types from content script to service worker
 var MessageFromCS = {
   ELEMENT_SELECTED: 'elementSelected',
@@ -103,6 +108,7 @@ var BadgeColor = {
 // Export object
 var _constants = {
   MessageToSW: MessageToSW,
+  MessageFromSW: MessageFromSW,
   MessageFromCS: MessageFromCS,
   CHECK_INTERVALS: CHECK_INTERVALS,
   DEFAULT_CHECK_INTERVAL: DEFAULT_CHECK_INTERVAL,

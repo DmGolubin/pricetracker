@@ -838,6 +838,20 @@ const Dashboard = (function () {
 
     // Load trackers
     loadTrackers();
+
+    // Listen for tracker updates from the service worker (e.g. variant price corrections)
+    chrome.runtime.onMessage.addListener(function (message) {
+      if (!message || message.action !== 'trackerUpdated') return;
+      var tid = message.trackerId;
+      if (!tid) return;
+      // Reload the updated tracker from API and refresh its card
+      fetch(API_BASE + '/trackers/' + encodeURIComponent(tid))
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (updated) {
+          if (updated) onTrackerUpdated(updated);
+        })
+        .catch(function () {});
+    });
   }
 
   // Start when DOM is ready

@@ -177,9 +177,19 @@ async function handlePriceResult(tracker, newPrice, deps) {
     checkedAt: now,
   });
 
+  // Detect first check for variant trackers: if initialPrice equals
+  // currentPrice and the new price differs, this is likely the first
+  // real price read after creation (variant trackers are created with
+  // the page's current price, not the variant's actual price).
+  var isFirstVariantCheck = tracker.variantSelector
+    && Number(tracker.initialPrice) === Number(tracker.currentPrice)
+    && Number(newPrice) !== Number(tracker.currentPrice);
+
   // Compute updated stats
-  const updatedMin = Math.min(tracker.minPrice, newPrice);
-  const updatedMax = Math.max(tracker.maxPrice, newPrice);
+  var baseMin = isFirstVariantCheck ? newPrice : tracker.minPrice;
+  var baseMax = isFirstVariantCheck ? newPrice : tracker.maxPrice;
+  const updatedMin = Math.min(baseMin, newPrice);
+  const updatedMax = Math.max(baseMax, newPrice);
   const priceChanged = Number(newPrice) !== Number(tracker.currentPrice);
 
   const updateData = {
@@ -190,19 +200,24 @@ async function handlePriceResult(tracker, newPrice, deps) {
     status: TrackerStatus.ACTIVE,
   };
 
-  if (priceChanged) {
+  // On first variant check, correct the initialPrice to the real value
+  if (isFirstVariantCheck) {
+    updateData.initialPrice = newPrice;
+  }
+
+  if (priceChanged && !isFirstVariantCheck) {
     updateData.status = TrackerStatus.UPDATED;
     updateData.unread = true;
   }
 
   await apiClient.updateTracker(tracker.id, updateData);
 
-  // Notify on change
-  if (priceChanged && badgeManager) {
+  // Notify on change (but not on first variant price correction)
+  if (priceChanged && !isFirstVariantCheck && badgeManager) {
     badgeManager.incrementUnread();
   }
 
-  if (priceChanged && notifier) {
+  if (priceChanged && !isFirstVariantCheck && notifier) {
     try {
       var settings = {};
       try { settings = await deps.apiClient.getSettings(); } catch (_s) {}

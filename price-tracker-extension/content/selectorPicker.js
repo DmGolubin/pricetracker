@@ -1051,88 +1051,13 @@
         chrome.runtime.sendMessage(basePayload);
         cleanup();
       } else {
-        // Multi-variant: sequentially click each variant button,
-        // wait for DOM to update, read the actual price, then send.
-        // This ensures each variant gets its own correct price.
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Сохранение...';
-
-        /**
-         * Read the current price from the page.
-         * First tries the given selector, then falls back to detectPriceSelector()
-         * to handle SPA re-renders where the old element was replaced.
-         */
-        function readPriceFromPage(sel) {
-          // Try the given selector first
-          try {
-            var priceEl = document.querySelector(sel);
-            if (priceEl) {
-              var txt = (priceEl.textContent || '').trim();
-              var p = parsePrice(txt);
-              if (p !== null && p > 0) return p;
-              var content = priceEl.getAttribute('content');
-              if (content) { p = parsePrice(content); if (p !== null && p > 0) return p; }
-            }
-          } catch (_) {}
-          // Fallback: re-detect price element (SPA may have re-rendered DOM)
-          var freshSel = detectPriceSelector();
-          if (freshSel && freshSel !== sel) {
-            try {
-              var freshEl = document.querySelector(freshSel);
-              if (freshEl) {
-                var ftxt = (freshEl.textContent || '').trim();
-                var fp = parsePrice(ftxt);
-                if (fp !== null && fp > 0) return fp;
-              }
-            } catch (_) {}
-          }
-          return null;
-        }
-
-        /**
-         * Wait for DOM to settle after a variant click.
-         * Uses MutationObserver to detect when the price element changes,
-         * with a maximum wait time as fallback.
-         */
-        function waitForDomSettle(callback) {
-          var MAX_WAIT = 3000;
-          var STABLE_DELAY = 500; // ms of no mutations = settled
-          var timer = null;
-          var maxTimer = null;
-          var observer = null;
-
-          function done() {
-            if (observer) { observer.disconnect(); observer = null; }
-            if (timer) { clearTimeout(timer); timer = null; }
-            if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
-            callback();
-          }
-
-          observer = new MutationObserver(function () {
-            // Reset the stable timer on each mutation
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(done, STABLE_DELAY);
-          });
-
-          observer.observe(document.body, {
-            childList: true, subtree: true, characterData: true
-          });
-
-          // Start the stable timer (in case no mutations happen)
-          timer = setTimeout(done, STABLE_DELAY);
-          // Max wait fallback
-          maxTimer = setTimeout(done, MAX_WAIT);
-        }
-
-        var variantQueue = selectedVariants.slice();
-
-        function processNextVariant() {
-          if (variantQueue.length === 0) {
-            cleanup();
-            return;
-          }
-
-          var v = variantQueue.shift();
+        // Multi-variant: create one tracker per selected variant.
+        // We do NOT click variant buttons here — the SPA may re-render
+        // the entire page, making price reading unreliable.
+        // Instead, each tracker is saved with variantSelector, and
+        // priceExtractor.js will click the variant + read the price
+        // during the first scheduled check.
+        selectedVariants.forEach(function (v) {
           var payload = {};
           for (var k in basePayload) payload[k] = basePayload[k];
           payload.title = baseName + ' — ' + v.label;
@@ -1149,47 +1074,26 @@
           }
 
           if (variantHref && variantHref !== payload.pageUrl) {
+            // Variant has its own URL — use it directly
             payload.pageUrl = variantHref;
             payload.variantSelector = '';
-            chrome.runtime.sendMessage(payload);
-            processNextVariant();
-          } else if (v.attrs && v.attrs['data-price']) {
+          } else {
+            // Click-based variant — priceExtractor will handle the click
+            payload.variantSelector = v.selector;
+          }
+
+          // If variant has data-price, use it directly
+          if (v.attrs && v.attrs['data-price']) {
             var vPrice = parsePrice(v.attrs['data-price']);
             if (vPrice !== null) {
               payload.price = vPrice;
               payload.trackingType = 'price';
             }
-            payload.variantSelector = v.selector;
-            chrome.runtime.sendMessage(payload);
-            processNextVariant();
-          } else {
-            // Click-based: click the variant, wait for DOM settle, read price
-            payload.variantSelector = v.selector;
-            if (variantEl) {
-              variantEl.click();
-              waitForDomSettle(function () {
-                // After SPA navigation, capture the new URL and price
-                payload.pageUrl = window.location.href;
-                var newPrice = readPriceFromPage(priceCssSelector);
-                if (newPrice !== null) {
-                  payload.price = newPrice;
-                }
-                // Re-detect price selector for this variant's tracker
-                var freshPriceSel = detectPriceSelector();
-                if (freshPriceSel) {
-                  payload.selector = freshPriceSel;
-                }
-                chrome.runtime.sendMessage(payload);
-                processNextVariant();
-              });
-            } else {
-              chrome.runtime.sendMessage(payload);
-              processNextVariant();
-            }
           }
-        }
 
-        processNextVariant();
+          chrome.runtime.sendMessage(payload);
+        });
+        cleanup();
       }
     });
 
