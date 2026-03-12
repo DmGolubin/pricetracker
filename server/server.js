@@ -88,7 +88,8 @@ async function initDB() {
     INSERT INTO settings (id) VALUES ('global') ON CONFLICT (id) DO NOTHING;
   `);
 
-    -- Migration: add variantSelector column if missing
+  // Migration: add variantSelector column if missing
+  await pool.query(`
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "variantSelector" TEXT DEFAULT '';
   `);
 
