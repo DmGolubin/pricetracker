@@ -227,9 +227,9 @@ async function handlePriceResult(tracker, newPrice, deps) {
 
   await apiClient.updateTracker(tracker.id, updateData);
 
-  // Check if this is a historical minimum
+  // Check if this is a historical minimum (only when price decreased)
   var isHistMin = false;
-  if (_thresholdEngine && priceChanged && !isFirstVariantCheck) {
+  if (_thresholdEngine && priceChanged && !isFirstVariantCheck && newPrice < Number(tracker.currentPrice)) {
     isHistMin = _thresholdEngine.isHistoricalMinimum(newPrice, tracker.minPrice);
   }
 

@@ -115,12 +115,14 @@ function isSignificant(oldPrice, newPrice, config) {
 
 /**
  * Check if the new price is a historical minimum.
+ * Only true when price is strictly lower than the previous minimum.
  * @param {number} newPrice
  * @param {number} currentMinPrice — tracker.minPrice before update
  * @returns {boolean}
  */
 function isHistoricalMinimum(newPrice, currentMinPrice) {
-  return newPrice <= currentMinPrice;
+  if (newPrice == null || currentMinPrice == null) return false;
+  return newPrice < currentMinPrice;
 }
 
 // Export object
