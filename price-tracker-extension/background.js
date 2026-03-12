@@ -19,6 +19,8 @@ importScripts(
   'shared/constants.js',
   'lib/apiClient.js',
   'lib/badgeManager.js',
+  'lib/thresholdEngine.js',
+  'lib/digestComposer.js',
   'lib/notifier.js',
   'lib/alarmManager.js',
   'lib/priceChecker.js'
