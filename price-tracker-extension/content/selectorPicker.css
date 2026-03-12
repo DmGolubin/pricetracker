@@ -342,3 +342,26 @@
   background-color: #2d3a50;
   border-radius: 3px;
 }
+
+
+/* ===== Variant parameter discovery UI ===== */
+.pt-picker-type-btn {
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-picker-type-btn[title]:hover::after {
+  content: '';
+}
+
+/* Multi-select: selected variants get a checkmark */
+.pt-picker-type-btn.active::before {
+  content: '✓ ';
+  font-size: 11px;
+}
+
+/* Param filter buttons — slightly different style */
+.pt-picker-field .pt-picker-type-toggle {
+  margin-top: 4px;
+}

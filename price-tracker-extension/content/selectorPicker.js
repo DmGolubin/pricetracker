@@ -316,75 +316,112 @@
 
   // ─── Confirmation Form ──────────────────────────────────────────
 
-  // ─── Variant Detection ────────────────────────────────────────
+  // ─── Variant Detection (Universal) ─────────────────────────────
 
   /**
-   * Detect product variant elements on the page.
-   * Looks for common patterns: elements with data-price, data-variant-id,
-   * .variant class, option selectors, etc.
-   * Returns array of { label, price, selector }.
+   * Scan the page for clickable variant-like elements.
+   * Universal approach: find elements with data-* attributes that look like
+   * product parameters (price, size, volume, color, etc.), group them by
+   * attribute name, and return structured data for the UI.
+   *
+   * Returns { params: { [attrName]: [{ label, value, selector, attrs }] }, elements: [...] }
+   *   - params: grouped by data-attribute name, each entry is an array of variant items
+   *   - elements: flat list of all detected variant elements with all their data-* attrs
    */
   function detectVariants() {
-    var results = [];
+    // Collect all elements that have at least one data-* attribute with a value,
+    // are clickable (a, button, label, [role=button], [tabindex], or small divs/spans),
+    // and are visible.
+    var CLICKABLE = /^(A|BUTTON|LABEL|INPUT|LI|SPAN|DIV|TD|DT|DD)$/;
+    var SKIP_ATTRS = /^data-(testid|reactid|react|qa|cy|test|automation|gtm|ga|analytics|track|event|toggle|dismiss|target|bs-|popper|original-title|placement|container|trigger|content|html|delay|animation|selector|offset|fallback|boundary|reference|flip|popperConfig)/i;
+    var PRICE_LIKE = /price|cost|sum|total|цена|стоимость|ціна/i;
+
+    var allEls = document.querySelectorAll('[data-price],[data-variant-id],[data-product-id],[data-sku],[data-value],[data-option],[data-size],[data-color],[data-volume],[data-weight],[data-quantity]');
+
+    // If specific selectors found nothing, do a broader scan
+    var candidates = allEls.length > 0 ? allEls : document.querySelectorAll('*');
+
+    var paramGroups = {}; // attrName -> [{ label, value, selector, el, allAttrs }]
     var seen = {};
 
-    // Strategy 1: elements with data-variant-id and data-price (makeup.ua pattern)
-    var variantEls = document.querySelectorAll('[data-variant-id][data-price]');
-    for (var i = 0; i < variantEls.length; i++) {
-      var el = variantEls[i];
-      var vid = el.getAttribute('data-variant-id');
-      var price = el.getAttribute('data-price');
-      var label = (el.getAttribute('title') || el.textContent || '').trim().slice(0, 30);
-      if (!label) label = 'Вариант ' + (i + 1);
-      if (price) label += ' — ' + price;
+    function isVisible(el) {
+      if (!el.offsetParent && el.style.display !== 'fixed') return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }
 
-      var sel = '[data-variant-id="' + vid + '"]';
-      if (!seen[sel]) {
-        seen[sel] = true;
-        results.push({ label: label, price: price, selector: sel });
+    function getLabel(el) {
+      return (el.getAttribute('title') || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 50);
+    }
+
+    for (var i = 0; i < candidates.length; i++) {
+      var el = candidates[i];
+      if (!CLICKABLE.test(el.tagName)) continue;
+      if (!isVisible(el)) continue;
+
+      // Collect all data-* attributes
+      var dataAttrs = {};
+      var hasRelevant = false;
+      for (var a = 0; a < el.attributes.length; a++) {
+        var attr = el.attributes[a];
+        if (!attr.name.startsWith('data-')) continue;
+        if (SKIP_ATTRS.test(attr.name)) continue;
+        if (!attr.value || attr.value.length > 200) continue;
+        dataAttrs[attr.name] = attr.value;
+        hasRelevant = true;
+      }
+
+      if (!hasRelevant) continue;
+
+      // Generate a unique selector for this element
+      var sel = generateSelector(el);
+      if (!sel || seen[sel]) continue;
+      seen[sel] = true;
+
+      var label = getLabel(el);
+
+      // Group by each data-attribute
+      for (var attrName in dataAttrs) {
+        if (!paramGroups[attrName]) paramGroups[attrName] = [];
+        paramGroups[attrName].push({
+          label: label,
+          value: dataAttrs[attrName],
+          selector: sel,
+          allAttrs: dataAttrs
+        });
       }
     }
 
-    // Strategy 2: elements with class "variant" and data-price (generic)
-    if (results.length === 0) {
-      var genericVariants = document.querySelectorAll('.variant[data-price]');
-      for (var j = 0; j < genericVariants.length; j++) {
-        var gEl = genericVariants[j];
-        var gPrice = gEl.getAttribute('data-price');
-        var gLabel = (gEl.getAttribute('title') || gEl.textContent || '').trim().slice(0, 30);
-        if (!gLabel) gLabel = 'Вариант ' + (j + 1);
-        if (gPrice) gLabel += ' — ' + gPrice;
-
-        var gSel = generateSelector(gEl);
-        if (gSel && !seen[gSel]) {
-          seen[gSel] = true;
-          results.push({ label: gLabel, price: gPrice, selector: gSel });
-        }
+    // Filter out groups with only 1 element (not really a "variant" set)
+    // and groups with too many elements (likely layout/structural attrs)
+    var filtered = {};
+    for (var key in paramGroups) {
+      var group = paramGroups[key];
+      if (group.length >= 2 && group.length <= 50) {
+        filtered[key] = group;
       }
     }
 
-    // Strategy 3: select/option with price-like values (e.g. size selectors)
-    if (results.length === 0) {
-      var selects = document.querySelectorAll('select');
-      for (var s = 0; s < selects.length; s++) {
-        var options = selects[s].querySelectorAll('option');
-        if (options.length > 1 && options.length <= 20) {
-          var hasPrice = false;
-          for (var o = 0; o < options.length; o++) {
-            if (options[o].getAttribute('data-price') || /\d/.test(options[o].value)) {
-              hasPrice = true;
-              break;
-            }
-          }
-          if (hasPrice) {
-            // This is likely a variant selector — but we can't "click" an option,
-            // so skip for now (would need a different approach)
-          }
-        }
-      }
-    }
+    return filtered;
+  }
 
-    return results;
+  /**
+   * Pretty-print a data-attribute name for display.
+   * "data-variant-id" -> "Variant Id", "data-price" -> "Price"
+   */
+  function prettyAttrName(attr) {
+    var name = attr.replace(/^data-/, '');
+    // Known translations
+    var translations = {
+      'price': 'Цена', 'variant-id': 'Вариант', 'product-id': 'Товар',
+      'sku': 'Артикул', 'value': 'Значение', 'option': 'Опция',
+      'size': 'Размер', 'color': 'Цвет', 'volume': 'Объём',
+      'weight': 'Вес', 'quantity': 'Количество', 'id': 'ID',
+      'name': 'Название', 'type': 'Тип', 'category': 'Категория'
+    };
+    if (translations[name]) return translations[name];
+    // Capitalize and replace dashes
+    return name.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
 
   function showConfirmForm(data) {
@@ -531,51 +568,157 @@
     // ─── Product group (text input) ─────────────────────────────
     var groupField = createField('Группа товаров', 'text', '', 'pt-field-group');
 
-    // ─── Variant selector (auto-detect variants on page) ───────
+    // ─── Variant selector (universal auto-detect) ─────────────
     var variantFieldWrapper = document.createElement('div');
     variantFieldWrapper.className = 'pt-picker-field';
     var variantLabel = document.createElement('label');
-    variantLabel.textContent = 'Вариант товара';
+    variantLabel.textContent = 'Варианты товара';
     variantFieldWrapper.appendChild(variantLabel);
 
-    var selectedVariantSelector = '';
+    // State: selected variants (multi-select). Each: { selector, label, attrs }
+    var selectedVariants = []; // empty = "Текущий" (no variant click)
 
-    // Try to find variant elements on the page
-    var variantCandidates = detectVariants();
+    // Detect variant parameters on the page
+    var variantParams = detectVariants();
+    var paramNames = Object.keys(variantParams);
 
-    if (variantCandidates.length > 0) {
-      var variantToggle = document.createElement('div');
-      variantToggle.className = 'pt-picker-type-toggle pt-picker-interval-toggle';
+    if (paramNames.length > 0) {
+      // ── Parameter filter buttons (data-price, data-volume, etc.) ──
+      var paramFilterWrap = document.createElement('div');
+      paramFilterWrap.className = 'pt-picker-field';
+      var paramFilterLabel = document.createElement('label');
+      paramFilterLabel.textContent = 'Найденные параметры';
+      paramFilterLabel.style.marginBottom = '6px';
+      paramFilterWrap.appendChild(paramFilterLabel);
 
-      // "None" button (default — no variant click)
-      var noneBtn = document.createElement('button');
-      noneBtn.className = 'pt-picker-type-btn active';
-      noneBtn.textContent = 'Текущий';
-      noneBtn.addEventListener('click', function () {
-        selectedVariantSelector = '';
-        variantToggle.querySelectorAll('.pt-picker-type-btn').forEach(function (b) {
+      var paramToggle = document.createElement('div');
+      paramToggle.className = 'pt-picker-type-toggle pt-picker-interval-toggle';
+
+      var activeParam = null;
+
+      // Container for variant items (shown when a param is selected)
+      var variantItemsWrap = document.createElement('div');
+      variantItemsWrap.className = 'pt-picker-field';
+      variantItemsWrap.style.display = 'none';
+
+      var variantItemsLabel = document.createElement('label');
+      variantItemsLabel.style.marginBottom = '6px';
+      variantItemsWrap.appendChild(variantItemsLabel);
+
+      var variantItemsToggle = document.createElement('div');
+      variantItemsToggle.className = 'pt-picker-type-toggle pt-picker-interval-toggle';
+      variantItemsWrap.appendChild(variantItemsToggle);
+
+      // "Текущий" always-visible option
+      var currentBtn = document.createElement('button');
+      currentBtn.className = 'pt-picker-type-btn active';
+      currentBtn.textContent = 'Текущий';
+      currentBtn.style.flex = 'none';
+      currentBtn.style.minWidth = 'auto';
+
+      function updateCurrentBtn() {
+        currentBtn.className = 'pt-picker-type-btn' + (selectedVariants.length === 0 ? ' active' : '');
+      }
+
+      currentBtn.addEventListener('click', function () {
+        selectedVariants = [];
+        updateCurrentBtn();
+        // Deselect all variant item buttons
+        variantItemsToggle.querySelectorAll('.pt-picker-type-btn').forEach(function (b) {
           b.className = 'pt-picker-type-btn';
         });
-        noneBtn.className = 'pt-picker-type-btn active';
       });
-      variantToggle.appendChild(noneBtn);
 
-      variantCandidates.forEach(function (v) {
+      function showParamItems(paramName) {
+        activeParam = paramName;
+        variantItemsWrap.style.display = '';
+        variantItemsLabel.textContent = prettyAttrName(paramName) + ' — выберите варианты:';
+        variantItemsToggle.innerHTML = '';
+
+        var items = variantParams[paramName];
+        items.forEach(function (item) {
+          var btn = document.createElement('button');
+          btn.className = 'pt-picker-type-btn';
+
+          // Build display text: show the value + label preview
+          var displayText = item.value;
+          if (item.label && item.label !== item.value) {
+            // Show label if it's different and short
+            var shortLabel = item.label.slice(0, 30);
+            displayText = shortLabel;
+            // If there's a price attr, append it
+            if (item.allAttrs['data-price']) {
+              displayText += ' — ' + item.allAttrs['data-price'];
+            }
+          }
+          btn.textContent = displayText;
+          btn.title = 'Селектор: ' + item.selector + '\nАтрибуты: ' + JSON.stringify(item.allAttrs);
+
+          // Check if already selected
+          var isSelected = selectedVariants.some(function (sv) { return sv.selector === item.selector; });
+          if (isSelected) btn.className = 'pt-picker-type-btn active';
+
+          btn.addEventListener('click', function () {
+            var idx = -1;
+            for (var si = 0; si < selectedVariants.length; si++) {
+              if (selectedVariants[si].selector === item.selector) { idx = si; break; }
+            }
+            if (idx >= 0) {
+              // Deselect
+              selectedVariants.splice(idx, 1);
+              btn.className = 'pt-picker-type-btn';
+            } else {
+              // Select (multi)
+              selectedVariants.push({
+                selector: item.selector,
+                label: item.label || item.value,
+                attrs: item.allAttrs
+              });
+              btn.className = 'pt-picker-type-btn active';
+            }
+            updateCurrentBtn();
+          });
+
+          variantItemsToggle.appendChild(btn);
+        });
+      }
+
+      paramNames.forEach(function (paramName) {
+        var count = variantParams[paramName].length;
         var btn = document.createElement('button');
         btn.className = 'pt-picker-type-btn';
-        btn.textContent = v.label;
-        if (v.price) btn.title = v.price;
+        btn.textContent = prettyAttrName(paramName) + ' (' + count + ')';
+        btn.title = paramName;
         btn.addEventListener('click', function () {
-          selectedVariantSelector = v.selector;
-          variantToggle.querySelectorAll('.pt-picker-type-btn').forEach(function (b) {
+          paramToggle.querySelectorAll('.pt-picker-type-btn').forEach(function (b) {
             b.className = 'pt-picker-type-btn';
           });
           btn.className = 'pt-picker-type-btn active';
+          showParamItems(paramName);
         });
-        variantToggle.appendChild(btn);
+        paramToggle.appendChild(btn);
       });
 
-      variantFieldWrapper.appendChild(variantToggle);
+      paramFilterWrap.appendChild(paramToggle);
+      variantFieldWrapper.appendChild(paramFilterWrap);
+
+      // "Текущий" button row
+      var currentRow = document.createElement('div');
+      currentRow.style.marginTop = '8px';
+      currentRow.style.marginBottom = '8px';
+      currentRow.appendChild(currentBtn);
+      variantFieldWrapper.appendChild(currentRow);
+
+      variantFieldWrapper.appendChild(variantItemsWrap);
+
+      // Auto-open first param
+      if (paramNames.length > 0) {
+        var firstBtn = paramToggle.querySelector('.pt-picker-type-btn');
+        if (firstBtn) {
+          firstBtn.className = 'pt-picker-type-btn active';
+          showParamItems(paramNames[0]);
+        }
+      }
     } else {
       // Fallback: manual text input
       var variantInput = document.createElement('input');
@@ -615,23 +758,36 @@
       var groupInput = document.getElementById('pt-field-group');
       var variantManualInput = document.getElementById('pt-field-variant');
 
-      var payload = {
+      var baseName = nameInput.value;
+      var basePayload = {
         action: 'elementSelected',
         selector: data.selector,
         price: parsePrice(priceInput.value),
-        title: nameInput.value,
+        title: baseName,
         imageUrl: imgInput.value,
         pageUrl: data.pageUrl,
         trackingType: currentType,
         checkIntervalHours: currentInterval,
         checkMode: currentMode,
         productGroup: groupInput ? groupInput.value : '',
-        variantSelector: variantManualInput ? variantManualInput.value : selectedVariantSelector,
+        variantSelector: variantManualInput ? variantManualInput.value : '',
         contentValue: currentType === 'content' ? data.contentValue : undefined,
         excludedSelectors: data.excludedSelectors
       };
 
-      chrome.runtime.sendMessage(payload);
+      if (selectedVariants.length === 0) {
+        // No variants selected — single tracker ("Текущий")
+        chrome.runtime.sendMessage(basePayload);
+      } else {
+        // Multi-variant: create one tracker per selected variant
+        selectedVariants.forEach(function (v) {
+          var payload = {};
+          for (var k in basePayload) payload[k] = basePayload[k];
+          payload.variantSelector = v.selector;
+          payload.title = baseName + ' — ' + v.label;
+          chrome.runtime.sendMessage(payload);
+        });
+      }
       cleanup();
     });
 
