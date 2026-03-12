@@ -379,6 +379,78 @@ app.get('/server-check/status', (req, res) => {
   res.json(scheduler.getStatus());
 });
 
+// Diagnostic endpoint: inspect what Puppeteer sees on a page
+app.post('/server-check/diagnose', async (req, res) => {
+  const scraper = require('./scraper');
+  const { url, variantSelector } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+
+  let page;
+  try {
+    const browser = await scraper.getBrowser();
+    page = await browser.newPage();
+    await page.setRequestInterception(true);
+    page.on('request', (r) => {
+      const t = r.resourceType();
+      if (['image', 'font', 'media', 'stylesheet'].includes(t)) r.abort(); else r.continue();
+    });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    await page.setViewport({ width: 1366, height: 768 });
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+
+    // Collect all price-related elements BEFORE variant click
+    const beforeClick = await page.evaluate(() => {
+      const sels = [
+        '.product-item__price-current', '.product-item__price', '.price-block__price',
+        '[data-testid="product-price"]', '[itemprop="price"]', '#pd-price',
+        '.product-price__big', '.product__price', '.price-current', '.product-price',
+      ];
+      const results = {};
+      for (const s of sels) {
+        try {
+          const el = document.querySelector(s);
+          results[s] = el ? { text: (el.textContent || '').trim().substring(0, 100), tag: el.tagName, cls: el.className } : null;
+        } catch(e) { results[s] = { error: e.message }; }
+      }
+      return results;
+    });
+
+    let afterClick = null;
+    let variantFound = false;
+    if (variantSelector) {
+      try {
+        await page.waitForSelector(variantSelector, { timeout: 5000 });
+        variantFound = true;
+        await page.click(variantSelector);
+        await page.waitForNetworkIdle({ timeout: 3000 }).catch(() => {});
+        await new Promise(r => setTimeout(r, 3000));
+
+        afterClick = await page.evaluate(() => {
+          const sels = [
+            '.product-item__price-current', '.product-item__price', '.price-block__price',
+            '[data-testid="product-price"]', '[itemprop="price"]', '#pd-price',
+            '.product-price__big', '.product__price', '.price-current', '.product-price',
+          ];
+          const results = {};
+          for (const s of sels) {
+            try {
+              const el = document.querySelector(s);
+              results[s] = el ? { text: (el.textContent || '').trim().substring(0, 100), tag: el.tagName, cls: el.className } : null;
+            } catch(e) { results[s] = { error: e.message }; }
+          }
+          return results;
+        });
+      } catch(e) { afterClick = { error: e.message }; }
+    }
+
+    res.json({ beforeClick, afterClick, variantFound, variantSelector });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (page) try { await page.close(); } catch(_) {}
+  }
+});
+
 // ─── Server Start ───────────────────────────────────────────────────
 
 initDB()
