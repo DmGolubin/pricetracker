@@ -435,17 +435,31 @@
       if (!parentKey || processedParents[parentKey]) continue;
       processedParents[parentKey] = true;
 
-      // Try to find a label for this group: look at preceding sibling or parent text
+      // Determine if this group looks like product variants.
+      // Two conditions must be met:
+      //   A) A variant-related label is found nearby (preceding sibling or parent), OR
+      //   B) The texts themselves look like variant values (numbers+units, sizes, colors)
+      // Without either condition, skip the group entirely.
+
       var groupName = '';
+
+      // Check if texts look like variant values
+      var variantLikeCount = 0;
+      for (var ti = 0; ti < texts.length; ti++) {
+        if (looksLikeVariantValue(texts[ti])) variantLikeCount++;
+      }
+      var textsLookLikeVariants = variantLikeCount >= texts.length * 0.5;
+
+      // Try to find a label from preceding sibling
       var prev = container.previousElementSibling;
       if (prev) {
         var prevText = (prev.textContent || '').trim().replace(/\s+/g, ' ');
-        if (prevText.length > 0 && prevText.length <= 40) {
+        if (prevText.length > 0 && prevText.length <= 40 && VARIANT_LABEL_RE.test(prevText)) {
           groupName = prevText.replace(/:$/, '');
         }
       }
+      // Try parent label
       if (!groupName) {
-        // Check parent for a label-like child before this container
         var parent = container.parentElement;
         if (parent) {
           var labelEl = parent.querySelector('label, span, p, div');
@@ -457,14 +471,9 @@
           }
         }
       }
+      // If no variant label found, only accept if texts look like variants
       if (!groupName) {
-        // Check if texts look like variants (numbers+units, sizes, colors)
-        var variantLikeCount = 0;
-        for (var ti = 0; ti < texts.length; ti++) {
-          if (looksLikeVariantValue(texts[ti])) variantLikeCount++;
-        }
-        // Require at least 50% of items to look like variant values
-        if (variantLikeCount >= texts.length * 0.5) {
+        if (textsLookLikeVariants) {
           var hasUnit = texts.some(function (t) { return /мл|ml|г|g|кг|kg|л|l|шт|oz|мм|mm|см|cm/i.test(t); });
           if (hasUnit) {
             groupName = 'Объём / Размер';
@@ -472,8 +481,14 @@
             groupName = 'Варианты';
           }
         } else {
-          continue; // Skip groups that don't look like product variants
+          continue; // Skip: no variant label and texts don't look like variants
         }
+      }
+      // Even with a label, verify texts are plausible variant values
+      // (prevents "Отзывы" sections with variant-like labels from leaking through)
+      if (groupName && !textsLookLikeVariants) {
+        // Label matched but texts don't look like variants — skip
+        continue;
       }
 
       // Add each child as a variant item
@@ -529,23 +544,19 @@
    * Used when saving variant trackers so that cssSelector points to the
    * actual price element rather than the variant button the user clicked.
    *
-   * Strategy: look for common price selectors, meta tags, and elements
-   * with price-like text near the product area.
+   * Universal approach: try well-known selectors first, then walk all
+   * visible elements looking for currency symbol + number with large font.
    */
   function detectPriceSelector() {
-    // 1. Common price selectors used by e-commerce sites
+    var CURRENCY_DETECT_RE = /₴|грн|UAH|USD|\$|€|₽|руб|£|¥|₩|zł|kr/i;
+
+    // 1. Well-known price selectors
     var PRICE_SELECTORS = [
-      '[data-testid="product-price"]',
-      '[data-testid="price"]',
-      '[itemprop="price"]',
-      '.product-price__big',
-      '.product__price',
-      '.price-current',
-      '.product-price',
-      '.price__value',
-      '.price-value',
-      '.current-price',
-      '.product__price-current',
+      '[data-testid="product-price"]', '[data-testid="price"]',
+      '[itemprop="price"]', '[data-price]',
+      '.product-price__big', '.product__price', '.price-current',
+      '.product-price', '.price__value', '.price-value',
+      '.current-price', '.product__price-current'
     ];
 
     for (var i = 0; i < PRICE_SELECTORS.length; i++) {
@@ -557,59 +568,73 @@
             var sel = generateSelector(el);
             if (sel) return sel;
           }
+          var content = el.getAttribute('content');
+          if (content && parsePrice(content) !== null) {
+            var sel2 = generateSelector(el);
+            if (sel2) return sel2;
+          }
         }
       } catch (_) {}
     }
 
-    // 2. Look for elements with itemprop="price" or content attr with price
-    var metaPrice = document.querySelector('meta[itemprop="price"]');
-    if (metaPrice && metaPrice.content && parsePrice(metaPrice.content) !== null) {
-      // Can't use meta for extraction, but look for visible price near it
-    }
+    // 2. Universal scan: walk all visible elements
+    var best = null;
+    var bestScore = -1;
 
-    // 3. Scan visible elements with price-like text (currency symbols + numbers)
-    var PRICE_TEXT_RE = /(?:₴|грн|UAH|USD|\$|€|₽|руб)\s*[\d\s.,]+|[\d\s.,]+\s*(?:₴|грн|UAH|USD|\$|€|₽|руб)/i;
-    var candidates = document.querySelectorAll(
-      'span, div, p, strong, b, em, ins, .price, [class*="price"], [class*="Price"]'
+    var walker = document.createTreeWalker(
+      document.body, NodeFilter.SHOW_ELEMENT, null, false
     );
 
-    var best = null;
-    var bestScore = 0;
+    var node;
+    while ((node = walker.nextNode())) {
+      var tag = node.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'SVG') continue;
+      if (isPickerElement(node)) continue;
 
-    for (var ci = 0; ci < candidates.length; ci++) {
-      var cand = candidates[ci];
-      // Skip hidden elements
-      if (!cand.offsetParent && cand.style.position !== 'fixed') continue;
-      var rect = cand.getBoundingClientRect();
+      // Get own direct text
+      var ownText = '';
+      for (var ci = 0; ci < node.childNodes.length; ci++) {
+        if (node.childNodes[ci].nodeType === 3) {
+          ownText += node.childNodes[ci].textContent;
+        }
+      }
+      var fullText = (node.textContent || '').trim();
+      var textToCheck = ownText.trim();
+      if (!textToCheck && fullText.length <= 30) textToCheck = fullText;
+      if (!textToCheck) continue;
+
+      if (!CURRENCY_DETECT_RE.test(textToCheck) && !CURRENCY_DETECT_RE.test(fullText)) continue;
+
+      var priceText = CURRENCY_DETECT_RE.test(textToCheck) ? textToCheck : fullText;
+      if (priceText.length > 60) continue;
+      if (parsePrice(priceText) === null) continue;
+
+      var rect;
+      try { rect = node.getBoundingClientRect(); } catch (_) { continue; }
       if (rect.width === 0 || rect.height === 0) continue;
 
-      // Skip our picker UI
-      if (isPickerElement(cand)) continue;
-
-      var cText = (cand.textContent || '').trim();
-      // Must contain a price-like pattern
-      if (!PRICE_TEXT_RE.test(cText)) continue;
-      // Must be parseable
-      if (parsePrice(cText) === null) continue;
-      // Prefer shorter text (more specific element)
-      if (cText.length > 50) continue;
-
       var score = 0;
-      // Prefer elements with price-related class names
-      var cls = (cand.className || '').toLowerCase();
-      if (/price|цена|ціна/.test(cls)) score += 10;
-      // Prefer elements higher on the page (product area)
-      if (rect.top < window.innerHeight) score += 5;
-      // Prefer shorter text (more precise)
-      score += Math.max(0, 30 - cText.length);
-      // Prefer larger font size (main price, not small print)
-      var fontSize = parseFloat(window.getComputedStyle(cand).fontSize);
-      if (fontSize >= 18) score += 5;
-      if (fontSize >= 24) score += 5;
+      var cls = (node.className && typeof node.className === 'string') ? node.className.toLowerCase() : '';
+      if (/price|цена|ціна/.test(cls)) score += 15;
+      if (node.getAttribute('data-testid') && /price/i.test(node.getAttribute('data-testid'))) score += 20;
+      if (node.getAttribute('itemprop') === 'price') score += 20;
+      if (rect.top < 600) score += 8;
+      else if (rect.top < 1000) score += 4;
+      try {
+        var fontSize = parseFloat(window.getComputedStyle(node).fontSize);
+        if (fontSize >= 24) score += 12;
+        else if (fontSize >= 18) score += 8;
+        else if (fontSize >= 14) score += 3;
+      } catch (_) {}
+      score += Math.max(0, 20 - priceText.length);
+      try {
+        var textDeco = window.getComputedStyle(node).textDecorationLine || window.getComputedStyle(node).textDecoration;
+        if (/line-through/.test(textDeco)) score -= 20;
+      } catch (_) {}
 
       if (score > bestScore) {
         bestScore = score;
-        best = cand;
+        best = node;
       }
     }
 
@@ -993,8 +1018,31 @@
         selectedVariants.forEach(function (v) {
           var payload = {};
           for (var k in basePayload) payload[k] = basePayload[k];
-          payload.variantSelector = v.selector;
           payload.title = baseName + ' — ' + v.label;
+
+          // Check if the variant element is a link — if so, use its URL
+          // directly instead of clicking. This handles SPAs like eva.ua
+          // where variant clicks cause hash navigation.
+          var variantEl = null;
+          try { variantEl = document.querySelector(v.selector); } catch (_) {}
+          var variantHref = '';
+          if (variantEl) {
+            // Check the element itself or its closest <a> ancestor/child
+            var linkEl = variantEl.closest('a') || variantEl.querySelector('a') || (variantEl.tagName === 'A' ? variantEl : null);
+            if (linkEl && linkEl.href) {
+              variantHref = linkEl.href;
+            }
+          }
+
+          if (variantHref && variantHref !== payload.pageUrl) {
+            // Variant has its own URL — use it directly, no click needed
+            payload.pageUrl = variantHref;
+            payload.variantSelector = '';
+          } else {
+            // No link — use click-based variant extraction
+            payload.variantSelector = v.selector;
+          }
+
           // If variant has data-price, use it and force price tracking
           if (v.attrs && v.attrs['data-price']) {
             var vPrice = parsePrice(v.attrs['data-price']);

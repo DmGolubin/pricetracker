@@ -175,19 +175,25 @@
 
   // ─── Auto-detect price fallback ──────────────────────────────────
 
-  var PRICE_TEXT_RE = /(?:₴|грн|UAH|USD|\$|€|₽|руб)\s*[\d\s.,]+|[\d\s.,]+\s*(?:₴|грн|UAH|USD|\$|€|₽|руб)/i;
+  var CURRENCY_SYMBOLS_RE = /₴|грн|UAH|USD|\$|€|₽|руб|£|¥|₩|zł|kr/i;
 
   /**
    * Try to find a price on the page when the primary selector doesn't
    * contain a parseable price (e.g. it points to a variant button).
-   * Scans common price selectors and visible elements with price-like text.
+   *
+   * Universal approach:
+   * 1. Try well-known price selectors (data-testid, itemprop, class names)
+   * 2. Walk ALL visible elements, find those whose own text (not children's)
+   *    contains a currency symbol + number. Score by font size, position,
+   *    class name hints. Pick the highest-scoring candidate.
    */
   function tryAutoDetectPrice(excludeElement) {
-    // 1. Common price selectors
+    // 1. Well-known price selectors
     var PRICE_SELECTORS = [
       '[data-testid="product-price"]', '[data-testid="price"]',
-      '[itemprop="price"]', '.product-price__big', '.product__price',
-      '.price-current', '.product-price', '.price__value', '.price-value',
+      '[itemprop="price"]', '[data-price]',
+      '.product-price__big', '.product__price', '.price-current',
+      '.product-price', '.price__value', '.price-value',
       '.current-price', '.product__price-current'
     ];
 
@@ -195,42 +201,83 @@
       try {
         var el = document.querySelector(PRICE_SELECTORS[i]);
         if (el && el !== excludeElement) {
-          var p = parsePrice((el.textContent || '').trim());
-          if (p !== null) return p;
+          var txt = (el.textContent || '').trim();
+          var p = parsePrice(txt);
+          if (p !== null && p > 0) return p;
+          // Try content attribute (meta itemprop="price" content="2930")
+          var content = el.getAttribute('content');
+          if (content) { p = parsePrice(content); if (p !== null && p > 0) return p; }
         }
       } catch (_) {}
     }
 
-    // 2. Scan visible elements with price-like text
-    var candidates = document.querySelectorAll(
-      'span, div, p, strong, b, em, ins, .price, [class*="price"], [class*="Price"]'
+    // 2. Universal scan: walk all visible elements
+    //    Use TreeWalker for efficiency — only check element nodes
+    var best = null;
+    var bestScore = -1;
+
+    var walker = document.createTreeWalker(
+      document.body, NodeFilter.SHOW_ELEMENT, null, false
     );
 
-    var best = null;
-    var bestScore = 0;
+    var node;
+    while ((node = walker.nextNode())) {
+      if (node === excludeElement) continue;
+      // Skip script/style/noscript
+      var tag = node.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'SVG') continue;
 
-    for (var ci = 0; ci < candidates.length; ci++) {
-      var cand = candidates[ci];
-      if (cand === excludeElement) continue;
-      if (!cand.offsetParent && cand.style.position !== 'fixed') continue;
-      var rect = cand.getBoundingClientRect();
+      // Get the element's own direct text (not from children)
+      var ownText = '';
+      for (var ci = 0; ci < node.childNodes.length; ci++) {
+        if (node.childNodes[ci].nodeType === 3) {
+          ownText += node.childNodes[ci].textContent;
+        }
+      }
+      // Also check full textContent for leaf-like elements (few children)
+      var fullText = (node.textContent || '').trim();
+      var textToCheck = ownText.trim();
+      // If own text is empty but element has short full text, use that
+      if (!textToCheck && fullText.length <= 30) textToCheck = fullText;
+      if (!textToCheck) continue;
+
+      // Must contain a currency symbol
+      if (!CURRENCY_SYMBOLS_RE.test(textToCheck) && !CURRENCY_SYMBOLS_RE.test(fullText)) continue;
+
+      // Try to parse price from the text
+      var priceText = CURRENCY_SYMBOLS_RE.test(textToCheck) ? textToCheck : fullText;
+      if (priceText.length > 60) continue;
+      var cp = parsePrice(priceText);
+      if (cp === null || cp <= 0) continue;
+
+      // Visibility check
+      var rect;
+      try { rect = node.getBoundingClientRect(); } catch (_) { continue; }
       if (rect.width === 0 || rect.height === 0) continue;
 
-      var cText = (cand.textContent || '').trim();
-      if (!PRICE_TEXT_RE.test(cText)) continue;
-      var cp = parsePrice(cText);
-      if (cp === null) continue;
-      if (cText.length > 50) continue;
-
+      // Score this candidate
       var score = 0;
-      var cls = (cand.className || '').toLowerCase();
-      if (/price|цена|ціна/.test(cls)) score += 10;
-      if (rect.top < 800) score += 5;
-      score += Math.max(0, 30 - cText.length);
+      var cls = (node.className && typeof node.className === 'string') ? node.className.toLowerCase() : '';
+      // Class/attr hints
+      if (/price|цена|ціна/.test(cls)) score += 15;
+      if (node.getAttribute('data-testid') && /price/i.test(node.getAttribute('data-testid'))) score += 20;
+      if (node.getAttribute('itemprop') === 'price') score += 20;
+      // Position: prefer elements in the top part of the page (product area)
+      if (rect.top < 600) score += 8;
+      else if (rect.top < 1000) score += 4;
+      // Font size: prefer larger (main price vs small print)
       try {
-        var fontSize = parseFloat(window.getComputedStyle(cand).fontSize);
-        if (fontSize >= 18) score += 5;
-        if (fontSize >= 24) score += 5;
+        var fontSize = parseFloat(window.getComputedStyle(node).fontSize);
+        if (fontSize >= 24) score += 12;
+        else if (fontSize >= 18) score += 8;
+        else if (fontSize >= 14) score += 3;
+      } catch (_) {}
+      // Prefer shorter text (more specific)
+      score += Math.max(0, 20 - priceText.length);
+      // Prefer elements that are NOT struck through (not old price)
+      try {
+        var textDeco = window.getComputedStyle(node).textDecorationLine || window.getComputedStyle(node).textDecoration;
+        if (/line-through/.test(textDeco)) score -= 20;
       } catch (_) {}
 
       if (score > bestScore) {
