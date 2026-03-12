@@ -836,15 +836,17 @@
           btn.className = 'pt-picker-type-btn';
 
           // Build readable display text
-          var displayText = '';
-          // Prefer: short label text, then attribute value
+          // variantLabel = short name for tracker title (e.g. "30ml")
+          // displayText = full text for button (e.g. "30ml — 2101")
+          var variantLabel = '';
           if (item.label && item.label.length <= 40) {
-            displayText = item.label;
+            variantLabel = item.label;
           } else if (item.label) {
-            displayText = item.label.slice(0, 35) + '…';
+            variantLabel = item.label.slice(0, 35) + '…';
           } else {
-            displayText = item.value;
+            variantLabel = item.value;
           }
+          var displayText = variantLabel;
           // Append price if this isn't the price param itself
           if (paramName !== 'data-price' && item.allAttrs['data-price']) {
             displayText += ' — ' + item.allAttrs['data-price'];
@@ -869,7 +871,7 @@
               // Select (multi)
               selectedVariants.push({
                 selector: item.selector,
-                label: displayText,
+                label: variantLabel,
                 attrs: item.allAttrs
               });
               btn.className = 'pt-picker-type-btn active';
