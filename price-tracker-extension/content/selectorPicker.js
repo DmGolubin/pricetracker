@@ -329,21 +329,7 @@
    *   - elements: flat list of all detected variant elements with all their data-* attrs
    */
   function detectVariants() {
-    // Only look for product-relevant data-* attributes (whitelist approach)
-    var RELEVANT_ATTRS = [
-      'data-price', 'data-variant-id', 'data-product-id', 'data-sku',
-      'data-size', 'data-color', 'data-volume', 'data-weight',
-      'data-option', 'data-quantity', 'data-variant', 'data-value'
-    ];
-
-    // Build a selector that matches elements with ANY of these attributes
-    var selectorStr = RELEVANT_ATTRS.map(function (a) { return '[' + a + ']'; }).join(',');
-    var candidates;
-    try { candidates = document.querySelectorAll(selectorStr); } catch (_) { return {}; }
-
-    if (candidates.length === 0) return {};
-
-    var paramGroups = {}; // attrName -> [{ label, value, selector, allAttrs }]
+    var paramGroups = {}; // groupName -> [{ label, value, selector, allAttrs }]
     var seen = {};
 
     function isVisible(el) {
@@ -356,11 +342,21 @@
       return (el.getAttribute('title') || el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60);
     }
 
-    for (var i = 0; i < candidates.length; i++) {
-      var el = candidates[i];
+    // ── Strategy 1: elements with product-relevant data-* attributes ──
+    var RELEVANT_ATTRS = [
+      'data-price', 'data-variant-id', 'data-product-id', 'data-sku',
+      'data-size', 'data-color', 'data-volume', 'data-weight',
+      'data-option', 'data-quantity', 'data-variant', 'data-value'
+    ];
+
+    var selectorStr = RELEVANT_ATTRS.map(function (a) { return '[' + a + ']'; }).join(',');
+    var dataEls;
+    try { dataEls = document.querySelectorAll(selectorStr); } catch (_) { dataEls = []; }
+
+    for (var i = 0; i < dataEls.length; i++) {
+      var el = dataEls[i];
       if (!isVisible(el)) continue;
 
-      // Collect only whitelisted data-* attributes
       var dataAttrs = {};
       var hasRelevant = false;
       for (var a = 0; a < RELEVANT_ATTRS.length; a++) {
@@ -371,7 +367,6 @@
           hasRelevant = true;
         }
       }
-
       if (!hasRelevant) continue;
 
       var sel = generateSelector(el);
@@ -379,19 +374,101 @@
       seen[sel] = true;
 
       var label = getLabel(el);
-
       for (var attrKey in dataAttrs) {
         if (!paramGroups[attrKey]) paramGroups[attrKey] = [];
         paramGroups[attrKey].push({
-          label: label,
-          value: dataAttrs[attrKey],
-          selector: sel,
-          allAttrs: dataAttrs
+          label: label, value: dataAttrs[attrKey],
+          selector: sel, allAttrs: dataAttrs
         });
       }
     }
 
-    // Keep only groups with 2–30 items (real variant sets)
+    // ── Strategy 2: sibling groups with short text (universal) ──
+    // Find groups of 2+ clickable siblings with short text content.
+    // This catches variant buttons on sites like eva.ua, rozetka, etc.
+    // that don't use data-* attributes.
+    var CLICKABLE_SEL = 'a, button, [role="button"], [role="tab"], [role="option"], label, [tabindex]';
+    var VARIANT_LABEL_RE = /об[ъ'є]м|размер|розмір|цвет|колір|color|size|volume|weight|вес|вага|тип|type|варіант|вариант|variant|option|опция|опція/i;
+
+    // Scan containers that might hold variant groups
+    var allContainers = document.querySelectorAll('div, ul, nav, fieldset, section');
+    var processedParents = {};
+
+    for (var ci = 0; ci < allContainers.length; ci++) {
+      var container = allContainers[ci];
+      if (!isVisible(container)) continue;
+
+      // Get direct clickable children
+      var children = container.querySelectorAll(':scope > ' + CLICKABLE_SEL);
+      if (children.length < 2 || children.length > 20) continue;
+
+      // All children must have short text (variant-like)
+      var allShort = true;
+      var texts = [];
+      for (var ch = 0; ch < children.length; ch++) {
+        var txt = (children[ch].textContent || '').trim().replace(/\s+/g, ' ');
+        if (txt.length === 0 || txt.length > 30) { allShort = false; break; }
+        texts.push(txt);
+      }
+      if (!allShort) continue;
+
+      // Avoid duplicates: skip if parent already processed
+      var parentKey = generateSelector(container);
+      if (!parentKey || processedParents[parentKey]) continue;
+      processedParents[parentKey] = true;
+
+      // Try to find a label for this group: look at preceding sibling or parent text
+      var groupName = '';
+      var prev = container.previousElementSibling;
+      if (prev) {
+        var prevText = (prev.textContent || '').trim().replace(/\s+/g, ' ');
+        if (prevText.length > 0 && prevText.length <= 40) {
+          groupName = prevText.replace(/:$/, '');
+        }
+      }
+      if (!groupName) {
+        // Check parent for a label-like child before this container
+        var parent = container.parentElement;
+        if (parent) {
+          var labelEl = parent.querySelector('label, span, p, div');
+          if (labelEl && labelEl !== container && !container.contains(labelEl)) {
+            var lt = (labelEl.textContent || '').trim().replace(/\s+/g, ' ');
+            if (lt.length > 0 && lt.length <= 40 && VARIANT_LABEL_RE.test(lt)) {
+              groupName = lt.replace(/:$/, '');
+            }
+          }
+        }
+      }
+      if (!groupName) {
+        // Check if texts look like variants (numbers, sizes, colors)
+        var hasNumber = texts.some(function (t) { return /\d/.test(t); });
+        var hasUnit = texts.some(function (t) { return /мл|ml|г|g|кг|kg|л|l|шт|oz|мм|mm|см|cm/i.test(t); });
+        if (hasNumber && hasUnit) {
+          groupName = 'Объём / Размер';
+        } else if (hasNumber) {
+          groupName = 'Варианты';
+        } else {
+          continue; // Skip groups that don't look like product variants
+        }
+      }
+
+      // Add each child as a variant item
+      for (var vi = 0; vi < children.length; vi++) {
+        var vEl = children[vi];
+        var vSel = generateSelector(vEl);
+        if (!vSel || seen[vSel]) continue;
+        seen[vSel] = true;
+
+        var vLabel = (vEl.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        if (!paramGroups[groupName]) paramGroups[groupName] = [];
+        paramGroups[groupName].push({
+          label: vLabel, value: vLabel,
+          selector: vSel, allAttrs: {}
+        });
+      }
+    }
+
+    // Keep only groups with 2–30 items
     var filtered = {};
     for (var key in paramGroups) {
       var group = paramGroups[key];
@@ -408,8 +485,10 @@
    * "data-variant-id" -> "Variant Id", "data-price" -> "Price"
    */
   function prettyAttrName(attr) {
+    // If it doesn't start with "data-", it's already a human-readable name (from Strategy 2)
+    if (!attr.startsWith('data-')) return attr;
+
     var name = attr.replace(/^data-/, '');
-    // Known translations
     var translations = {
       'price': 'Цена', 'variant-id': 'Вариант', 'product-id': 'Товар',
       'sku': 'Артикул', 'value': 'Значение', 'option': 'Опция',
@@ -418,7 +497,6 @@
       'name': 'Название', 'type': 'Тип', 'category': 'Категория'
     };
     if (translations[name]) return translations[name];
-    // Capitalize and replace dashes
     return name.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
 
