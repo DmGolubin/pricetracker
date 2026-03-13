@@ -3,13 +3,15 @@
  * Extracts numeric price values from text strings.
  */
 
-const CURRENCY_PATTERN = /R\$|kr|zł|kn|[€$₽₴£¥₩₹₺₫฿]/gi;
+const CURRENCY_PATTERN = /R\$|kr|zł|kn|грн|руб|[€$₽₴£¥₩₹₺₫฿]/gi;
 
 function parsePrice(text) {
   if (text == null || typeof text !== 'string') return null;
 
   let cleaned = text.replace(CURRENCY_PATTERN, '').trim();
   cleaned = cleaned.replace(/[\u00A0\u202F]/g, ' ');
+  // Remove any remaining non-numeric characters (letters, symbols) except digits, dots, commas, spaces, minus
+  cleaned = cleaned.replace(/[^\d.,\s-]/g, '').trim();
   if (cleaned.length === 0) return null;
 
   cleaned = cleaned.replace(/(\d) (\d)/g, '$1$2');
