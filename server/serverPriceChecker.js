@@ -13,6 +13,7 @@ const scraper = require('./scraper');
 const thresholdEngine = require('./serverThresholdEngine');
 const digestComposer = require('./serverDigestComposer');
 const telegram = require('./telegramSender');
+const autoGrouper = require('./autoGrouper');
 
 const CONCURRENCY = 1;
 
@@ -188,6 +189,17 @@ async function runCheckCycle(pool) {
   }
 
   var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+  // 7. Run auto-grouping to detect cross-store products
+  try {
+    var groupResult = await autoGrouper.autoGroupAll(pool);
+    if (groupResult.grouped > 0 || groupResult.newGroups > 0) {
+      console.log('[ServerCheck] 🔗 Auto-grouped: ' + groupResult.grouped + ' trackers, ' + (groupResult.newGroups || 0) + ' new groups');
+    }
+  } catch (err) {
+    console.warn('[ServerCheck] ⚠ Auto-grouping failed: ' + err.message);
+  }
+
   console.log('[ServerCheck] ═══════════════════════════════════════════════');
   console.log('[ServerCheck] ✅ Cycle complete in ' + elapsed + 's');
   console.log('[ServerCheck]    Checked: ' + checked + ' | Changed: ' + changed + ' | Errors: ' + errors);
@@ -287,9 +299,30 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
   );
 
   // Check historical minimum (only when price decreased)
+  // If tracker belongs to a productGroup, check cross-store minimum
   var isHistMin = false;
+  var isCrossStoreMin = false;
   if (priceChanged && !isFirstVariantCheck && newPrice < oldPrice) {
+    // Per-tracker historical minimum (as before)
     isHistMin = thresholdEngine.isHistoricalMinimum(newPrice, Number(tracker.minPrice));
+
+    // Cross-store group minimum: find the lowest minPrice across all trackers in the same group
+    if (tracker.productGroup) {
+      try {
+        var groupMinResult = await pool.query(
+          'SELECT MIN("minPrice") AS "groupMin" FROM trackers WHERE "productGroup" = $1 AND id != $2 AND "minPrice" > 0',
+          [tracker.productGroup, tracker.id]
+        );
+        var groupMin = groupMinResult.rows[0] && groupMinResult.rows[0].groupMin != null
+          ? Number(groupMinResult.rows[0].groupMin) : null;
+        if (groupMin != null && newPrice < groupMin) {
+          isCrossStoreMin = true;
+          isHistMin = true; // Promote to historical minimum if it beats the entire group
+        }
+      } catch (err) {
+        console.warn('[ServerCheck] #' + tracker.id + ' ⚠ Failed to check group minimum: ' + err.message);
+      }
+    }
   }
 
   // Feed digest collector
@@ -302,12 +335,12 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
 
     var logMsg = '[ServerCheck] #' + tracker.id + ' ' + direction + ' ' + oldPrice + ' → ' + newPrice
       + ' (' + (diff > 0 ? '+' : '') + pctChange + '%)'
-      + (isHistMin ? ' 🏆 HIST MIN' : '')
+      + (isCrossStoreMin ? ' 🏆🏆 CROSS-STORE MIN' : isHistMin ? ' 🏆 HIST MIN' : '')
       + (significant ? '' : ' (below threshold)');
     console.log(logMsg);
 
     if (significant || isHistMin) {
-      collector.addChange(tracker, oldPrice, newPrice, isHistMin);
+      collector.addChange(tracker, oldPrice, newPrice, isHistMin, isCrossStoreMin);
     } else {
       collector.addUnchanged();
     }

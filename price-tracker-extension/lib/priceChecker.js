@@ -229,8 +229,28 @@ async function handlePriceResult(tracker, newPrice, deps) {
 
   // Check if this is a historical minimum (only when price decreased)
   var isHistMin = false;
+  var isCrossStoreMin = false;
   if (_thresholdEngine && priceChanged && !isFirstVariantCheck && newPrice < Number(tracker.currentPrice)) {
     isHistMin = _thresholdEngine.isHistoricalMinimum(newPrice, tracker.minPrice);
+
+    // Cross-store group minimum: check if this price beats all stores in the group
+    if (tracker.productGroup && apiClient) {
+      try {
+        var groupTrackers = await apiClient.getTrackers();
+        var groupMembers = groupTrackers.filter(function(t) {
+          return t.productGroup === tracker.productGroup && t.id !== tracker.id && Number(t.minPrice) > 0;
+        });
+        if (groupMembers.length > 0) {
+          var groupMin = Math.min.apply(null, groupMembers.map(function(t) { return Number(t.minPrice); }));
+          if (newPrice < groupMin) {
+            isCrossStoreMin = true;
+            isHistMin = true;
+          }
+        }
+      } catch (_g) {
+        // Group check failure should not break the flow
+      }
+    }
   }
 
   // Notify on change (but not on first variant price correction)
@@ -242,7 +262,7 @@ async function handlePriceResult(tracker, newPrice, deps) {
     try {
       var settings = {};
       try { settings = await deps.apiClient.getSettings(); } catch (_s) {}
-      var notifyOptions = isHistMin ? { isHistoricalMinimum: true } : undefined;
+      var notifyOptions = isHistMin ? { isHistoricalMinimum: true, isCrossStoreMinimum: isCrossStoreMin } : undefined;
       await notifier.notify(tracker, tracker.currentPrice, newPrice, settings, notifyOptions);
     } catch (_) {
       // Notification errors should not break the check
@@ -252,7 +272,7 @@ async function handlePriceResult(tracker, newPrice, deps) {
   // Feed the digest collector
   if (deps.digestCollector) {
     if (priceChanged && !isFirstVariantCheck) {
-      deps.digestCollector.addChange(tracker, tracker.currentPrice, newPrice, isHistMin);
+      deps.digestCollector.addChange(tracker, tracker.currentPrice, newPrice, isHistMin, isCrossStoreMin);
     } else {
       deps.digestCollector.addUnchanged();
     }

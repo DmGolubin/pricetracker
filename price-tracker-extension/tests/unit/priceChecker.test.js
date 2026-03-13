@@ -232,7 +232,7 @@ describe('handlePriceResult', () => {
 
     expect(deps.badgeManager.incrementUnread).toHaveBeenCalled();
     // newPrice 85 < minPrice 90 → historical minimum, so options include isHistoricalMinimum
-    expect(deps.notifier.notify).toHaveBeenCalledWith(tracker, 100, 85, {}, { isHistoricalMinimum: true });
+    expect(deps.notifier.notify).toHaveBeenCalledWith(tracker, 100, 85, {}, { isHistoricalMinimum: true, isCrossStoreMinimum: false });
   });
 
   test('does not set updated status when price unchanged', async () => {

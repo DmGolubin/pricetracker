@@ -269,7 +269,7 @@ app.delete('/trackers/:id', async (req, res) => {
 app.post('/trackers/auto-group', async (req, res) => {
   try {
     const result = await autoGrouper.autoGroupAll(pool);
-    res.json({ grouped: result.grouped, total: result.total });
+    res.json({ grouped: result.grouped, total: result.total, newGroups: result.newGroups || 0 });
   } catch (err) {
     console.error('POST /trackers/auto-group error:', err);
     res.status(500).json({ error: err.message });

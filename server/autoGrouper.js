@@ -129,9 +129,10 @@ function findMatchingGroup(normalizedName, existingGroups, threshold = 0.85) {
 
 /**
  * Auto-group all ungrouped trackers by matching their normalized product names
- * against existing groups. Skips trackers with manually set productGroup.
+ * against existing groups. Also creates new groups when ungrouped trackers
+ * match each other (cross-store product detection).
  * @param {import('pg').Pool} pool — PostgreSQL connection pool
- * @returns {Promise<{grouped: number, total: number}>}
+ * @returns {Promise<{grouped: number, total: number, newGroups: number}>}
  */
 async function autoGroupAll(pool) {
   // 1. Get all trackers that have no group (empty string or NULL)
@@ -152,8 +153,10 @@ async function autoGroupAll(pool) {
   }));
 
   let grouped = 0;
+  let newGroups = 0;
+  const stillUngrouped = []; // trackers that didn't match any existing group
 
-  // 3. For each ungrouped tracker, try to find a matching group
+  // 3. For each ungrouped tracker, try to find a matching existing group
   for (const tracker of ungrouped) {
     const normalized = normalizeName(tracker.productName);
     if (!normalized) continue;
@@ -166,10 +169,76 @@ async function autoGroupAll(pool) {
         [matchedGroup, tracker.id]
       );
       grouped++;
+    } else {
+      stillUngrouped.push({ ...tracker, normalized });
     }
   }
 
-  return { grouped, total: ungrouped.length };
+  // 4. Cross-match remaining ungrouped trackers to create new groups
+  // This detects the same product across different stores
+  const assigned = new Set();
+
+  for (let i = 0; i < stillUngrouped.length; i++) {
+    if (assigned.has(stillUngrouped[i].id)) continue;
+
+    const cluster = [stillUngrouped[i]];
+
+    for (let j = i + 1; j < stillUngrouped.length; j++) {
+      if (assigned.has(stillUngrouped[j].id)) continue;
+
+      const score = similarity(stillUngrouped[i].normalized, stillUngrouped[j].normalized);
+      if (score >= 0.85) {
+        cluster.push(stillUngrouped[j]);
+      }
+    }
+
+    // Only create a group if we found at least 2 matching trackers
+    if (cluster.length >= 2) {
+      // Use the shortest product name as the group name (usually the cleanest)
+      const groupName = cluster
+        .map(t => cleanGroupName(t.productName))
+        .sort((a, b) => a.length - b.length)[0];
+
+      for (const t of cluster) {
+        await pool.query(
+          `UPDATE trackers SET "productGroup" = $1, "updatedAt" = NOW() WHERE id = $2`,
+          [groupName, t.id]
+        );
+        assigned.add(t.id);
+        grouped++;
+      }
+
+      // Add to existing groups so subsequent iterations can match
+      existingGroups.push({
+        groupName,
+        normalizedName: normalizeName(groupName),
+      });
+      newGroups++;
+    }
+  }
+
+  return { grouped, total: ungrouped.length, newGroups };
+}
+
+/**
+ * Clean a product name for use as a group name.
+ * Removes store suffixes and trailing noise.
+ * @param {string} name
+ * @returns {string}
+ */
+function cleanGroupName(name) {
+  if (!name) return '';
+  let result = name.trim();
+
+  // Remove store suffixes (preserve original case)
+  for (const suffix of STORE_SUFFIXES) {
+    const idx = result.toLowerCase().lastIndexOf(suffix);
+    if (idx !== -1) {
+      result = result.slice(0, idx);
+    }
+  }
+
+  return result.replace(/\s+/g, ' ').trim();
 }
 
 module.exports = {
@@ -177,4 +246,5 @@ module.exports = {
   similarity,
   findMatchingGroup,
   autoGroupAll,
+  cleanGroupName,
 };

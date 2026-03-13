@@ -130,9 +130,10 @@ function formatEntryHtml(entry) {
   var percentStr = sign + entry.percentChange.toFixed(1) + '%';
   var shop = getShopLabel(entry.domain);
   var variantSuffix = variant ? ' · ' + escapeHtml(variant) : '';
+  var crossStoreTag = entry.isCrossStoreMinimum ? ' 🏆🏆' : '';
   var line = '• <a href="' + entry.pageUrl + '">' + name + '</a>'
     + '\n   <s>' + entry.oldPrice + '</s> → <b>' + entry.newPrice + '</b> грн'
-    + ' (' + percentStr + ') · ' + escapeHtml(shop) + variantSuffix;
+    + ' (' + percentStr + ') · ' + escapeHtml(shop) + variantSuffix + crossStoreTag;
   return line;
 }
 
@@ -145,13 +146,16 @@ function formatEntryHtml(entry) {
  * @returns {string}
  */
 function formatDigestHtml(entries, unchangedCount) {
+  var crossStoreMin = [];
   var histMin = [];
   var decreased = [];
   var increased = [];
 
   for (var i = 0; i < entries.length; i++) {
     var entry = entries[i];
-    if (entry.isHistoricalMinimum) {
+    if (entry.isCrossStoreMinimum) {
+      crossStoreMin.push(entry);
+    } else if (entry.isHistoricalMinimum) {
       histMin.push(entry);
     } else if (entry.newPrice < entry.oldPrice) {
       decreased.push(entry);
@@ -161,6 +165,15 @@ function formatDigestHtml(entries, unchangedCount) {
   }
 
   var parts = [];
+
+  if (crossStoreMin.length > 0) {
+    var section = '<b>🏆🏆 Лучшая цена среди всех магазинов!</b>\n';
+    for (var i = 0; i < crossStoreMin.length; i++) {
+      section += '\n' + formatEntryHtml(crossStoreMin[i]);
+      if (i < crossStoreMin.length - 1) section += '\n';
+    }
+    parts.push(section);
+  }
 
   if (histMin.length > 0) {
     var section = '<b>🏆 Исторический минимум!</b>\n';
@@ -250,8 +263,9 @@ function createCollector() {
      * @param {number} oldPrice
      * @param {number} newPrice
      * @param {boolean} isHistMin — whether this is a historical minimum
+     * @param {boolean} [isCrossStoreMin] — whether this beats all stores in the group
      */
-    addChange: function (tracker, oldPrice, newPrice, isHistMin) {
+    addChange: function (tracker, oldPrice, newPrice, isHistMin, isCrossStoreMin) {
       var percentChange = oldPrice !== 0
         ? ((newPrice - oldPrice) / oldPrice) * 100
         : 0;
@@ -264,6 +278,8 @@ function createCollector() {
         newPrice: newPrice,
         percentChange: percentChange,
         isHistoricalMinimum: !!isHistMin,
+        isCrossStoreMinimum: !!isCrossStoreMin,
+        productGroup: tracker.productGroup || '',
       });
     },
 

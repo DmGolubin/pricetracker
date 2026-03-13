@@ -90,23 +90,35 @@ function formatEntryHtml(entry) {
   const percentStr = sign + entry.percentChange.toFixed(1) + '%';
   const shop = getShopLabel(entry.domain);
   const variantSuffix = variant ? ' · ' + escapeHtml(variant) : '';
+  const crossStoreTag = entry.isCrossStoreMinimum ? ' 🏆🏆' : '';
   return '• <a href="' + entry.pageUrl + '">' + name + '</a>'
     + '\n   <s>' + entry.oldPrice + '</s> → <b>' + entry.newPrice + '</b> грн'
-    + ' (' + percentStr + ') · ' + escapeHtml(shop) + variantSuffix;
+    + ' (' + percentStr + ') · ' + escapeHtml(shop) + variantSuffix + crossStoreTag;
 }
 
 function formatDigestHtml(entries, unchangedCount) {
+  const crossStoreMin = [];
   const histMin = [];
   const decreased = [];
   const increased = [];
 
   for (const entry of entries) {
-    if (entry.isHistoricalMinimum) histMin.push(entry);
+    if (entry.isCrossStoreMinimum) crossStoreMin.push(entry);
+    else if (entry.isHistoricalMinimum) histMin.push(entry);
     else if (entry.newPrice < entry.oldPrice) decreased.push(entry);
     else if (entry.newPrice > entry.oldPrice) increased.push(entry);
   }
 
   const parts = [];
+
+  if (crossStoreMin.length > 0) {
+    let section = '<b>🏆🏆 Лучшая цена среди всех магазинов!</b>\n';
+    for (let i = 0; i < crossStoreMin.length; i++) {
+      section += '\n' + formatEntryHtml(crossStoreMin[i]);
+      if (i < crossStoreMin.length - 1) section += '\n';
+    }
+    parts.push(section);
+  }
 
   if (histMin.length > 0) {
     let section = '<b>🏆 Исторический минимум!</b>\n';
@@ -167,7 +179,7 @@ function createCollector() {
   let unchangedCount = 0;
 
   return {
-    addChange(tracker, oldPrice, newPrice, isHistMin) {
+    addChange(tracker, oldPrice, newPrice, isHistMin, isCrossStoreMin) {
       const percentChange = oldPrice !== 0
         ? ((newPrice - oldPrice) / oldPrice) * 100 : 0;
       entries.push({
@@ -176,6 +188,8 @@ function createCollector() {
         domain: extractDomain(tracker.pageUrl),
         oldPrice, newPrice, percentChange,
         isHistoricalMinimum: !!isHistMin,
+        isCrossStoreMinimum: !!isCrossStoreMin,
+        productGroup: tracker.productGroup || '',
       });
     },
     addUnchanged() { unchangedCount++; },
