@@ -298,7 +298,18 @@ async function extractPrice(tracker) {
         // Wait for network + DOM to settle
         await page.waitForNetworkIdle({ timeout: 3000 }).catch(function() {});
 
-        if (priceBeforeClick) {
+        // EVA.UA SPA: after variant click, the price element may be removed and re-created.
+        // Wait for the price selector to reappear in the DOM first.
+        if (isEva) {
+          try {
+            await page.waitForSelector(priceWatchSelectors[0], { timeout: 8000 });
+            console.log('[Scraper] #' + trackerId + ' EVA: price element reappeared after variant click');
+          } catch (_) {
+            console.log('[Scraper] #' + trackerId + ' EVA: price element did not reappear after 8s');
+          }
+          // Extra settle time for EVA SPA rendering
+          await new Promise(function(r) { setTimeout(r, 2000); });
+        } else if (priceBeforeClick) {
           try {
             await page.waitForFunction(
               function(oldPrice, selectors) {
