@@ -256,14 +256,22 @@ async function extractPrice(tracker) {
           });
           console.log('[Scraper] #' + trackerId + ' EVA: price before click: ' + (priceBefore || 'none'));
 
-          // Click the variant button. Puppeteer click may cause SPA navigation
-          // which detaches the frame. We handle this by catching the error and
-          // waiting for the page to settle.
+          // Use JS click via evaluate — Puppeteer's page.click() triggers
+          // navigation detection on EVA SPA which causes "detached Frame" errors.
+          // JS dispatchEvent stays in the same execution context.
           var clickCausedNavigation = false;
           try {
-            await page.click(titleSelector);
+            await page.evaluate(function(sel) {
+              var btn = document.querySelector(sel);
+              if (btn) {
+                // Dispatch both click and pointerup events for Vue compatibility
+                btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+                btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+                btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+              }
+            }, titleSelector);
           } catch (clickErr) {
-            console.log('[Scraper] #' + trackerId + ' EVA: click caused error: ' + clickErr.message);
+            console.log('[Scraper] #' + trackerId + ' EVA: JS click error: ' + clickErr.message);
             clickCausedNavigation = true;
           }
 
