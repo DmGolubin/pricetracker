@@ -242,21 +242,27 @@ async function extractPrice(tracker) {
         try {
           await page.waitForSelector(titleSelector, { timeout: 5000 });
 
-          // EVA SPA: clicking a variant may cause client-side navigation.
-          // Use Promise.all to catch both click and potential navigation.
-          try {
-            await Promise.all([
-              page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(function() {}),
-              page.click(titleSelector),
-            ]);
-          } catch (_) {}
+          // Read price BEFORE click for comparison
+          var priceBefore = await page.evaluate(function() {
+            var el = document.querySelector('[data-testid="product-price"]');
+            return el ? (el.textContent || '').trim() : null;
+          });
+          console.log('[Scraper] #' + trackerId + ' EVA: price before click: ' + (priceBefore || 'none'));
 
-          // Wait for Vue to re-render and price to update
-          await new Promise(function(r) { setTimeout(r, 3000); });
+          // Use JS click via evaluate to avoid Puppeteer navigation issues.
+          // Puppeteer's page.click() triggers navigation detection which causes
+          // "detached Frame" errors on SPAs. JS click stays in the same context.
+          await page.evaluate(function(sel) {
+            var btn = document.querySelector(sel);
+            if (btn) btn.click();
+          }, titleSelector);
 
-          // Wait for price element to appear (may be on a new page after navigation)
+          // Wait for Vue to process the click and update the price
+          await new Promise(function(r) { setTimeout(r, 4000); });
+
+          // Wait for price element (may be re-rendered)
           try {
-            await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
+            await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
           } catch (_) {}
           await new Promise(function(r) { setTimeout(r, 2000); });
 
@@ -267,8 +273,8 @@ async function extractPrice(tracker) {
               return el ? (el.textContent || '').trim() : null;
             });
           } catch (evalErr) {
-            console.log('[Scraper] #' + trackerId + ' EVA: evaluate failed after click: ' + evalErr.message);
-            // Frame may have been detached — wait for new page to load
+            // If context was destroyed, wait for new page and retry
+            console.log('[Scraper] #' + trackerId + ' EVA: context destroyed after JS click, waiting for reload...');
             await new Promise(function(r) { setTimeout(r, 5000); });
             try {
               await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
