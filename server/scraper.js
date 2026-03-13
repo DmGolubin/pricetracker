@@ -58,8 +58,8 @@ async function getBrowser() {
       '--metrics-recording-only',
       '--no-first-run',
       '--safebrowsing-disable-auto-update',
-      '--single-process',
       '--disable-web-security',
+      '--disable-blink-features=AutomationControlled',
     ],
   });
 
@@ -102,6 +102,28 @@ async function extractPrice(tracker) {
   try {
     page = await browser.newPage();
 
+    // Anti-detection: patch navigator properties before any page scripts run
+    await page.evaluateOnNewDocument(() => {
+      // Override webdriver flag
+      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+      // Override plugins to look like a real browser
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
+      // Override languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['uk-UA', 'uk', 'ru', 'en-US', 'en'],
+      });
+      // Override chrome runtime
+      window.chrome = { runtime: {} };
+      // Override permissions query
+      const origQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (params) =>
+        params.name === 'notifications'
+          ? Promise.resolve({ state: Notification.permission })
+          : origQuery(params);
+    });
+
     // Block images, fonts, media to speed up loading
     // Don't block stylesheets for Notino (React SPA may need CSS)
     const isNotinoPage = (tracker.pageUrl || '').indexOf('notino.ua') !== -1;
@@ -125,6 +147,15 @@ async function extractPrice(tracker) {
 
     // Set viewport
     await page.setViewport({ width: 1366, height: 768 });
+
+    // Set extra HTTP headers to look more like a real browser
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'uk-UA,uk;q=0.9,ru;q=0.8,en-US;q=0.7,en;q=0.6',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+    });
 
     // Navigate to the page
     console.log(`[Scraper] #${trackerId} Loading: ${tracker.pageUrl}`);
