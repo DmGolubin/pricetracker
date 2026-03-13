@@ -173,65 +173,76 @@ async function extractPrice(tracker) {
     const isEva = (tracker.pageUrl || '').indexOf('eva.ua') !== -1;
     const isNotino = (tracker.pageUrl || '').indexOf('notino.ua') !== -1;
 
-    // ─── EVA.UA variant: extract variant ID from button title, build direct URL ───
-    // EVA is a Vue/Nuxt SPA. Clicking variant buttons doesn't work in headless
-    // because the React re-render destroys the price element. Instead, we:
-    // 1. Find all variant buttons and extract product IDs from their title attrs
-    //    (e.g. title="100 (828766)" → product ID 828766)
-    // 2. Match the desired variant by the variantSelector
-    // 3. Navigate directly to the variant URL using the product ID as hash
+    // ─── EVA.UA variant: find variant buttons by title pattern, navigate by hash ──
+    // EVA is a Vue/Nuxt SPA. Clicking variant buttons doesn't work in headless.
+    // Strategy: find all variant buttons with title="VOLUME (PRODUCT_ID)" pattern,
+    // match the desired variant by volume from productName, then navigate to hash URL.
     if (isEva && tracker.variantSelector) {
-      console.log('[Scraper] #' + trackerId + ' EVA: extracting variant info from buttons...');
+      // Extract desired volume from productName (e.g., "— 100" or "— 30")
+      var volumeMatch = (tracker.productName || '').match(/—\s*(\d+)/);
+      var desiredVolume = volumeMatch ? volumeMatch[1] : null;
+      console.log('[Scraper] #' + trackerId + ' EVA: looking for variant, desired volume: ' + (desiredVolume || 'unknown'));
 
-      var evaVariantResult = await page.evaluate(function(varSel) {
-        // Find the target variant button
-        var btn = null;
-        try { btn = document.querySelector(varSel); } catch(e) {}
-        if (!btn) return { error: 'variant button not found: ' + varSel };
+      var evaVariantResult = await page.evaluate(function(varSel, wantedVol) {
+        // Strategy 1: find all variant buttons with title="VOLUME (ID)" pattern
+        var allButtons = [];
+        var matchedBtn = null;
+        var buttons = document.querySelectorAll('button[title]');
+        buttons.forEach(function(b) {
+          var t = (b.getAttribute('title') || '').trim();
+          var m = t.match(/^(\d+)\s*\((\d+)\)$/);
+          if (m) {
+            var info = {
+              title: t,
+              volume: m[1],
+              productId: m[2],
+              selected: (b.className || '').indexOf('border-apple') !== -1,
+              outOfStock: (b.className || '').indexOf('border-dark-900') !== -1
+            };
+            allButtons.push(info);
+            // Match by desired volume
+            if (wantedVol && m[1] === wantedVol) {
+              matchedBtn = info;
+            }
+          }
+        });
 
-        var title = (btn.getAttribute('title') || '').trim();
-        // Extract product ID from title like "100 (828766)" or "50 (828768)"
-        var idMatch = title.match(/\((\d+)\)/);
-        var productId = idMatch ? idMatch[1] : null;
-
-        // Also check if button has a data attribute with the variant ID
-        if (!productId) {
-          productId = btn.getAttribute('data-product-id') || btn.getAttribute('data-id') || null;
+        // Strategy 2: if no volume match, try the variantSelector directly
+        if (!matchedBtn) {
+          var btn = null;
+          try { btn = document.querySelector(varSel); } catch(e) {}
+          if (btn) {
+            var title = (btn.getAttribute('title') || '').trim();
+            var idMatch = title.match(/\((\d+)\)/);
+            if (idMatch) {
+              matchedBtn = {
+                title: title,
+                volume: title.replace(/\s*\(\d+\)/, ''),
+                productId: idMatch[1],
+                selected: (btn.className || '').indexOf('border-apple') !== -1,
+                outOfStock: (btn.className || '').indexOf('border-dark-900') !== -1
+              };
+            }
+          }
         }
-
-        // Check if this variant is already selected (has border-apple class)
-        var isSelected = (btn.className || '').indexOf('border-apple') !== -1;
 
         // Read current price
         var priceEl = document.querySelector('[data-testid="product-price"]');
         var currentPrice = priceEl ? (priceEl.textContent || '').trim() : null;
 
-        // Get all variant buttons info for debugging
-        var allButtons = [];
-        var buttons = document.querySelectorAll('button[title]');
-        buttons.forEach(function(b) {
-          var t = (b.getAttribute('title') || '').trim();
-          if (/\(\d+\)/.test(t)) {
-            allButtons.push({
-              title: t,
-              selected: (b.className || '').indexOf('border-apple') !== -1
-            });
-          }
-        });
-
         return {
-          productId: productId,
-          title: title,
-          isSelected: isSelected,
+          matched: matchedBtn,
           currentPrice: currentPrice,
           allButtons: allButtons
         };
-      }, tracker.variantSelector);
+      }, tracker.variantSelector, desiredVolume);
 
       console.log('[Scraper] #' + trackerId + ' EVA variant info:', JSON.stringify(evaVariantResult));
 
-      if (evaVariantResult && !evaVariantResult.error) {
-        if (evaVariantResult.isSelected && evaVariantResult.currentPrice) {
+      if (evaVariantResult && evaVariantResult.matched) {
+        var matched = evaVariantResult.matched;
+
+        if (matched.selected && evaVariantResult.currentPrice) {
           // Variant is already selected (default variant) — just read the price
           var price = parsePrice(evaVariantResult.currentPrice);
           if (price !== null && price > 0) {
@@ -241,10 +252,10 @@ async function extractPrice(tracker) {
           }
         }
 
-        if (evaVariantResult.productId) {
+        if (matched.productId) {
           // Navigate to the variant-specific URL using hash
           var baseUrl = (tracker.pageUrl || '').split('#')[0];
-          var variantUrl = baseUrl + '#/' + evaVariantResult.productId;
+          var variantUrl = baseUrl + '#/' + matched.productId;
           console.log('[Scraper] #' + trackerId + ' EVA: navigating to variant URL: ' + variantUrl);
 
           try {
@@ -281,7 +292,7 @@ async function extractPrice(tracker) {
               window.location.hash = '/' + pid;
               window.dispatchEvent(new HashChangeEvent('hashchange'));
               window.dispatchEvent(new PopStateEvent('popstate'));
-            }, evaVariantResult.productId);
+            }, matched.productId);
             await new Promise(function(r) { setTimeout(r, 5000); });
             try {
               await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
@@ -302,6 +313,8 @@ async function extractPrice(tracker) {
             }
           } catch (_) {}
         }
+      } else {
+        console.log('[Scraper] #' + trackerId + ' EVA: no matching variant button found. Buttons:', JSON.stringify((evaVariantResult || {}).allButtons));
       }
     }
 
