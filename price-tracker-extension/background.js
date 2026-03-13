@@ -400,7 +400,7 @@ var _bgExports = {
   handleResetBadge: handleResetBadge,
   getActiveTab: getActiveTab,
   initSettings: initSettings,
-  rescheduleAllAlarms: rescheduleAllAlarms,
+  // rescheduleAllAlarms removed — server-side checks handle scheduling
 };
 
 if (typeof module !== 'undefined' && module.exports) {
