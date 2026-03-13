@@ -292,23 +292,39 @@ async function extractPrice(tracker) {
 
         console.log('[Scraper] #' + trackerId + ' Price before click: ' + (priceBeforeClick || 'not found'));
 
-        // EVA.UA: click triggers SPA navigation, so we must wait for navigation simultaneously
+        // EVA.UA: click triggers client-side routing (pushState), not a full navigation.
+        // The price element gets removed and re-created during React re-render.
         if (isEva) {
-          await Promise.all([
-            page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(function() {}),
-            page.click(tracker.variantSelector),
-          ]);
+          // Record current URL before click
+          var urlBeforeClick = await page.url();
+
+          await page.click(tracker.variantSelector);
           variantClicked = true;
 
-          // Wait for the price element to appear after SPA navigation
+          // Wait for URL to change (pushState) or timeout
+          try {
+            await page.waitForFunction(
+              function(oldUrl) { return window.location.href !== oldUrl; },
+              { timeout: 5000 },
+              urlBeforeClick
+            );
+            console.log('[Scraper] #' + trackerId + ' EVA: URL changed after variant click');
+          } catch (_) {
+            console.log('[Scraper] #' + trackerId + ' EVA: URL did not change (same variant or click failed)');
+          }
+
+          // Wait for network to settle after SPA transition
+          await page.waitForNetworkIdle({ timeout: 5000 }).catch(function() {});
+
+          // Wait for price element to reappear
           try {
             await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
-            console.log('[Scraper] #' + trackerId + ' EVA: price element found after variant navigation');
+            console.log('[Scraper] #' + trackerId + ' EVA: price element found after variant click');
           } catch (_) {
-            console.log('[Scraper] #' + trackerId + ' EVA: price element not found after navigation, extra wait...');
+            console.log('[Scraper] #' + trackerId + ' EVA: price element not found, extra wait...');
             await new Promise(function(r) { setTimeout(r, 5000); });
           }
-          await new Promise(function(r) { setTimeout(r, 1000); });
+          await new Promise(function(r) { setTimeout(r, 1500); });
         } else {
           await page.click(tracker.variantSelector);
           variantClicked = true;
