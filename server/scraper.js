@@ -142,11 +142,21 @@ async function extractPrice(tracker) {
 
     // Notino is a React SPA — wait for the price element to render
     if (isNotino) {
+      var pdPriceFound = false;
       try {
-        await page.waitForSelector('#pd-price', { timeout: 10000 });
+        await page.waitForSelector('#pd-price span[data-testid="pd-price"]', { timeout: 15000 });
+        pdPriceFound = true;
         console.log(`[Scraper] #${trackerId} Notino: #pd-price found`);
       } catch (_) {
-        console.log(`[Scraper] #${trackerId} Notino: #pd-price not found after 10s wait`);
+        console.log(`[Scraper] #${trackerId} Notino: #pd-price not found after 15s, retrying after extra wait...`);
+        await new Promise(r => setTimeout(r, 5000));
+        var retryEl = await page.$('#pd-price');
+        if (retryEl) {
+          pdPriceFound = true;
+          console.log(`[Scraper] #${trackerId} Notino: #pd-price found on retry`);
+        } else {
+          console.log(`[Scraper] #${trackerId} Notino: #pd-price still not found after retry`);
+        }
       }
     }
 

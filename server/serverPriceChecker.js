@@ -14,7 +14,7 @@ const thresholdEngine = require('./serverThresholdEngine');
 const digestComposer = require('./serverDigestComposer');
 const telegram = require('./telegramSender');
 
-const CONCURRENCY = 2;
+const CONCURRENCY = 1;
 
 /**
  * Run a full price check cycle for all active trackers.
