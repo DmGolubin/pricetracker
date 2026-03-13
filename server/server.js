@@ -413,6 +413,14 @@ app.post('/server-check/diagnose', async (req, res) => {
     await page.setViewport({ width: 1366, height: 768 });
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
 
+    const pageInfo = await page.evaluate(() => ({
+      title: document.title,
+      url: window.location.href,
+      bodyLen: (document.body && document.body.innerHTML || '').length,
+      hasPrice: !!document.querySelector('[itemprop="price"]'),
+      hasVariant: !!document.querySelector('[data-variant-id]'),
+    }));
+
     // Collect all price-related elements BEFORE variant click
     const beforeClick = await page.evaluate(() => {
       const sels = [
@@ -458,7 +466,7 @@ app.post('/server-check/diagnose', async (req, res) => {
       } catch(e) { afterClick = { error: e.message }; }
     }
 
-    res.json({ beforeClick, afterClick, variantFound, variantSelector });
+    res.json({ pageInfo, beforeClick, afterClick, variantFound, variantSelector });
   } catch (err) {
     res.status(500).json({ error: err.message });
   } finally {
