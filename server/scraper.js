@@ -292,48 +292,56 @@ async function extractPrice(tracker) {
 
         console.log('[Scraper] #' + trackerId + ' Price before click: ' + (priceBeforeClick || 'not found'));
 
-        await page.click(tracker.variantSelector);
-        variantClicked = true;
-
-        // Wait for network + DOM to settle
-        await page.waitForNetworkIdle({ timeout: 3000 }).catch(function() {});
-
-        // EVA.UA SPA: after variant click, the price element may be removed and re-created.
-        // Wait for the price selector to reappear in the DOM first.
+        // EVA.UA: click triggers SPA navigation, so we must wait for navigation simultaneously
         if (isEva) {
+          await Promise.all([
+            page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(function() {}),
+            page.click(tracker.variantSelector),
+          ]);
+          variantClicked = true;
+
+          // Wait for the price element to appear after SPA navigation
           try {
-            await page.waitForSelector(priceWatchSelectors[0], { timeout: 8000 });
-            console.log('[Scraper] #' + trackerId + ' EVA: price element reappeared after variant click');
+            await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
+            console.log('[Scraper] #' + trackerId + ' EVA: price element found after variant navigation');
           } catch (_) {
-            console.log('[Scraper] #' + trackerId + ' EVA: price element did not reappear after 8s');
+            console.log('[Scraper] #' + trackerId + ' EVA: price element not found after navigation, extra wait...');
+            await new Promise(function(r) { setTimeout(r, 5000); });
           }
-          // Extra settle time for EVA SPA rendering
-          await new Promise(function(r) { setTimeout(r, 2000); });
-        } else if (priceBeforeClick) {
-          try {
-            await page.waitForFunction(
-              function(oldPrice, selectors) {
-                for (var i = 0; i < selectors.length; i++) {
-                  try {
-                    var el = document.querySelector(selectors[i]);
-                    if (el) {
-                      var current = (el.textContent || '').trim();
-                      if (current && /\d/.test(current) && current !== oldPrice) return true;
-                    }
-                  } catch(e) {}
-                }
-                return false;
-              },
-              { timeout: 5000 },
-              priceBeforeClick,
-              priceWatchSelectors
-            );
-            console.log('[Scraper] #' + trackerId + ' ✅ Price changed after variant click');
-          } catch (waitErr) {
-            console.log('[Scraper] #' + trackerId + ' ⚠ Price did not change after click (same price or click failed)');
-          }
+          await new Promise(function(r) { setTimeout(r, 1000); });
         } else {
-          await new Promise(function(r) { setTimeout(r, 2500); });
+          await page.click(tracker.variantSelector);
+          variantClicked = true;
+
+          // Wait for network + DOM to settle
+          await page.waitForNetworkIdle({ timeout: 3000 }).catch(function() {});
+
+          if (priceBeforeClick) {
+            try {
+              await page.waitForFunction(
+                function(oldPrice, selectors) {
+                  for (var i = 0; i < selectors.length; i++) {
+                    try {
+                      var el = document.querySelector(selectors[i]);
+                      if (el) {
+                        var current = (el.textContent || '').trim();
+                        if (current && /\d/.test(current) && current !== oldPrice) return true;
+                      }
+                    } catch(e) {}
+                  }
+                  return false;
+                },
+                { timeout: 5000 },
+                priceBeforeClick,
+                priceWatchSelectors
+              );
+              console.log('[Scraper] #' + trackerId + ' ✅ Price changed after variant click');
+            } catch (waitErr) {
+              console.log('[Scraper] #' + trackerId + ' ⚠ Price did not change after click (same price or click failed)');
+            }
+          } else {
+            await new Promise(function(r) { setTimeout(r, 2500); });
+          }
         }
 
         await new Promise(function(r) { setTimeout(r, 500); });
