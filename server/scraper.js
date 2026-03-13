@@ -173,31 +173,135 @@ async function extractPrice(tracker) {
     const isEva = (tracker.pageUrl || '').indexOf('eva.ua') !== -1;
     const isNotino = (tracker.pageUrl || '').indexOf('notino.ua') !== -1;
 
-    // EVA.UA with hash variant: after page load, trigger hash navigation via JS
-    // EVA React SPA processes hash routes client-side after hydration
-    if (isEva && (tracker.pageUrl || '').indexOf('#') !== -1 && tracker.variantSelector) {
-      var hashPart = (tracker.pageUrl || '').split('#')[1] || '';
-      if (hashPart) {
-        console.log('[Scraper] #' + trackerId + ' EVA: triggering hash navigation to #' + hashPart);
-        // Set hash and dispatch hashchange event to trigger React router
-        await page.evaluate(function(hash) {
-          window.location.hash = hash;
-          window.dispatchEvent(new HashChangeEvent('hashchange'));
-        }, hashPart);
-        // Wait for React to process the hash change
-        await new Promise(function(r) { setTimeout(r, 5000); });
-        // Wait for price element
-        try {
-          await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
-        } catch (_) {}
-        await new Promise(function(r) { setTimeout(r, 2000); });
-        
-        // Read price after hash navigation
-        var hashPrice = await page.evaluate(function() {
-          var el = document.querySelector('[data-testid="product-price"]');
-          return el ? (el.textContent || '').trim() : null;
+    // ─── EVA.UA variant: extract variant ID from button title, build direct URL ───
+    // EVA is a Vue/Nuxt SPA. Clicking variant buttons doesn't work in headless
+    // because the React re-render destroys the price element. Instead, we:
+    // 1. Find all variant buttons and extract product IDs from their title attrs
+    //    (e.g. title="100 (828766)" → product ID 828766)
+    // 2. Match the desired variant by the variantSelector
+    // 3. Navigate directly to the variant URL using the product ID as hash
+    if (isEva && tracker.variantSelector) {
+      console.log('[Scraper] #' + trackerId + ' EVA: extracting variant info from buttons...');
+
+      var evaVariantResult = await page.evaluate(function(varSel) {
+        // Find the target variant button
+        var btn = null;
+        try { btn = document.querySelector(varSel); } catch(e) {}
+        if (!btn) return { error: 'variant button not found: ' + varSel };
+
+        var title = (btn.getAttribute('title') || '').trim();
+        // Extract product ID from title like "100 (828766)" or "50 (828768)"
+        var idMatch = title.match(/\((\d+)\)/);
+        var productId = idMatch ? idMatch[1] : null;
+
+        // Also check if button has a data attribute with the variant ID
+        if (!productId) {
+          productId = btn.getAttribute('data-product-id') || btn.getAttribute('data-id') || null;
+        }
+
+        // Check if this variant is already selected (has border-apple class)
+        var isSelected = (btn.className || '').indexOf('border-apple') !== -1;
+
+        // Read current price
+        var priceEl = document.querySelector('[data-testid="product-price"]');
+        var currentPrice = priceEl ? (priceEl.textContent || '').trim() : null;
+
+        // Get all variant buttons info for debugging
+        var allButtons = [];
+        var buttons = document.querySelectorAll('button[title]');
+        buttons.forEach(function(b) {
+          var t = (b.getAttribute('title') || '').trim();
+          if (/\(\d+\)/.test(t)) {
+            allButtons.push({
+              title: t,
+              selected: (b.className || '').indexOf('border-apple') !== -1
+            });
+          }
         });
-        console.log('[Scraper] #' + trackerId + ' EVA: price after hash navigation: ' + (hashPrice || 'none'));
+
+        return {
+          productId: productId,
+          title: title,
+          isSelected: isSelected,
+          currentPrice: currentPrice,
+          allButtons: allButtons
+        };
+      }, tracker.variantSelector);
+
+      console.log('[Scraper] #' + trackerId + ' EVA variant info:', JSON.stringify(evaVariantResult));
+
+      if (evaVariantResult && !evaVariantResult.error) {
+        if (evaVariantResult.isSelected && evaVariantResult.currentPrice) {
+          // Variant is already selected (default variant) — just read the price
+          var price = parsePrice(evaVariantResult.currentPrice);
+          if (price !== null && price > 0) {
+            var elapsed = Date.now() - pageStart;
+            console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA default variant, ' + elapsed + 'ms) — ' + shortName);
+            return { success: true, price: price };
+          }
+        }
+
+        if (evaVariantResult.productId) {
+          // Navigate to the variant-specific URL using hash
+          var baseUrl = (tracker.pageUrl || '').split('#')[0];
+          var variantUrl = baseUrl + '#/' + evaVariantResult.productId;
+          console.log('[Scraper] #' + trackerId + ' EVA: navigating to variant URL: ' + variantUrl);
+
+          try {
+            await page.goto(variantUrl, { waitUntil: 'networkidle2', timeout: PAGE_TIMEOUT_MS });
+            // Wait for Vue/Nuxt to hydrate and process the hash route
+            await new Promise(function(r) { setTimeout(r, 5000); });
+            try {
+              await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
+            } catch (_) {}
+            await new Promise(function(r) { setTimeout(r, 2000); });
+
+            var evaPrice = await page.evaluate(function() {
+              var el = document.querySelector('[data-testid="product-price"]');
+              return el ? (el.textContent || '').trim() : null;
+            });
+            console.log('[Scraper] #' + trackerId + ' EVA: price after variant navigation: ' + (evaPrice || 'none'));
+
+            if (evaPrice) {
+              var price = parsePrice(evaPrice);
+              if (price !== null && price > 0) {
+                var elapsed = Date.now() - pageStart;
+                console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA variant URL, ' + elapsed + 'ms) — ' + shortName);
+                return { success: true, price: price };
+              }
+            }
+          } catch (navErr) {
+            console.log('[Scraper] #' + trackerId + ' EVA: variant navigation failed: ' + navErr.message);
+          }
+
+          // Fallback: try setting hash via JS on the already-loaded page
+          console.log('[Scraper] #' + trackerId + ' EVA: trying hash change fallback...');
+          try {
+            await page.evaluate(function(pid) {
+              window.location.hash = '/' + pid;
+              window.dispatchEvent(new HashChangeEvent('hashchange'));
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }, evaVariantResult.productId);
+            await new Promise(function(r) { setTimeout(r, 5000); });
+            try {
+              await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
+            } catch (_) {}
+            await new Promise(function(r) { setTimeout(r, 2000); });
+
+            var hashPrice = await page.evaluate(function() {
+              var el = document.querySelector('[data-testid="product-price"]');
+              return el ? (el.textContent || '').trim() : null;
+            });
+            if (hashPrice) {
+              var price = parsePrice(hashPrice);
+              if (price !== null && price > 0) {
+                var elapsed = Date.now() - pageStart;
+                console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA hash fallback, ' + elapsed + 'ms) — ' + shortName);
+                return { success: true, price: price };
+              }
+            }
+          } catch (_) {}
+        }
       }
     }
 
@@ -237,142 +341,152 @@ async function extractPrice(tracker) {
     // ─── Variant handling ────────────────────────────────────────────
     // makeup.com.ua stores prices in data-price attributes on variant elements,
     // so we can read the price directly without clicking.
-    // eva.ua requires clicking the variant button and reading the updated price.
+    // eva.ua is handled above with direct URL navigation.
     var variantClicked = false;
     if (tracker.variantSelector) {
       // MAKEUP.COM.UA: read data-price attribute directly from the variant element
+      // The variant divs have data-variant-id and data-price attributes.
+      // We try multiple strategies to find the right variant element.
       if (isMakeup) {
-        var dataPrice = await page.evaluate(function(sel) {
-          var el = document.querySelector(sel);
-          // Fallback: if CSS-escaped data-variant-id selector fails, try extracting the ID
+        var makeupResult = await page.evaluate(function(sel) {
+          var el = null;
+          
+          // Strategy 1: try the selector as-is
+          try { el = document.querySelector(sel); } catch(e) {}
+          
+          // Strategy 2: extract variant ID from selector and search directly
           if (!el && sel.indexOf('data-variant-id') !== -1) {
-            var idMatch = sel.match(/data-variant-id[*~|^$]?=["']?\\?3?2?\s*(\d+)/);
-            if (idMatch) {
-              el = document.querySelector('[data-variant-id="' + idMatch[1] + '"]');
+            // Extract the raw variant ID from various selector formats:
+            // [data-variant-id="\35 03001_3"] → 503001_3
+            // [data-variant-id="503001_3"] → 503001_3
+            // .variant[data-variant-id*="503001"] → 503001
+            var rawMatch = sel.match(/data-variant-id[*~|^$]?=["']?([^"'\]]+)/);
+            if (rawMatch) {
+              var rawId = rawMatch[1]
+                // Decode CSS unicode escapes: \35 → "5", \33 → "3", etc.
+                .replace(/\\3(\d)\s*/g, function(_, d) { return String.fromCharCode(0x30 + parseInt(d)); })
+                .replace(/\\(\d)/g, function(_, d) { return d; })
+                .replace(/\\/g, '')
+                .trim();
+              
+              // Try exact match first
+              el = document.querySelector('[data-variant-id="' + rawId + '"]');
+              
+              // Try contains match if exact fails
+              if (!el) {
+                var allVariants = document.querySelectorAll('.variant[data-variant-id]');
+                for (var i = 0; i < allVariants.length; i++) {
+                  var vid = allVariants[i].getAttribute('data-variant-id') || '';
+                  if (vid === rawId || vid.indexOf(rawId) !== -1 || rawId.indexOf(vid) !== -1) {
+                    el = allVariants[i];
+                    break;
+                  }
+                }
+              }
             }
           }
-          // Fallback: if selector like [data-loyalty-text=""] matches wrong element, use .variant.checked
-          if (!el || (!el.getAttribute('data-price') && !el.closest('[data-price]'))) {
-            var checked = document.querySelector('.variant.checked[data-price]');
-            if (checked) el = checked;
+          
+          // Strategy 3: if selector is like .variant:nth-child(N), try it
+          if (!el && /variant.*nth-child/i.test(sel)) {
+            try { el = document.querySelector(sel); } catch(e) {}
           }
-          if (!el) return null;
-          // The variant element itself or a parent may have data-price
+          
+          if (!el) return { found: false, allVariants: [] };
+          
+          // Read data-price from the element itself or walk up to find it
           var dp = el.getAttribute('data-price');
-          if (dp) return dp;
-          // Walk up to find data-price on a parent (variant div wraps the clickable element)
-          var parent = el.closest('[data-price]');
-          if (parent) return parent.getAttribute('data-price');
-          // Also check if the selector targets a child inside the variant div
-          var variantDiv = el.closest('.variant');
-          if (variantDiv && variantDiv.getAttribute('data-price')) return variantDiv.getAttribute('data-price');
-          return null;
+          if (!dp) {
+            var parent = el.closest('[data-price]');
+            if (parent) dp = parent.getAttribute('data-price');
+          }
+          if (!dp) {
+            var variantDiv = el.closest('.variant') || el;
+            dp = variantDiv.getAttribute('data-price');
+          }
+          
+          // Also try meta itemprop="price" inside the variant
+          var metaContent = null;
+          var variantContainer = el.closest('[data-variant-id]') || el.closest('.variant') || el;
+          var meta = variantContainer.querySelector('meta[itemprop="price"]');
+          if (meta) metaContent = meta.getAttribute('content');
+          
+          // Collect all variants for debugging
+          var allVariants = [];
+          document.querySelectorAll('.variant[data-variant-id]').forEach(function(v) {
+            allVariants.push({
+              id: v.getAttribute('data-variant-id'),
+              price: v.getAttribute('data-price'),
+              title: (v.getAttribute('title') || '').trim(),
+              checked: v.classList.contains('checked')
+            });
+          });
+          
+          return {
+            found: true,
+            dataPrice: dp,
+            metaPrice: metaContent,
+            variantId: (el.getAttribute('data-variant-id') || ''),
+            allVariants: allVariants
+          };
         }, tracker.variantSelector);
 
-        if (dataPrice) {
-          var price = parsePrice(dataPrice);
-          if (price !== null && price > 0) {
-            var elapsed = Date.now() - pageStart;
-            console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (data-price attr, ' + elapsed + 'ms) — ' + shortName);
-            return { success: true, price: price };
+        console.log('[Scraper] #' + trackerId + ' Makeup variant result:', JSON.stringify(makeupResult));
+
+        if (makeupResult && makeupResult.found) {
+          // Prefer data-price, fall back to meta itemprop price
+          var priceStr = makeupResult.dataPrice || makeupResult.metaPrice;
+          if (priceStr) {
+            var price = parsePrice(priceStr);
+            if (price !== null && price > 0) {
+              var elapsed = Date.now() - pageStart;
+              console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (Makeup data-price, ' + elapsed + 'ms) — ' + shortName);
+              return { success: true, price: price };
+            }
+            console.log('[Scraper] #' + trackerId + ' Makeup: found price text "' + priceStr + '" but parse failed');
+          } else {
+            console.log('[Scraper] #' + trackerId + ' Makeup: variant found but no data-price or meta price');
           }
-          console.log('[Scraper] #' + trackerId + ' data-price found but parse failed: "' + dataPrice + '"');
         } else {
-          console.log('[Scraper] #' + trackerId + ' No data-price attr on variant element, falling back to click...');
-        }
-
-        // Fallback: try reading meta itemprop="price" content inside the variant
-        var metaPrice = await page.evaluate(function(sel) {
-          var el = document.querySelector(sel);
-          if (!el) return null;
-          var variantDiv = el.closest('[data-variant-id]') || el.closest('.variant');
-          if (!variantDiv) return null;
-          var meta = variantDiv.querySelector('meta[itemprop="price"]');
-          return meta ? meta.getAttribute('content') : null;
-        }, tracker.variantSelector);
-
-        if (metaPrice) {
-          var price = parsePrice(metaPrice);
-          if (price !== null && price > 0) {
-            var elapsed = Date.now() - pageStart;
-            console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (meta itemprop, ' + elapsed + 'ms) — ' + shortName);
-            return { success: true, price: price };
-          }
+          console.log('[Scraper] #' + trackerId + ' Makeup: variant element not found, trying click fallback...');
         }
       }
 
-      // EVA.UA and others: click the variant and read the updated price
-      try {
-        console.log('[Scraper] #' + trackerId + ' Clicking variant: ' + tracker.variantSelector);
-        await page.waitForSelector(tracker.variantSelector, { timeout: 5000 });
+      // EVA.UA: variant was handled above (before Notino section) with direct URL navigation.
+      // If it didn't return a price, mark as variantClicked so we try price selectors below.
+      if (isEva) {
+        variantClicked = true;
+      }
 
-        // Capture the current price text BEFORE clicking
-        var priceBeforeClick = await page.evaluate(function(selectors) {
-          for (var i = 0; i < selectors.length; i++) {
-            try {
-              var el = document.querySelector(selectors[i]);
-              if (el) {
-                var text = (el.textContent || '').trim();
-                if (text && /\d/.test(text)) return text;
-              }
-            } catch(e) {}
-          }
-          return null;
-        }, priceWatchSelectors);
+      // Makeup: if data-price approach above didn't return, mark as variantClicked
+      // so we try reading from price watch selectors as fallback.
+      if (isMakeup) {
+        variantClicked = true;
+      }
 
-        console.log('[Scraper] #' + trackerId + ' Price before click: ' + (priceBeforeClick || 'not found'));
+      // Non-Makeup, non-EVA sites: click the variant and read the updated price
+      // EVA is handled above with direct URL navigation.
+      // Makeup is handled above with data-price attributes.
+      if (!isMakeup && !isEva) {
+        try {
+          console.log('[Scraper] #' + trackerId + ' Clicking variant: ' + tracker.variantSelector);
+          await page.waitForSelector(tracker.variantSelector, { timeout: 5000 });
 
-        // EVA.UA: React SPA — variant click causes full component re-render.
-        // If hash navigation already set the correct variant, skip clicking.
-        if (isEva) {
-          // Check if hash navigation already loaded the correct variant
-          var evaCurrentPrice = await page.evaluate(function() {
-            var el = document.querySelector('[data-testid="product-price"]');
-            return el ? (el.textContent || '').trim() : null;
-          });
-          
-          if (evaCurrentPrice && evaCurrentPrice !== priceBeforeClick) {
-            // Hash navigation worked — price changed from default
-            console.log('[Scraper] #' + trackerId + ' EVA: hash navigation set variant price: ' + evaCurrentPrice);
-            variantClicked = true;
-          } else {
-            // Hash navigation didn't work or no hash — try clicking
-            console.log('[Scraper] #' + trackerId + ' EVA: clicking variant button...');
-            
-            var btnText = await page.evaluate(function(sel) {
-              var btn = document.querySelector(sel);
-              return btn ? (btn.textContent || '').trim() : 'not found';
-            }, tracker.variantSelector);
-            console.log('[Scraper] #' + trackerId + ' EVA: variant button text: "' + btnText + '"');
-
-            // Try clicking with Promise.all to catch any navigation
-            try {
-              await Promise.all([
-                page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 10000 }).catch(function() {}),
-                page.click(tracker.variantSelector),
-              ]);
-            } catch (_) {}
-            variantClicked = true;
-
-            // Wait for React to re-render
-            await new Promise(function(r) { setTimeout(r, 5000); });
-
-            // Check if price element exists now
-            var priceAfterEva = await page.evaluate(function() {
-              var el = document.querySelector('[data-testid="product-price"]');
-              return el ? (el.textContent || '').trim() : null;
-            });
-            console.log('[Scraper] #' + trackerId + ' EVA: price after click: ' + (priceAfterEva || 'none'));
-
-            if (!priceAfterEva) {
-              console.log('[Scraper] #' + trackerId + ' EVA: price gone, waiting for reappear...');
+          // Capture the current price text BEFORE clicking
+          var priceBeforeClick = await page.evaluate(function(selectors) {
+            for (var i = 0; i < selectors.length; i++) {
               try {
-                await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
-              } catch (_) {}
-              await new Promise(function(r) { setTimeout(r, 2000); });
+                var el = document.querySelector(selectors[i]);
+                if (el) {
+                  var text = (el.textContent || '').trim();
+                  if (text && /\d/.test(text)) return text;
+                }
+              } catch(e) {}
             }
-          }
-        } else {
+            return null;
+          }, priceWatchSelectors);
+
+          console.log('[Scraper] #' + trackerId + ' Price before click: ' + (priceBeforeClick || 'not found'));
+
           await page.click(tracker.variantSelector);
           variantClicked = true;
 
@@ -405,26 +519,28 @@ async function extractPrice(tracker) {
           } else {
             await new Promise(function(r) { setTimeout(r, 2500); });
           }
+
+          await new Promise(function(r) { setTimeout(r, 500); });
+
+          var priceAfterClick = await page.evaluate(function(selectors) {
+            for (var i = 0; i < selectors.length; i++) {
+              try {
+                var el = document.querySelector(selectors[i]);
+                if (el) {
+                  var text = (el.textContent || '').trim();
+                  if (text && /\d/.test(text)) return text;
+                }
+              } catch(e) {}
+            }
+            return null;
+          }, priceWatchSelectors);
+          console.log('[Scraper] #' + trackerId + ' Price after click: ' + (priceAfterClick || 'not found'));
+
+        } catch (variantErr) {
+          console.warn('[Scraper] #' + trackerId + ' ⚠ Variant click failed: ' + variantErr.message);
         }
 
-        await new Promise(function(r) { setTimeout(r, 500); });
-
-        var priceAfterClick = await page.evaluate(function(selectors) {
-          for (var i = 0; i < selectors.length; i++) {
-            try {
-              var el = document.querySelector(selectors[i]);
-              if (el) {
-                var text = (el.textContent || '').trim();
-                if (text && /\d/.test(text)) return text;
-              }
-            } catch(e) {}
-          }
-          return null;
-        }, priceWatchSelectors);
-        console.log('[Scraper] #' + trackerId + ' Price after click: ' + (priceAfterClick || 'not found'));
-
-      } catch (variantErr) {
-        console.warn('[Scraper] #' + trackerId + ' ⚠ Variant click failed: ' + variantErr.message);
+        variantClicked = true;
       }
     }
 
