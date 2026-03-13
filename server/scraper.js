@@ -340,7 +340,13 @@ async function extractPrice(tracker) {
       // The variant divs have data-variant-id and data-price attributes.
       // We try multiple strategies to find the right variant element.
       if (isMakeup) {
-        var makeupResult = await page.evaluate(function(sel) {
+        // Wait for page to fully settle (Makeup may do JS redirects)
+        await new Promise(function(r) { setTimeout(r, 2000); });
+
+        var makeupResult = null;
+        for (var makeupRetry = 0; makeupRetry < 2; makeupRetry++) {
+          try {
+            makeupResult = await page.evaluate(function(sel) {
           var el = null;
           
           // Strategy 1: try the selector as-is
@@ -421,6 +427,15 @@ async function extractPrice(tracker) {
             allVariants: allVariants
           };
         }, tracker.variantSelector);
+            break; // Success — exit retry loop
+          } catch (evalErr) {
+            console.log('[Scraper] #' + trackerId + ' Makeup: evaluate failed (attempt ' + (makeupRetry + 1) + '): ' + evalErr.message);
+            if (makeupRetry === 0) {
+              // Wait and retry — page may have navigated
+              await new Promise(function(r) { setTimeout(r, 3000); });
+            }
+          }
+        }
 
         console.log('[Scraper] #' + trackerId + ' Makeup variant result:', JSON.stringify(makeupResult));
 

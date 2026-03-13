@@ -391,7 +391,7 @@ app.put('/settings/global', async (req, res) => {
 
 // Version endpoint to verify deployment
 app.get('/version', (req, res) => {
-  res.json({ version: 'v2.3.0', deployedAt: new Date().toISOString(), commit: 'eva-click-by-title' });
+  res.json({ version: 'v2.4.0', deployedAt: new Date().toISOString(), commit: 'makeup-retry' });
 });
 
 app.post('/server-check', async (req, res) => {
