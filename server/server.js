@@ -391,7 +391,7 @@ app.put('/settings/global', async (req, res) => {
 
 // Version endpoint to verify deployment
 app.get('/version', (req, res) => {
-  res.json({ version: 'v2.11.0', deployedAt: new Date().toISOString(), commit: 'clear-all-reset-zero' });
+  res.json({ version: 'v2.12.0', deployedAt: new Date().toISOString(), commit: 'fix-notino-giftset-makeup-variant-wait' });
 });
 
 app.post('/server-check', async (req, res) => {

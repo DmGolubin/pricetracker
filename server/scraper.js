@@ -318,21 +318,34 @@ async function extractPrice(tracker) {
     }
 
     // Notino is a React SPA — wait for the price element to render
+    // Try multiple selectors: the main pd-price, or the price wrapper with content attr
     if (isNotino) {
       var pdPriceFound = false;
-      try {
-        await page.waitForSelector('#pd-price span[data-testid="pd-price"]', { timeout: 15000 });
-        pdPriceFound = true;
-        console.log(`[Scraper] #${trackerId} Notino: #pd-price found`);
-      } catch (_) {
-        console.log(`[Scraper] #${trackerId} Notino: #pd-price not found after 15s, retrying after extra wait...`);
-        await new Promise(r => setTimeout(r, 5000));
-        var retryEl = await page.$('#pd-price');
-        if (retryEl) {
+      var notinoSelectors = [
+        '#pd-price span[data-testid="pd-price"]',
+        'span[data-testid="pd-price"]',
+        'div[data-testid="pd-price-wrapper"] span[content]',
+        'span[data-testid="pd-price-wrapper"] span[content]',
+      ];
+      for (var nsi = 0; nsi < notinoSelectors.length && !pdPriceFound; nsi++) {
+        try {
+          await page.waitForSelector(notinoSelectors[nsi], { timeout: nsi === 0 ? 15000 : 3000 });
           pdPriceFound = true;
-          console.log(`[Scraper] #${trackerId} Notino: #pd-price found on retry`);
-        } else {
-          console.log(`[Scraper] #${trackerId} Notino: #pd-price still not found after retry`);
+          console.log(`[Scraper] #${trackerId} Notino: found via ${notinoSelectors[nsi]}`);
+        } catch (_) {}
+      }
+      if (!pdPriceFound) {
+        console.log(`[Scraper] #${trackerId} Notino: no price selector found after all attempts, retrying after extra wait...`);
+        await new Promise(r => setTimeout(r, 5000));
+        for (var nsi2 = 0; nsi2 < notinoSelectors.length && !pdPriceFound; nsi2++) {
+          var retryEl = await page.$(notinoSelectors[nsi2]);
+          if (retryEl) {
+            pdPriceFound = true;
+            console.log(`[Scraper] #${trackerId} Notino: found on retry via ${notinoSelectors[nsi2]}`);
+          }
+        }
+        if (!pdPriceFound) {
+          console.log(`[Scraper] #${trackerId} Notino: still not found after retry`);
         }
       }
     }
@@ -362,6 +375,14 @@ async function extractPrice(tracker) {
       if (isMakeup) {
         // Wait for page to fully settle (Makeup may do JS redirects)
         await new Promise(function(r) { setTimeout(r, 2000); });
+
+        // Wait for variant elements to appear in DOM
+        try {
+          await page.waitForSelector('.variant[data-variant-id]', { timeout: 8000 });
+          console.log('[Scraper] #' + trackerId + ' Makeup: variant elements found in DOM');
+        } catch (_) {
+          console.log('[Scraper] #' + trackerId + ' Makeup: variant elements not found after 8s wait');
+        }
 
         var makeupResult = null;
         for (var makeupRetry = 0; makeupRetry < 2; makeupRetry++) {
