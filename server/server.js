@@ -418,6 +418,82 @@ app.post('/server-check/test/:id', async (req, res) => {
   }
 });
 
+// Debug EVA variant buttons — show HTML, links, and structure
+app.post('/server-check/eva-debug', async (req, res) => {
+  const scraper = require('./scraper');
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+  let page;
+  try {
+    const browser = await scraper.getBrowser();
+    page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    });
+    await page.setRequestInterception(true);
+    page.on('request', (r) => {
+      const t = r.resourceType();
+      if (['image', 'font', 'media'].includes(t)) r.abort(); else r.continue();
+    });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
+    await page.setViewport({ width: 1366, height: 768 });
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+
+    const debug = await page.evaluate(() => {
+      // Find volume buttons container
+      var results = { buttons: [], containerHTML: '', links: [] };
+      // Look for buttons with "мл" text
+      var allBtns = document.querySelectorAll('button');
+      allBtns.forEach(function(btn, i) {
+        var text = (btn.textContent || '').trim();
+        if (text.match(/\d+\s*мл/)) {
+          var parent = btn.parentElement;
+          var grandparent = parent ? parent.parentElement : null;
+          // Check for <a> tags inside or wrapping the button
+          var innerA = btn.querySelector('a');
+          var outerA = btn.closest('a');
+          results.buttons.push({
+            index: i,
+            text: text,
+            outerHTML: btn.outerHTML.substring(0, 300),
+            parentTag: parent ? parent.tagName : null,
+            parentClass: parent ? (parent.className || '').substring(0, 100) : null,
+            grandparentTag: grandparent ? grandparent.tagName : null,
+            hasInnerA: !!innerA,
+            innerAHref: innerA ? innerA.href : null,
+            hasOuterA: !!outerA,
+            outerAHref: outerA ? outerA.href : null,
+            dataAttrs: {},
+          });
+          // Collect data attributes
+          for (var j = 0; j < btn.attributes.length; j++) {
+            var attr = btn.attributes[j];
+            if (attr.name.startsWith('data-')) {
+              results.buttons[results.buttons.length - 1].dataAttrs[attr.name] = attr.value;
+            }
+          }
+        }
+      });
+      // Also look for <a> tags with "мл" text (maybe variants are links, not buttons)
+      var allLinks = document.querySelectorAll('a');
+      allLinks.forEach(function(a) {
+        var text = (a.textContent || '').trim();
+        if (text.match(/\d+\s*мл/)) {
+          results.links.push({ text: text, href: a.href, outerHTML: a.outerHTML.substring(0, 300) });
+        }
+      });
+      return results;
+    });
+
+    await scraper.closeBrowser();
+    res.json(debug);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (page) try { await page.close(); } catch(_) {}
+  }
+});
+
 // Diagnostic endpoint: inspect what Puppeteer sees on a page
 app.post('/server-check/diagnose', async (req, res) => {
   const scraper = require('./scraper');
