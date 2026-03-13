@@ -32,21 +32,48 @@ function cleanProductName(name) {
 }
 
 /**
- * Extract variant label (volume, origin) from the raw product name.
- * Looks for patterns like "— 100ml", "— 50ml — 5091", "— из UA — 7483", "— 30".
+ * Extract variant label (volume, origin, set info) from the raw product name.
+ * Handles all known patterns from Makeup, EVA, Notino product names.
  * @param {string} name — raw productName from DB
- * @returns {string} — e.g. "100ml", "50ml", "из ЕС", "" if none
+ * @returns {string} — e.g. "50ml", "100ml", "из UA", "120ml тестер", "набор edp/100ml + mini/10ml", "" if none
  */
 function extractVariantLabel(name) {
   if (!name) return '';
-  // Pattern: "— из UA [— price]" or "— из ЕС [— price]" (check first, before numbers)
-  var match = name.match(/\s*[-–—]\s*(из\s+\S+)\s*(?:[-–—]\s*\d+)?\s*$/i);
-  if (match) return match[1];
-  // Pattern: "— 100ml [— price]" or "— 30 [— price]"
-  match = name.match(/\s*[-–—]\s*(\d+(?:ml)?)\s*(?:[-–—]\s*\d+)?\s*$/i);
-  if (match) return match[1] + (/ml/i.test(match[1]) ? '' : 'ml');
+
+  // 1. Origin pattern: "— из UA [— price]" or "— из ЕС [— price]"
+  var m = name.match(/[\s\-–—]+из\s+(\S+)(?:\s*[\-–—]\s*\d+)?\s*$/i);
+  if (m) return 'из ' + m[1];
+
+  // 2. Volume with ml suffix and optional trailing price: "— 50ml — 5091" or "— 50ml"
+  m = name.match(/[\s\-–—]+(\d+)\s*ml(?:\s*[\-–—]\s*\d+)?\s*$/i);
+  if (m) return m[1] + 'ml';
+
+  // 3. EVA-style bare number at end: "— 100", "— 30", "— 120"
+  m = name.match(/[\s\-–—]+(\d{2,4})\s*$/);
+  if (m) return m[1] + 'ml';
+
+  // 4. Cyrillic volume in name: "100 мл (ТЕСТЕР)" or "120 мл (тестер)" or "50 мл"
+  m = name.match(/(\d+)\s*мл\s*(?:\(([^)]+)\))?\s*/i);
+  if (m) {
+    var label = m[1] + 'ml';
+    if (m[2]) label += ' ' + m[2].toLowerCase();
+    return label;
+  }
+
+  // 5. Set/bundle in parentheses: "(edp/100ml + edp/mini/10ml)"
+  m = name.match(/\(([^)]*\d+\s*ml[^)]*)\)/i);
+  if (m) {
+    // Shorten: "edp/100ml + edp/mini/10ml" → "100ml + 10ml"
+    var parts = m[1].split('+').map(function(p) {
+      var vol = p.match(/(\d+)\s*ml/i);
+      return vol ? vol[1] + 'ml' : p.trim();
+    });
+    return 'набор ' + parts.join(' + ');
+  }
+
   return '';
 }
+
 
 function getShopLabel(domain) {
   if (!domain) return '';
