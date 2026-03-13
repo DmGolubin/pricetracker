@@ -379,6 +379,21 @@ app.get('/server-check/status', (req, res) => {
   res.json(scheduler.getStatus());
 });
 
+// Test single tracker extraction (debug)
+app.post('/server-check/test/:id', async (req, res) => {
+  const scraper = require('./scraper');
+  try {
+    const { rows } = await pool.query('SELECT * FROM trackers WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Tracker not found' });
+    const tracker = rows[0];
+    const result = await scraper.extractPrice(tracker);
+    await scraper.closeBrowser();
+    res.json({ trackerId: tracker.id, productName: tracker.productName, cssSelector: tracker.cssSelector, variantSelector: tracker.variantSelector, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Diagnostic endpoint: inspect what Puppeteer sees on a page
 app.post('/server-check/diagnose', async (req, res) => {
   const scraper = require('./scraper');
