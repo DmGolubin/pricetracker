@@ -282,19 +282,19 @@ app.post('/trackers/auto-group', async (req, res) => {
 app.post('/priceHistory/clear-all', async (req, res) => {
   try {
     await pool.query('DELETE FROM price_history');
-    await pool.query(`
+    const { rowCount } = await pool.query(`
       UPDATE trackers SET
-        "currentPrice" = "initialPrice",
-        "minPrice" = "initialPrice",
-        "maxPrice" = "initialPrice",
+        "currentPrice" = 0,
+        "minPrice" = 0,
+        "maxPrice" = 0,
         "previousPrice" = 0,
+        "initialPrice" = 0,
         status = 'active',
         unread = false,
         "errorMessage" = '',
         "lastCheckedAt" = NULL,
         "updatedAt" = NOW()
     `);
-    const { rowCount } = await pool.query('SELECT COUNT(*) FROM trackers');
     res.json({ cleared: true, trackersReset: rowCount });
   } catch (err) {
     console.error('POST /priceHistory/clear-all error:', err);
@@ -391,7 +391,7 @@ app.put('/settings/global', async (req, res) => {
 
 // Version endpoint to verify deployment
 app.get('/version', (req, res) => {
-  res.json({ version: 'v2.10.0', deployedAt: new Date().toISOString(), commit: 'eva-js-dispatch' });
+  res.json({ version: 'v2.11.0', deployedAt: new Date().toISOString(), commit: 'clear-all-reset-zero' });
 });
 
 app.post('/server-check', async (req, res) => {
