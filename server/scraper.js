@@ -173,10 +173,12 @@ async function extractPrice(tracker) {
     const isEva = (tracker.pageUrl || '').indexOf('eva.ua') !== -1;
     const isNotino = (tracker.pageUrl || '').indexOf('notino.ua') !== -1;
 
-    // ─── EVA.UA variant: find variant buttons by title pattern, navigate by hash ──
-    // EVA is a Vue/Nuxt SPA. Clicking variant buttons doesn't work in headless.
-    // Strategy: find all variant buttons with title="VOLUME (PRODUCT_ID)" pattern,
-    // match the desired variant by volume from productName, then navigate to hash URL.
+    // ─── EVA.UA variant: click variant button found by title pattern ──────────
+    // EVA is a Vue/Nuxt SPA. The variant buttons have title="VOLUME (PRODUCT_ID)".
+    // Hash navigation doesn't work (EVA ignores the hash on initial load).
+    // But clicking the button DOES work — we just need to find it by title.
+    // Strategy: extract volume from productName, find button by title, click it,
+    // wait for price to update.
     if (isEva && tracker.variantSelector) {
       // Extract desired volume from productName (e.g., "— 100" or "— 30")
       var volumeMatch = (tracker.productName || '').match(/—\s*(\d+)/);
@@ -184,9 +186,10 @@ async function extractPrice(tracker) {
       console.log('[Scraper] #' + trackerId + ' EVA: looking for variant, desired volume: ' + (desiredVolume || 'unknown'));
 
       var evaVariantResult = await page.evaluate(function(varSel, wantedVol) {
-        // Strategy 1: find all variant buttons with title="VOLUME (ID)" pattern
+        // Find all variant buttons with title="VOLUME (ID)" pattern
         var allButtons = [];
         var matchedBtn = null;
+        var matchedEl = null;
         var buttons = document.querySelectorAll('button[title]');
         buttons.forEach(function(b) {
           var t = (b.getAttribute('title') || '').trim();
@@ -200,31 +203,11 @@ async function extractPrice(tracker) {
               outOfStock: (b.className || '').indexOf('border-dark-900') !== -1
             };
             allButtons.push(info);
-            // Match by desired volume
             if (wantedVol && m[1] === wantedVol) {
               matchedBtn = info;
             }
           }
         });
-
-        // Strategy 2: if no volume match, try the variantSelector directly
-        if (!matchedBtn) {
-          var btn = null;
-          try { btn = document.querySelector(varSel); } catch(e) {}
-          if (btn) {
-            var title = (btn.getAttribute('title') || '').trim();
-            var idMatch = title.match(/\((\d+)\)/);
-            if (idMatch) {
-              matchedBtn = {
-                title: title,
-                volume: title.replace(/\s*\(\d+\)/, ''),
-                productId: idMatch[1],
-                selected: (btn.className || '').indexOf('border-apple') !== -1,
-                outOfStock: (btn.className || '').indexOf('border-dark-900') !== -1
-              };
-            }
-          }
-        }
 
         // Read current price
         var priceEl = document.querySelector('[data-testid="product-price"]');
@@ -252,66 +235,62 @@ async function extractPrice(tracker) {
           }
         }
 
-        if (matched.productId) {
-          // Navigate to the variant-specific URL using hash
-          var baseUrl = (tracker.pageUrl || '').split('#')[0];
-          var variantUrl = baseUrl + '#/' + matched.productId;
-          console.log('[Scraper] #' + trackerId + ' EVA: navigating to variant URL: ' + variantUrl);
+        // Click the variant button using title-based selector
+        var titleSelector = 'button[title="' + matched.title + '"]';
+        console.log('[Scraper] #' + trackerId + ' EVA: clicking variant via: ' + titleSelector);
 
+        try {
+          await page.waitForSelector(titleSelector, { timeout: 5000 });
+          await page.click(titleSelector);
+
+          // Wait for Vue to re-render and price to update
+          await new Promise(function(r) { setTimeout(r, 3000); });
+
+          // Wait for price element to reappear (Vue may destroy and recreate it)
           try {
-            await page.goto(variantUrl, { waitUntil: 'networkidle2', timeout: PAGE_TIMEOUT_MS });
-            // Wait for Vue/Nuxt to hydrate and process the hash route
+            await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
+          } catch (_) {}
+          await new Promise(function(r) { setTimeout(r, 2000); });
+
+          var evaPrice = await page.evaluate(function() {
+            var el = document.querySelector('[data-testid="product-price"]');
+            return el ? (el.textContent || '').trim() : null;
+          });
+          console.log('[Scraper] #' + trackerId + ' EVA: price after click: ' + (evaPrice || 'none'));
+
+          if (evaPrice) {
+            var price = parsePrice(evaPrice);
+            if (price !== null && price > 0) {
+              var elapsed = Date.now() - pageStart;
+              console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA variant click, ' + elapsed + 'ms) — ' + shortName);
+              return { success: true, price: price };
+            }
+          }
+
+          // Price element might have been destroyed — wait longer and retry
+          if (!evaPrice) {
+            console.log('[Scraper] #' + trackerId + ' EVA: price not found after click, waiting longer...');
             await new Promise(function(r) { setTimeout(r, 5000); });
             try {
               await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
             } catch (_) {}
             await new Promise(function(r) { setTimeout(r, 2000); });
 
-            var evaPrice = await page.evaluate(function() {
+            evaPrice = await page.evaluate(function() {
               var el = document.querySelector('[data-testid="product-price"]');
               return el ? (el.textContent || '').trim() : null;
             });
-            console.log('[Scraper] #' + trackerId + ' EVA: price after variant navigation: ' + (evaPrice || 'none'));
-
             if (evaPrice) {
               var price = parsePrice(evaPrice);
               if (price !== null && price > 0) {
                 var elapsed = Date.now() - pageStart;
-                console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA variant URL, ' + elapsed + 'ms) — ' + shortName);
+                console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA variant click retry, ' + elapsed + 'ms) — ' + shortName);
                 return { success: true, price: price };
               }
             }
-          } catch (navErr) {
-            console.log('[Scraper] #' + trackerId + ' EVA: variant navigation failed: ' + navErr.message);
           }
-
-          // Fallback: try setting hash via JS on the already-loaded page
-          console.log('[Scraper] #' + trackerId + ' EVA: trying hash change fallback...');
-          try {
-            await page.evaluate(function(pid) {
-              window.location.hash = '/' + pid;
-              window.dispatchEvent(new HashChangeEvent('hashchange'));
-              window.dispatchEvent(new PopStateEvent('popstate'));
-            }, matched.productId);
-            await new Promise(function(r) { setTimeout(r, 5000); });
-            try {
-              await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
-            } catch (_) {}
-            await new Promise(function(r) { setTimeout(r, 2000); });
-
-            var hashPrice = await page.evaluate(function() {
-              var el = document.querySelector('[data-testid="product-price"]');
-              return el ? (el.textContent || '').trim() : null;
-            });
-            if (hashPrice) {
-              var price = parsePrice(hashPrice);
-              if (price !== null && price > 0) {
-                var elapsed = Date.now() - pageStart;
-                console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA hash fallback, ' + elapsed + 'ms) — ' + shortName);
-                return { success: true, price: price };
-              }
-            }
-          } catch (_) {}
+        } catch (clickErr) {
+          console.log('[Scraper] #' + trackerId + ' EVA: click failed: ' + clickErr.message);
         }
       } else {
         console.log('[Scraper] #' + trackerId + ' EVA: no matching variant button found. Buttons:', JSON.stringify((evaVariantResult || {}).allButtons));
