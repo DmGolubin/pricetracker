@@ -495,7 +495,69 @@ async function extractPrice(tracker) {
             console.log('[Scraper] #' + trackerId + ' Makeup: variant found but no data-price or meta price');
           }
         } else {
-          console.log('[Scraper] #' + trackerId + ' Makeup: variant element not found, trying click fallback...');
+          console.log('[Scraper] #' + trackerId + ' Makeup: variant element not found, trying meta price fallback...');
+          
+          // Fallback: extract variant ID from selector, find any element with that data-variant-id
+          // or read price from meta[itemprop="price"] matching the variant volume from productName
+          var metaFallbackResult = null;
+          try {
+            metaFallbackResult = await page.evaluate(function(sel, prodName) {
+              // Extract variant ID from selector
+              var rawMatch = sel.match(/data-variant-id[*~|^$]?=["']?([^"'\]]+)/);
+              var variantId = rawMatch ? rawMatch[1].replace(/\\/g, '').trim() : null;
+              
+              // Try finding element by data-variant-id without .variant class requirement
+              var el = null;
+              if (variantId) {
+                el = document.querySelector('[data-variant-id="' + variantId + '"]');
+              }
+              if (el) {
+                var dp = el.getAttribute('data-price');
+                var meta = el.querySelector('meta[itemprop="price"]');
+                var metaPrice = meta ? meta.getAttribute('content') : null;
+                return { found: true, price: dp || metaPrice, method: 'data-variant-id-no-class' };
+              }
+              
+              // Try extracting volume from productName (e.g., "— 50ml — 5334")
+              var volMatch = (prodName || '').match(/—\s*(\d+)ml/i);
+              var wantedVol = volMatch ? volMatch[1] + 'ml' : null;
+              
+              // Search all elements with data-variant-id (any tag/class)
+              var allVarEls = document.querySelectorAll('[data-variant-id]');
+              for (var i = 0; i < allVarEls.length; i++) {
+                var v = allVarEls[i];
+                var title = (v.getAttribute('title') || '').trim().toLowerCase();
+                var dp2 = v.getAttribute('data-price');
+                var vid = v.getAttribute('data-variant-id');
+                if (variantId && vid === variantId && dp2) {
+                  return { found: true, price: dp2, method: 'any-element-variant-id' };
+                }
+                if (wantedVol && title === wantedVol.toLowerCase() && dp2) {
+                  return { found: true, price: dp2, method: 'volume-title-match' };
+                }
+              }
+              
+              // Last resort: read the main displayed price (itemprop="price")
+              var mainPrice = document.querySelector('span[itemprop="price"]');
+              if (mainPrice) {
+                return { found: true, price: mainPrice.textContent.trim(), method: 'main-itemprop-price' };
+              }
+              
+              return { found: false };
+            }, tracker.variantSelector, tracker.productName);
+          } catch (e) {
+            console.log('[Scraper] #' + trackerId + ' Makeup: meta fallback evaluate error: ' + e.message);
+          }
+          
+          if (metaFallbackResult && metaFallbackResult.found && metaFallbackResult.price) {
+            var price = parsePrice(metaFallbackResult.price);
+            if (price !== null && price > 0) {
+              var elapsed = Date.now() - pageStart;
+              console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (Makeup ' + metaFallbackResult.method + ', ' + elapsed + 'ms) — ' + shortName);
+              return { success: true, price: price };
+            }
+          }
+          console.log('[Scraper] #' + trackerId + ' Makeup: meta fallback result:', JSON.stringify(metaFallbackResult));
         }
       }
 
@@ -622,7 +684,10 @@ async function extractPrice(tracker) {
     // Notino special: read price from content attribute of span[data-testid="pd-price"]
     // This is more reliable than textContent because font tags may not render in headless
     if (isNotino) {
-      var notinoPrice = await page.evaluate(function() {
+      var notinoPrice = null;
+      for (var notinoAttempt = 0; notinoAttempt < 2; notinoAttempt++) {
+        try {
+          notinoPrice = await page.evaluate(function() {
         // Try content attribute first (most reliable)
         var span = document.querySelector('span[data-testid="pd-price"]');
         if (span) {
@@ -653,6 +718,15 @@ async function extractPrice(tracker) {
         }
         return null;
       });
+          if (notinoPrice) break; // Got a result, exit retry loop
+        } catch (notinoEvalErr) {
+          console.log('[Scraper] #' + trackerId + ' Notino: evaluate attempt ' + (notinoAttempt + 1) + ' failed: ' + notinoEvalErr.message);
+          if (notinoAttempt === 0) {
+            // Wait and retry — page may have navigated (detached frame)
+            await new Promise(function(r) { setTimeout(r, 3000); });
+          }
+        }
+      }
       if (notinoPrice) {
         var price = parsePrice(notinoPrice);
         if (price !== null && price > 0) {
