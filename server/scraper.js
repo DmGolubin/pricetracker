@@ -256,13 +256,26 @@ async function extractPrice(tracker) {
           });
           console.log('[Scraper] #' + trackerId + ' EVA: price before click: ' + (priceBefore || 'none'));
 
-          // Use JS click via evaluate to avoid Puppeteer navigation issues.
-          // Puppeteer's page.click() triggers navigation detection which causes
-          // "detached Frame" errors on SPAs. JS click stays in the same context.
-          await page.evaluate(function(sel) {
-            var btn = document.querySelector(sel);
-            if (btn) btn.click();
-          }, titleSelector);
+          // Try Puppeteer click first (more reliable for triggering Vue events),
+          // fall back to JS click if Puppeteer click causes frame detach.
+          var clickWorked = false;
+          try {
+            await page.click(titleSelector);
+            clickWorked = true;
+          } catch (puppeteerClickErr) {
+            console.log('[Scraper] #' + trackerId + ' EVA: Puppeteer click failed: ' + puppeteerClickErr.message + ', trying JS click...');
+            try {
+              await page.evaluate(function(sel) {
+                var btn = document.querySelector(sel);
+                if (btn) {
+                  btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                }
+              }, titleSelector);
+              clickWorked = true;
+            } catch (jsClickErr) {
+              console.log('[Scraper] #' + trackerId + ' EVA: JS click also failed: ' + jsClickErr.message);
+            }
+          }
 
           // Wait for Vue to process the click and update the price
           await new Promise(function(r) { setTimeout(r, 4000); });
