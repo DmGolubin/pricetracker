@@ -9,7 +9,7 @@
  */
 
 // Currency symbols / words to strip (order matters — R$ before $)
-const CURRENCY_PATTERN = /R\$|kr|zł|kn|[€$₽₴£¥₩₹₺₫฿]/gi;
+const CURRENCY_PATTERN = /R\$|kr|zł|kn|грн|руб|[€$₽₴£¥₩₹₺₫฿]/gi;
 
 /**
  * Parse a price string into a number.
@@ -21,6 +21,9 @@ function parsePrice(text) {
 
   // Strip currency symbols and trim
   let cleaned = text.replace(CURRENCY_PATTERN, '').trim();
+
+  // Strip any remaining non-numeric, non-separator characters (e.g. leftover currency words)
+  cleaned = cleaned.replace(/[^\d.,\s\u00A0\u202F-]/g, '').trim();
 
   // Remove non-breaking spaces (U+00A0) and narrow no-break spaces (U+202F)
   cleaned = cleaned.replace(/[\u00A0\u202F]/g, ' ');
