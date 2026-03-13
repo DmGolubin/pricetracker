@@ -278,6 +278,30 @@ app.post('/trackers/auto-group', async (req, res) => {
 
 // ─── Price History ──────────────────────────────────────────────────
 
+// Clear all price history and reset tracker prices to initialPrice
+app.post('/priceHistory/clear-all', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM price_history');
+    await pool.query(`
+      UPDATE trackers SET
+        "currentPrice" = "initialPrice",
+        "minPrice" = "initialPrice",
+        "maxPrice" = "initialPrice",
+        "previousPrice" = 0,
+        status = 'active',
+        unread = false,
+        "errorMessage" = '',
+        "lastCheckedAt" = NULL,
+        "updatedAt" = NOW()
+    `);
+    const { rowCount } = await pool.query('SELECT COUNT(*) FROM trackers');
+    res.json({ cleared: true, trackersReset: rowCount });
+  } catch (err) {
+    console.error('POST /priceHistory/clear-all error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/priceHistory', async (req, res) => {
   try {
     const trackerId = req.query.trackerId;
