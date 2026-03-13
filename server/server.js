@@ -389,6 +389,11 @@ app.put('/settings/global', async (req, res) => {
 
 // ─── Server-side Price Check (Scheduler) ────────────────────────────
 
+// Version endpoint to verify deployment
+app.get('/version', (req, res) => {
+  res.json({ version: 'v2.1.0', deployedAt: new Date().toISOString(), commit: 'fdcf997' });
+});
+
 app.post('/server-check', async (req, res) => {
   try {
     const result = await scheduler.triggerManualCheck(pool);
