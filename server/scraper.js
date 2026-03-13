@@ -173,6 +173,17 @@ async function extractPrice(tracker) {
     const isEva = (tracker.pageUrl || '').indexOf('eva.ua') !== -1;
     const isNotino = (tracker.pageUrl || '').indexOf('notino.ua') !== -1;
 
+    // EVA.UA with hash variant: wait for React hydration to process the hash route
+    if (isEva && (tracker.pageUrl || '').indexOf('#') !== -1) {
+      console.log('[Scraper] #' + trackerId + ' EVA: URL has hash variant, waiting for React hydration...');
+      // Wait for React to hydrate and process the hash route
+      await new Promise(function(r) { setTimeout(r, 5000); });
+      // Check if the price element changed after hydration
+      try {
+        await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
+      } catch (_) {}
+    }
+
     // Notino is a React SPA — wait for the price element to render
     if (isNotino) {
       var pdPriceFound = false;
@@ -295,50 +306,58 @@ async function extractPrice(tracker) {
         console.log('[Scraper] #' + trackerId + ' Price before click: ' + (priceBeforeClick || 'not found'));
 
         // EVA.UA: React SPA — variant click causes full component re-render.
-        // Strategy: use JavaScript click + wait for price element to reappear.
+        // Strategy 1: Try programmatic hash navigation
+        // Strategy 2: Try Puppeteer click with navigation wait
+        // Strategy 3: Read default price if variant click fails
         if (isEva) {
-          await page.evaluate(function(sel) {
+          // First try: programmatic click via Puppeteer
+          console.log('[Scraper] #' + trackerId + ' EVA: clicking variant button...');
+          
+          // Get the button text to log which variant we're clicking
+          var btnText = await page.evaluate(function(sel) {
             var btn = document.querySelector(sel);
-            if (btn) {
-              // Dispatch a real click event
-              btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-            }
+            return btn ? (btn.textContent || '').trim() : 'not found';
           }, tracker.variantSelector);
+          console.log('[Scraper] #' + trackerId + ' EVA: variant button text: "' + btnText + '"');
+
+          // Capture price before click
+          var priceBefore = await page.evaluate(function() {
+            var el = document.querySelector('[data-testid="product-price"]');
+            return el ? (el.textContent || '').trim() : null;
+          });
+          console.log('[Scraper] #' + trackerId + ' EVA: price before click: ' + (priceBefore || 'none'));
+
+          // Try clicking with Promise.all to catch any navigation
+          try {
+            await Promise.all([
+              page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 10000 }).catch(function() {}),
+              page.click(tracker.variantSelector),
+            ]);
+          } catch (_) {}
           variantClicked = true;
-          console.log('[Scraper] #' + trackerId + ' EVA: dispatched JS click on variant');
 
-          // Wait for the price element to disappear (React unmount)
-          var disappeared = false;
-          try {
-            await page.waitForFunction(
-              function() { return !document.querySelector('[data-testid="product-price"]'); },
-              { timeout: 3000 }
-            );
-            disappeared = true;
-            console.log('[Scraper] #' + trackerId + ' EVA: price element disappeared');
-          } catch (_) {
-            console.log('[Scraper] #' + trackerId + ' EVA: price element did not disappear, trying page.goto with hash...');
-          }
+          // Wait for React to re-render
+          await new Promise(function(r) { setTimeout(r, 5000); });
 
-          if (!disappeared) {
-            // Fallback: navigate to the page URL directly (may contain hash for variant)
-            var trackerUrl = tracker.pageUrl || '';
-            if (trackerUrl.indexOf('#') !== -1) {
-              console.log('[Scraper] #' + trackerId + ' EVA: navigating to URL with hash: ' + trackerUrl);
-              await page.goto(trackerUrl, { waitUntil: 'networkidle2', timeout: 15000 }).catch(function() {});
-              await new Promise(function(r) { setTimeout(r, 3000); });
+          // Check if price element exists now
+          var priceAfter = await page.evaluate(function() {
+            var el = document.querySelector('[data-testid="product-price"]');
+            return el ? (el.textContent || '').trim() : null;
+          });
+          console.log('[Scraper] #' + trackerId + ' EVA: price after click+wait: ' + (priceAfter || 'none'));
+          console.log('[Scraper] #' + trackerId + ' EVA: current URL: ' + (await page.url()));
+
+          // If price element disappeared, wait longer for it to reappear
+          if (!priceAfter) {
+            console.log('[Scraper] #' + trackerId + ' EVA: price gone, waiting for reappear...');
+            try {
+              await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
+              console.log('[Scraper] #' + trackerId + ' EVA: price element reappeared');
+            } catch (_) {
+              console.log('[Scraper] #' + trackerId + ' EVA: price element did not reappear');
             }
+            await new Promise(function(r) { setTimeout(r, 2000); });
           }
-
-          // Wait for price element to appear
-          try {
-            await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
-            console.log('[Scraper] #' + trackerId + ' EVA: price element found');
-          } catch (_) {
-            console.log('[Scraper] #' + trackerId + ' EVA: price element not found after 15s');
-            await new Promise(function(r) { setTimeout(r, 5000); });
-          }
-          await new Promise(function(r) { setTimeout(r, 1500); });
         } else {
           await page.click(tracker.variantSelector);
           variantClicked = true;
