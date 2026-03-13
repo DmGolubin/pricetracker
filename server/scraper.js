@@ -329,6 +329,40 @@ async function extractPrice(tracker) {
     }
 
     // ─── Non-variant trackers: try the CSS selector directly ─────────
+
+    // Notino special: read price from content attribute of span[data-testid="pd-price"]
+    // This is more reliable than textContent because font tags may not render in headless
+    if (isNotino) {
+      var notinoPrice = await page.evaluate(function() {
+        // Try content attribute first (most reliable)
+        var span = document.querySelector('span[data-testid="pd-price"]');
+        if (span) {
+          var content = span.getAttribute('content');
+          if (content && /\d/.test(content)) return content;
+          var text = (span.textContent || '').trim();
+          if (text && /\d/.test(text)) return text;
+        }
+        // Fallback: #pd-price textContent
+        var pdPrice = document.querySelector('#pd-price');
+        if (pdPrice) {
+          var text = (pdPrice.textContent || '').trim();
+          if (text && /\d/.test(text)) return text;
+        }
+        return null;
+      });
+      if (notinoPrice) {
+        var price = parsePrice(notinoPrice);
+        if (price !== null && price > 0) {
+          var elapsed = Date.now() - pageStart;
+          console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (notino content attr, ' + elapsed + 'ms) — ' + shortName);
+          return { success: true, price: price };
+        }
+        console.log('[Scraper] #' + trackerId + ' Notino: found text "' + notinoPrice + '" but parse failed');
+      } else {
+        console.log('[Scraper] #' + trackerId + ' Notino: no price element found at all');
+      }
+    }
+
     const result = await page.evaluate((cssSelector, excludedSelectors) => {
       const el = document.querySelector(cssSelector);
       if (!el) return { found: false, text: null };
@@ -441,6 +475,7 @@ async function autoDetectPriceOnPage(page) {
       // EVA.ua specific
       '[data-testid="product-price"]', '[data-testid="price"]',
       // Notino.ua specific
+      'span[data-testid="pd-price"]',
       '#pd-price',
       // Generic
       '[itemprop="price"]', '[data-price]',
