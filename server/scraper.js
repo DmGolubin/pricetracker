@@ -103,10 +103,15 @@ async function extractPrice(tracker) {
     page = await browser.newPage();
 
     // Block images, fonts, media to speed up loading
+    // Don't block stylesheets for Notino (React SPA may need CSS)
+    const isNotinoPage = (tracker.pageUrl || '').indexOf('notino.ua') !== -1;
     await page.setRequestInterception(true);
     page.on('request', (req) => {
       const type = req.resourceType();
-      if (['image', 'font', 'media', 'stylesheet'].includes(type)) {
+      const blockTypes = isNotinoPage
+        ? ['image', 'font', 'media']
+        : ['image', 'font', 'media', 'stylesheet'];
+      if (blockTypes.includes(type)) {
         req.abort();
       } else {
         req.continue();
@@ -133,6 +138,17 @@ async function extractPrice(tracker) {
     // Determine site-specific price selectors for this URL
     const isMakeup = (tracker.pageUrl || '').indexOf('makeup.com.ua') !== -1;
     const isEva = (tracker.pageUrl || '').indexOf('eva.ua') !== -1;
+    const isNotino = (tracker.pageUrl || '').indexOf('notino.ua') !== -1;
+
+    // Notino is a React SPA — wait for the price element to render
+    if (isNotino) {
+      try {
+        await page.waitForSelector('#pd-price', { timeout: 10000 });
+        console.log(`[Scraper] #${trackerId} Notino: #pd-price found`);
+      } catch (_) {
+        console.log(`[Scraper] #${trackerId} Notino: #pd-price not found after 10s wait`);
+      }
+    }
 
     // Build the list of selectors to watch for price changes after variant click
     var priceWatchSelectors = [];
