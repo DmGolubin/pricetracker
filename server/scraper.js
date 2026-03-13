@@ -160,9 +160,16 @@ async function extractPrice(tracker) {
     });
 
     // Navigate to the page
-    console.log(`[Scraper] #${trackerId} Loading: ${tracker.pageUrl}`);
+    // For EVA with hash URLs and variant selector: strip the hash to avoid
+    // SPA navigation issues during initial load. We'll click the variant later.
+    var navigateUrl = tracker.pageUrl;
+    if (isEvaPage && tracker.variantSelector && (navigateUrl || '').indexOf('#') !== -1) {
+      navigateUrl = navigateUrl.split('#')[0];
+      console.log(`[Scraper] #${trackerId} EVA: stripped hash, loading base URL: ${navigateUrl}`);
+    }
+    console.log(`[Scraper] #${trackerId} Loading: ${navigateUrl}`);
     const navStart = Date.now();
-    await page.goto(tracker.pageUrl, {
+    await page.goto(navigateUrl, {
       waitUntil: 'networkidle2',
       timeout: PAGE_TIMEOUT_MS,
     });
