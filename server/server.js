@@ -421,13 +421,18 @@ app.post('/server-check/test/:id', async (req, res) => {
 // Diagnostic endpoint: inspect what Puppeteer sees on a page
 app.post('/server-check/diagnose', async (req, res) => {
   const scraper = require('./scraper');
-  const { url, variantSelector } = req.body;
+  const { url, variantSelector, waitAfterClick } = req.body;
   if (!url) return res.status(400).json({ error: 'url required' });
 
   let page;
   try {
     const browser = await scraper.getBrowser();
     page = await browser.newPage();
+
+    // Anti-detection
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    });
     await page.setRequestInterception(true);
     page.on('request', (r) => {
       const t = r.resourceType();
@@ -464,13 +469,51 @@ app.post('/server-check/diagnose', async (req, res) => {
 
     let afterClick = null;
     let variantFound = false;
+    let variantButtons = null;
+    let urlAfterClick = null;
+
+    // List all variant buttons on the page
+    variantButtons = await page.evaluate(() => {
+      var buttons = [];
+      document.querySelectorAll('button').forEach(function(btn) {
+        var text = (btn.textContent || '').trim();
+        if (text && text.length < 30 && /\d/.test(text)) {
+          var rect = btn.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            // Build a simple selector path
+            var parent = btn.parentElement;
+            var idx = parent ? Array.from(parent.children).indexOf(btn) + 1 : 0;
+            buttons.push({ text: text, tag: btn.tagName, cls: btn.className.substring(0, 80), childIndex: idx });
+          }
+        }
+      });
+      return buttons;
+    });
+
     if (variantSelector) {
       try {
         await page.waitForSelector(variantSelector, { timeout: 5000 });
         variantFound = true;
+
+        var urlBefore = await page.url();
         await page.click(variantSelector);
-        await page.waitForNetworkIdle({ timeout: 3000 }).catch(() => {});
-        await new Promise(r => setTimeout(r, 3000));
+
+        // Wait for URL change (pushState)
+        await page.waitForFunction(
+          function(old) { return window.location.href !== old; },
+          { timeout: 5000 },
+          urlBefore
+        ).catch(function() {});
+
+        await page.waitForNetworkIdle({ timeout: 5000 }).catch(() => {});
+
+        // Wait for price element to reappear
+        try {
+          await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
+        } catch(_) {}
+
+        await new Promise(r => setTimeout(r, 2000));
+        urlAfterClick = await page.url();
 
         afterClick = await page.evaluate(() => {
           const sels = [
@@ -490,7 +533,7 @@ app.post('/server-check/diagnose', async (req, res) => {
       } catch(e) { afterClick = { error: e.message }; }
     }
 
-    res.json({ pageInfo, beforeClick, afterClick, variantFound, variantSelector });
+    res.json({ pageInfo, beforeClick, afterClick, variantFound, variantSelector, variantButtons, urlAfterClick });
   } catch (err) {
     res.status(500).json({ error: err.message });
   } finally {
