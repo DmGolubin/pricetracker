@@ -127,10 +127,12 @@ async function extractPrice(tracker) {
     // Block images, fonts, media to speed up loading
     // Don't block stylesheets for Notino (React SPA may need CSS)
     const isNotinoPage = (tracker.pageUrl || '').indexOf('notino.ua') !== -1;
+    const isEvaPage = (tracker.pageUrl || '').indexOf('eva.ua') !== -1;
     await page.setRequestInterception(true);
     page.on('request', (req) => {
       const type = req.resourceType();
-      const blockTypes = isNotinoPage
+      // Don't block stylesheets for React SPAs (Notino, EVA) — they need CSS for rendering
+      const blockTypes = (isNotinoPage || isEvaPage)
         ? ['image', 'font', 'media']
         : ['image', 'font', 'media', 'stylesheet'];
       if (blockTypes.includes(type)) {
@@ -301,28 +303,28 @@ async function extractPrice(tracker) {
           await page.click(tracker.variantSelector);
           variantClicked = true;
 
-          // Wait for URL to change (pushState) or timeout
+          // Wait for the price element to disappear (React unmount)
           try {
             await page.waitForFunction(
-              function(oldUrl) { return window.location.href !== oldUrl; },
-              { timeout: 5000 },
-              urlBeforeClick
+              function(sel) { return !document.querySelector(sel); },
+              { timeout: 3000 },
+              '[data-testid="product-price"]'
             );
-            console.log('[Scraper] #' + trackerId + ' EVA: URL changed after variant click');
+            console.log('[Scraper] #' + trackerId + ' EVA: price element disappeared (React re-render)');
           } catch (_) {
-            console.log('[Scraper] #' + trackerId + ' EVA: URL did not change (same variant or click failed)');
+            // Element may not disappear if same variant was already selected
+            console.log('[Scraper] #' + trackerId + ' EVA: price element did not disappear');
           }
 
-          // Wait for network to settle after SPA transition
-          await page.waitForNetworkIdle({ timeout: 5000 }).catch(function() {});
-
-          // Wait for price element to reappear
+          // Now wait for it to reappear
           try {
-            await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
-            console.log('[Scraper] #' + trackerId + ' EVA: price element found after variant click');
+            await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
+            console.log('[Scraper] #' + trackerId + ' EVA: price element reappeared');
           } catch (_) {
-            console.log('[Scraper] #' + trackerId + ' EVA: price element not found, extra wait...');
-            await new Promise(function(r) { setTimeout(r, 5000); });
+            console.log('[Scraper] #' + trackerId + ' EVA: price element not found after 15s');
+            // Try waiting for network idle and then check again
+            await page.waitForNetworkIdle({ timeout: 5000 }).catch(function() {});
+            await new Promise(function(r) { setTimeout(r, 3000); });
           }
           await new Promise(function(r) { setTimeout(r, 1500); });
         } else {
