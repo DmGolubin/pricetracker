@@ -256,53 +256,40 @@ async function extractPrice(tracker) {
           });
           console.log('[Scraper] #' + trackerId + ' EVA: price before click: ' + (priceBefore || 'none'));
 
-          // Try Puppeteer click first (more reliable for triggering Vue events),
-          // fall back to JS click if Puppeteer click causes frame detach.
-          var clickWorked = false;
+          // Click the variant button. Puppeteer click may cause SPA navigation
+          // which detaches the frame. We handle this by catching the error and
+          // waiting for the page to settle.
+          var clickCausedNavigation = false;
           try {
             await page.click(titleSelector);
-            clickWorked = true;
-          } catch (puppeteerClickErr) {
-            console.log('[Scraper] #' + trackerId + ' EVA: Puppeteer click failed: ' + puppeteerClickErr.message + ', trying JS click...');
-            try {
-              await page.evaluate(function(sel) {
-                var btn = document.querySelector(sel);
-                if (btn) {
-                  btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                }
-              }, titleSelector);
-              clickWorked = true;
-            } catch (jsClickErr) {
-              console.log('[Scraper] #' + trackerId + ' EVA: JS click also failed: ' + jsClickErr.message);
-            }
+          } catch (clickErr) {
+            console.log('[Scraper] #' + trackerId + ' EVA: click caused error: ' + clickErr.message);
+            clickCausedNavigation = true;
           }
 
-          // Wait for Vue to process the click and update the price
+          // After click, the SPA may navigate. Wait for everything to settle.
+          if (clickCausedNavigation) {
+            // Wait for any pending navigation to complete
+            try {
+              await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
+            } catch (_) {}
+          }
           await new Promise(function(r) { setTimeout(r, 4000); });
 
-          // Wait for price element (may be re-rendered)
-          try {
-            await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
-          } catch (_) {}
-          await new Promise(function(r) { setTimeout(r, 2000); });
-
+          // Try to read the price — may need multiple attempts if frame was detached
           var evaPrice = null;
-          try {
-            evaPrice = await page.evaluate(function() {
-              var el = document.querySelector('[data-testid="product-price"]');
-              return el ? (el.textContent || '').trim() : null;
-            });
-          } catch (evalErr) {
-            // If context was destroyed, wait for new page and retry
-            console.log('[Scraper] #' + trackerId + ' EVA: context destroyed after JS click, waiting for reload...');
-            await new Promise(function(r) { setTimeout(r, 5000); });
+          for (var readAttempt = 0; readAttempt < 3; readAttempt++) {
             try {
-              await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
+              await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
               evaPrice = await page.evaluate(function() {
                 var el = document.querySelector('[data-testid="product-price"]');
                 return el ? (el.textContent || '').trim() : null;
               });
-            } catch (_) {}
+              if (evaPrice) break;
+            } catch (readErr) {
+              console.log('[Scraper] #' + trackerId + ' EVA: read attempt ' + (readAttempt + 1) + ' failed: ' + readErr.message);
+              await new Promise(function(r) { setTimeout(r, 3000); });
+            }
           }
           console.log('[Scraper] #' + trackerId + ' EVA: price after click: ' + (evaPrice || 'none'));
 
