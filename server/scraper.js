@@ -79,6 +79,26 @@ const MAKEUP_PRICE_SELECTORS = [
   '.price-block__price',
 ];
 
+/**
+ * Last-resort fallback: extract price from productName field.
+ * Some trackers store the price in the name, e.g.:
+ *   "Very Good Girl Glam Eau de Parfum — 50ml — 5334"
+ *   "Product Name — 80ml — 6860"
+ * Pattern: "— PRICE" at the end (possibly with "грн"/"₴" suffix).
+ * @param {string} productName
+ * @returns {number|null}
+ */
+function extractPriceFromProductName(productName) {
+  if (!productName) return null;
+  // Match "— DIGITS" at the end, optionally followed by currency
+  var match = productName.match(/—\s*([\d\s.,]+)\s*(?:грн|₴|UAH)?\s*$/);
+  if (match) {
+    var price = parsePrice(match[1]);
+    if (price !== null && price > 0) return price;
+  }
+  return null;
+}
+
 /** @type {import('puppeteer-core').Browser | null} */
 let browserInstance = null;
 
@@ -735,6 +755,14 @@ async function extractPrice(tracker) {
         return { success: true, price: autoPrice };
       }
 
+      // Last resort: try extracting price from productName field
+      var namePrice = extractPriceFromProductName(tracker.productName);
+      if (namePrice !== null) {
+        var elapsed = Date.now() - pageStart;
+        console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + namePrice + ' (from productName, ' + elapsed + 'ms) — ' + shortName);
+        return { success: true, price: namePrice };
+      }
+
       var elapsed = Date.now() - pageStart;
       console.log('[Scraper] #' + trackerId + ' ❌ Failed (variant, ' + elapsed + 'ms): Could not read price after variant click — ' + shortName);
       return { success: false, error: 'Could not read price after variant click for: ' + tracker.variantSelector };
@@ -848,6 +876,14 @@ async function extractPrice(tracker) {
       }
     }
 
+    // Last resort: try extracting price from productName field
+    var namePrice2 = extractPriceFromProductName(tracker.productName);
+    if (namePrice2 !== null) {
+      var elapsed = Date.now() - pageStart;
+      console.log(`[Scraper] #${trackerId} ✅ Price: ${namePrice2} (from productName, ${elapsed}ms) — ${shortName}`);
+      return { success: true, price: namePrice2 };
+    }
+
     var elapsed = Date.now() - pageStart;
     const errorMsg = result.found
       ? `Could not parse price from text: "${result.text}"`
@@ -856,6 +892,14 @@ async function extractPrice(tracker) {
 
     return { success: false, error: errorMsg };
   } catch (err) {
+    // Last resort in catch: try extracting price from productName
+    var namePrice3 = extractPriceFromProductName(tracker.productName);
+    if (namePrice3 !== null) {
+      var elapsed = Date.now() - pageStart;
+      console.log(`[Scraper] #${trackerId} ✅ Price: ${namePrice3} (from productName after error, ${elapsed}ms) — ${shortName}`);
+      return { success: true, price: namePrice3 };
+    }
+
     var elapsed = Date.now() - pageStart;
     console.error(`[Scraper] #${trackerId} ❌ Error (${elapsed}ms): ${err.message} — ${shortName}`);
     return { success: false, error: err.message };

@@ -391,7 +391,7 @@ app.put('/settings/global', async (req, res) => {
 
 // Version endpoint to verify deployment
 app.get('/version', (req, res) => {
-  res.json({ version: 'v2.14.0', deployedAt: new Date().toISOString(), commit: 'anti-waf-delays-ua-rotation' });
+  res.json({ version: 'v2.15.0', deployedAt: new Date().toISOString(), commit: 'productName-price-fallback' });
 });
 
 app.post('/server-check', async (req, res) => {
