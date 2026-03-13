@@ -241,21 +241,43 @@ async function extractPrice(tracker) {
 
         try {
           await page.waitForSelector(titleSelector, { timeout: 5000 });
-          await page.click(titleSelector);
+
+          // EVA SPA: clicking a variant may cause client-side navigation.
+          // Use Promise.all to catch both click and potential navigation.
+          try {
+            await Promise.all([
+              page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(function() {}),
+              page.click(titleSelector),
+            ]);
+          } catch (_) {}
 
           // Wait for Vue to re-render and price to update
           await new Promise(function(r) { setTimeout(r, 3000); });
 
-          // Wait for price element to reappear (Vue may destroy and recreate it)
+          // Wait for price element to appear (may be on a new page after navigation)
           try {
-            await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
+            await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
           } catch (_) {}
           await new Promise(function(r) { setTimeout(r, 2000); });
 
-          var evaPrice = await page.evaluate(function() {
-            var el = document.querySelector('[data-testid="product-price"]');
-            return el ? (el.textContent || '').trim() : null;
-          });
+          var evaPrice = null;
+          try {
+            evaPrice = await page.evaluate(function() {
+              var el = document.querySelector('[data-testid="product-price"]');
+              return el ? (el.textContent || '').trim() : null;
+            });
+          } catch (evalErr) {
+            console.log('[Scraper] #' + trackerId + ' EVA: evaluate failed after click: ' + evalErr.message);
+            // Frame may have been detached — wait for new page to load
+            await new Promise(function(r) { setTimeout(r, 5000); });
+            try {
+              await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
+              evaPrice = await page.evaluate(function() {
+                var el = document.querySelector('[data-testid="product-price"]');
+                return el ? (el.textContent || '').trim() : null;
+              });
+            } catch (_) {}
+          }
           console.log('[Scraper] #' + trackerId + ' EVA: price after click: ' + (evaPrice || 'none'));
 
           if (evaPrice) {
@@ -264,29 +286,6 @@ async function extractPrice(tracker) {
               var elapsed = Date.now() - pageStart;
               console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA variant click, ' + elapsed + 'ms) — ' + shortName);
               return { success: true, price: price };
-            }
-          }
-
-          // Price element might have been destroyed — wait longer and retry
-          if (!evaPrice) {
-            console.log('[Scraper] #' + trackerId + ' EVA: price not found after click, waiting longer...');
-            await new Promise(function(r) { setTimeout(r, 5000); });
-            try {
-              await page.waitForSelector('[data-testid="product-price"]', { timeout: 15000 });
-            } catch (_) {}
-            await new Promise(function(r) { setTimeout(r, 2000); });
-
-            evaPrice = await page.evaluate(function() {
-              var el = document.querySelector('[data-testid="product-price"]');
-              return el ? (el.textContent || '').trim() : null;
-            });
-            if (evaPrice) {
-              var price = parsePrice(evaPrice);
-              if (price !== null && price > 0) {
-                var elapsed = Date.now() - pageStart;
-                console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA variant click retry, ' + elapsed + 'ms) — ' + shortName);
-                return { success: true, price: price };
-              }
             }
           }
         } catch (clickErr) {
