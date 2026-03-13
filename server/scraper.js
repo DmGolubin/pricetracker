@@ -17,6 +17,58 @@ const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromiu
 const PAGE_TIMEOUT_MS = 30000;
 
 /**
+ * Pool of realistic User-Agent strings for rotation.
+ * Mix of Chrome versions on Windows/Mac to look like real traffic.
+ */
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+];
+
+/** Pick a random User-Agent from the pool */
+function randomUA() {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+/**
+ * WAF/Cloudflare block detection patterns.
+ * If page title or body matches these, the request was blocked.
+ */
+const WAF_BLOCK_TITLES = [
+  'just a moment',
+  'attention required',
+  'access denied',
+  'error: the request could not be satisfied',
+  'please wait',
+  'checking your browser',
+  'ddos protection',
+];
+
+/**
+ * Check if a page was blocked by WAF/Cloudflare.
+ * @param {import('puppeteer-core').Page} page
+ * @returns {Promise<boolean>}
+ */
+async function isWafBlocked(page) {
+  try {
+    var title = await page.title();
+    var titleLower = (title || '').toLowerCase();
+    for (var i = 0; i < WAF_BLOCK_TITLES.length; i++) {
+      if (titleLower.indexOf(WAF_BLOCK_TITLES[i]) !== -1) return true;
+    }
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
  * Makeup.com.ua-specific price selectors — these are the elements
  * where the main product price is displayed. After a variant click,
  * the price in these elements updates dynamically.
@@ -142,10 +194,9 @@ async function extractPrice(tracker) {
       }
     });
 
-    // Set a realistic user agent
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-    );
+    // Set a realistic user agent (randomized from pool)
+    var selectedUA = randomUA();
+    await page.setUserAgent(selectedUA);
 
     // Set viewport
     await page.setViewport({ width: 1366, height: 768 });
@@ -174,6 +225,16 @@ async function extractPrice(tracker) {
       timeout: PAGE_TIMEOUT_MS,
     });
     console.log(`[Scraper] #${trackerId} Page loaded in ${Date.now() - navStart}ms`);
+
+    // WAF/Cloudflare block detection — if blocked, return error with special flag
+    var wafBlocked = await isWafBlocked(page);
+    if (wafBlocked) {
+      var pageTitle = '';
+      try { pageTitle = await page.title(); } catch(_) {}
+      var elapsed = Date.now() - pageStart;
+      console.log(`[Scraper] #${trackerId} ⛔ WAF blocked (${elapsed}ms): "${pageTitle}" — ${shortName}`);
+      return { success: false, error: 'WAF_BLOCKED: ' + pageTitle, wafBlocked: true };
+    }
 
     // Determine site-specific price selectors for this URL
     const isMakeup = (tracker.pageUrl || '').indexOf('makeup.com.ua') !== -1;
@@ -974,4 +1035,4 @@ async function tryFallbackSelectors(page, originalSelector) {
   return null;
 }
 
-module.exports = { getBrowser, closeBrowser, extractPrice, readPriceFromSelectors };
+module.exports = { getBrowser, closeBrowser, extractPrice, readPriceFromSelectors, isWafBlocked, randomUA };

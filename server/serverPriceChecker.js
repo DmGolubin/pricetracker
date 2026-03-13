@@ -17,6 +17,39 @@ const telegram = require('./telegramSender');
 const CONCURRENCY = 1;
 
 /**
+ * Extract domain from URL for WAF cooldown tracking.
+ */
+function getDomain(url) {
+  try {
+    return new URL(url).hostname.replace('www.', '');
+  } catch (_) {
+    return 'unknown';
+  }
+}
+
+/**
+ * Shuffle array in-place (Fisher-Yates).
+ * Randomizes tracker order so we don't hit the same domain repeatedly.
+ */
+function shuffleArray(arr) {
+  for (var i = arr.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+  return arr;
+}
+
+/**
+ * Random delay between min and max milliseconds.
+ */
+function randomDelay(minMs, maxMs) {
+  var ms = minMs + Math.floor(Math.random() * (maxMs - minMs));
+  return new Promise(function(resolve) { setTimeout(resolve, ms); });
+}
+
+/**
  * Run a full price check cycle for all active trackers.
  * @param {Pool} pool
  * @returns {Promise<{checked: number, changed: number, errors: number}>}
@@ -71,17 +104,49 @@ async function runCheckCycle(pool) {
   // Count content trackers as unchanged
   contentTrackers.forEach(function() { collector.addUnchanged(); checked++; });
 
+  // Shuffle trackers to randomize order — avoids hitting same domain repeatedly
+  shuffleArray(priceTrackers);
+  console.log('[ServerCheck] Tracker order randomized');
+
+  // WAF cooldown tracker: domain → timestamp of last WAF block
+  var wafCooldowns = {};
+  var WAF_COOLDOWN_MS = 60000; // 60s cooldown per domain after WAF block
+
   // 4. Process price trackers with concurrency limit
   var index = 0;
 
   async function processNext() {
     while (index < priceTrackers.length) {
       var tracker = priceTrackers[index++];
+      var domain = getDomain(tracker.pageUrl || '');
+
+      // Check WAF cooldown for this domain
+      if (wafCooldowns[domain]) {
+        var elapsed = Date.now() - wafCooldowns[domain];
+        if (elapsed < WAF_COOLDOWN_MS) {
+          var waitMs = WAF_COOLDOWN_MS - elapsed;
+          console.log('[ServerCheck] ⏳ WAF cooldown for ' + domain + ' — waiting ' + Math.round(waitMs / 1000) + 's');
+          await new Promise(function(r) { setTimeout(r, waitMs); });
+        }
+      }
+
+      // Random delay between trackers (5-15 seconds)
+      if (index > 1) {
+        var delayMs = 5000 + Math.floor(Math.random() * 10000);
+        console.log('[ServerCheck] ⏳ Delay ' + Math.round(delayMs / 1000) + 's before #' + tracker.id);
+        await new Promise(function(r) { setTimeout(r, delayMs); });
+      }
+
       try {
         var result = await checkSingleTracker(pool, tracker, settings, collector);
         checked++;
         if (result === 'changed') changed++;
         else if (result === 'error') errors++;
+        else if (result === 'waf_blocked') {
+          errors++;
+          wafCooldowns[domain] = Date.now();
+          console.log('[ServerCheck] ⛔ WAF block detected for ' + domain + ' — cooldown activated');
+        }
       } catch (err) {
         console.error('[ServerCheck] ❌ Unexpected error for #' + tracker.id + ': ' + err.message);
         errors++;
@@ -138,6 +203,16 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
   var result = await scraper.extractPrice(tracker);
 
   if (!result.success) {
+    // Check if this was a WAF/Cloudflare block
+    if (result.wafBlocked) {
+      console.warn('[ServerCheck] #' + tracker.id + ' ⛔ WAF blocked: ' + result.error);
+      await pool.query(
+        'UPDATE trackers SET "errorMessage" = $1, "lastCheckedAt" = NOW(), "updatedAt" = NOW() WHERE id = $2',
+        [result.error, tracker.id]
+      );
+      return 'waf_blocked';
+    }
+
     console.warn('[ServerCheck] #' + tracker.id + ' ❌ Extraction failed: ' + result.error);
 
     await pool.query(
