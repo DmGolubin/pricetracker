@@ -334,12 +334,14 @@ async function getActiveTab(sender) {
 }
 
 // ─── Alarm Handler ──────────────────────────────────────────────────
+// Auto-check disabled — server-side Puppeteer on Railway handles periodic checks.
+// Manual check from dashboard/popup still works via handleCheckAllPrices.
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  alarmManager.handleAlarm(alarm, (trackerId) => {
-    priceChecker.checkPrice(trackerId, deps);
-  });
-});
+// chrome.alarms.onAlarm.addListener((alarm) => {
+//   alarmManager.handleAlarm(alarm, (trackerId) => {
+//     priceChecker.checkPrice(trackerId, deps);
+//   });
+// });
 
 // ─── Notification Click Handler ─────────────────────────────────────
 
@@ -362,34 +364,20 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
 });
 
 // ─── Restore alarms on install/update/startup ──────────────────────
+// Disabled — server-side checks replace extension alarms.
 
-/**
- * Restore alarms for all active/updated trackers.
- * Called on install, update, and browser startup to ensure
- * periodic checks continue even after extension reload.
- */
-async function rescheduleAllAlarms() {
-  try {
-    await initSettings();
-    const trackers = await apiClient.getTrackers();
-    if (!Array.isArray(trackers)) return;
-
-    for (const t of trackers) {
-      if (t.status === TrackerStatus.ACTIVE || t.status === TrackerStatus.UPDATED) {
-        alarmManager.scheduleTracker(t.id, t.checkIntervalHours || DEFAULT_CHECK_INTERVAL);
-      }
-    }
-  } catch (_) {
-    // Server may not be reachable yet
-  }
-}
+// async function rescheduleAllAlarms() { ... }
 
 chrome.runtime.onInstalled.addListener(() => {
-  rescheduleAllAlarms();
+  // Clear any existing alarms from previous versions
+  chrome.alarms.clearAll();
+  initSettings();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  rescheduleAllAlarms();
+  // Clear any existing alarms from previous versions
+  chrome.alarms.clearAll();
+  initSettings();
 });
 
 // ─── Initialization ─────────────────────────────────────────────────
