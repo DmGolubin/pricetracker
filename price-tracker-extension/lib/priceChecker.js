@@ -253,12 +253,32 @@ async function handlePriceResult(tracker, newPrice, deps) {
     }
   }
 
-  // Notify on change (but not on first variant price correction)
-  if (priceChanged && !isFirstVariantCheck && badgeManager) {
+  // For grouped trackers: suppress price-drop alerts unless the new price
+  // beats the current best price across all other stores in the group.
+  var suppressedByGroup = false;
+  if (priceChanged && !isFirstVariantCheck && newPrice < Number(tracker.currentPrice) && tracker.productGroup && apiClient) {
+    try {
+      var allTrackers = await apiClient.getTrackers();
+      var groupMembers = allTrackers.filter(function(t) {
+        return t.productGroup === tracker.productGroup && t.id !== tracker.id && Number(t.currentPrice) > 0;
+      });
+      if (groupMembers.length > 0) {
+        var groupCurrentMin = Math.min.apply(null, groupMembers.map(function(t) { return Number(t.currentPrice); }));
+        if (newPrice >= groupCurrentMin) {
+          suppressedByGroup = true;
+        }
+      }
+    } catch (_sg) {
+      // Group check failure should not break the flow
+    }
+  }
+
+  // Notify on change (but not on first variant price correction, not if suppressed by group)
+  if (priceChanged && !isFirstVariantCheck && !suppressedByGroup && badgeManager) {
     badgeManager.incrementUnread();
   }
 
-  if (priceChanged && !isFirstVariantCheck && notifier) {
+  if (priceChanged && !isFirstVariantCheck && !suppressedByGroup && notifier) {
     try {
       var settings = {};
       try { settings = await deps.apiClient.getSettings(); } catch (_s) {}
@@ -271,7 +291,7 @@ async function handlePriceResult(tracker, newPrice, deps) {
 
   // Feed the digest collector
   if (deps.digestCollector) {
-    if (priceChanged && !isFirstVariantCheck) {
+    if (priceChanged && !isFirstVariantCheck && !suppressedByGroup) {
       deps.digestCollector.addChange(tracker, tracker.currentPrice, newPrice, isHistMin, isCrossStoreMin);
     } else {
       deps.digestCollector.addUnchanged();

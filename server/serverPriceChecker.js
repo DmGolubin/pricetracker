@@ -325,6 +325,27 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
     }
   }
 
+  // For grouped trackers: suppress price-drop alerts unless the new price
+  // beats the current best price across all other stores in the group.
+  var suppressedByGroup = false;
+  if (priceChanged && !isFirstVariantCheck && newPrice < oldPrice && tracker.productGroup) {
+    try {
+      var groupCurrentResult = await pool.query(
+        'SELECT MIN("currentPrice") AS "groupCurrentMin" FROM trackers WHERE "productGroup" = $1 AND id != $2 AND "currentPrice" > 0',
+        [tracker.productGroup, tracker.id]
+      );
+      var groupCurrentMin = groupCurrentResult.rows[0] && groupCurrentResult.rows[0].groupCurrentMin != null
+        ? Number(groupCurrentResult.rows[0].groupCurrentMin) : null;
+      if (groupCurrentMin != null && newPrice >= groupCurrentMin) {
+        suppressedByGroup = true;
+        console.log('[ServerCheck] #' + tracker.id + ' 📉 ' + oldPrice + ' → ' + newPrice
+          + ' — suppressed (group current min is ' + groupCurrentMin + ')');
+      }
+    } catch (err) {
+      console.warn('[ServerCheck] #' + tracker.id + ' ⚠ Failed to check group current min: ' + err.message);
+    }
+  }
+
   // Feed digest collector
   if (priceChanged && !isFirstVariantCheck) {
     var thresholdConfig = thresholdEngine.resolveThresholdConfig(tracker, settings);
@@ -336,10 +357,13 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
     var logMsg = '[ServerCheck] #' + tracker.id + ' ' + direction + ' ' + oldPrice + ' → ' + newPrice
       + ' (' + (diff > 0 ? '+' : '') + pctChange + '%)'
       + (isCrossStoreMin ? ' 🏆🏆 CROSS-STORE MIN' : isHistMin ? ' 🏆 HIST MIN' : '')
-      + (significant ? '' : ' (below threshold)');
+      + (significant ? '' : ' (below threshold)')
+      + (suppressedByGroup ? ' [SUPPRESSED by group]' : '');
     console.log(logMsg);
 
-    if (significant || isHistMin) {
+    if (suppressedByGroup) {
+      collector.addUnchanged();
+    } else if (significant || isHistMin) {
       collector.addChange(tracker, oldPrice, newPrice, isHistMin, isCrossStoreMin);
     } else {
       collector.addUnchanged();
