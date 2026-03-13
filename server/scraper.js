@@ -183,6 +183,18 @@ async function extractPrice(tracker) {
       if (isMakeup) {
         var dataPrice = await page.evaluate(function(sel) {
           var el = document.querySelector(sel);
+          // Fallback: if CSS-escaped data-variant-id selector fails, try extracting the ID
+          if (!el && sel.indexOf('data-variant-id') !== -1) {
+            var idMatch = sel.match(/data-variant-id[*~|^$]?=["']?\\?3?2?\s*(\d+)/);
+            if (idMatch) {
+              el = document.querySelector('[data-variant-id="' + idMatch[1] + '"]');
+            }
+          }
+          // Fallback: if selector like [data-loyalty-text=""] matches wrong element, use .variant.checked
+          if (!el || (!el.getAttribute('data-price') && !el.closest('[data-price]'))) {
+            var checked = document.querySelector('.variant.checked[data-price]');
+            if (checked) el = checked;
+          }
           if (!el) return null;
           // The variant element itself or a parent may have data-price
           var dp = el.getAttribute('data-price');
@@ -347,6 +359,20 @@ async function extractPrice(tracker) {
         if (pdPrice) {
           var text = (pdPrice.textContent || '').trim();
           if (text && /\d/.test(text)) return text;
+        }
+        // Fallback: selected variant tile price (multi-variant pages)
+        var selectedVariant = document.querySelector('a.pd-variant-selected span[data-testid="price-variant"]');
+        if (selectedVariant) {
+          var content = selectedVariant.getAttribute('content');
+          if (content && /\d/.test(content)) return content;
+          var text = (selectedVariant.textContent || '').trim();
+          if (text && /\d/.test(text)) return text;
+        }
+        // Last resort: first variant tile price
+        var anyVariant = document.querySelector('span[data-testid="price-variant"]');
+        if (anyVariant) {
+          var content = anyVariant.getAttribute('content');
+          if (content && /\d/.test(content)) return content;
         }
         return null;
       });
