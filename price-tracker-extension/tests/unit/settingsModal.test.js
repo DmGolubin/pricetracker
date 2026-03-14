@@ -128,12 +128,14 @@ describe('SettingsModal', () => {
       expect(Array.from(radios).map(r => r.value)).toEqual(['auto', 'pinTab']);
     });
 
-    test('modal has notification filter select with all types', () => {
+    test('modal has notification filter dropdown with all types', () => {
       SettingsModal.open(makeTracker(), container, {});
 
-      const select = container.querySelector('[data-field="filterType"]');
-      expect(select).not.toBeNull();
-      expect(Array.from(select.options).map(o => o.value)).toEqual([
+      const dropdown = container.querySelector('[data-field="filterType"]');
+      expect(dropdown).not.toBeNull();
+      expect(dropdown.classList.contains('custom-dropdown')).toBe(true);
+      const items = dropdown.querySelectorAll('.custom-dropdown-item');
+      expect(Array.from(items).map(i => i.getAttribute('data-value'))).toEqual([
         'none', 'contains', 'greaterThan', 'lessThan', 'increased', 'decreased',
       ]);
     });
@@ -190,7 +192,7 @@ describe('SettingsModal', () => {
         makeTracker({ notificationFilter: { type: 'greaterThan', value: 50 } }),
         container, {}
       );
-      expect(container.querySelector('[data-field="filterType"]').value).toBe('greaterThan');
+      expect(container.querySelector('[data-field="filterType"]').getAttribute('data-value')).toBe('greaterThan');
     });
 
     test('notification filter value is pre-filled', () => {
@@ -267,29 +269,30 @@ describe('SettingsModal', () => {
 
     test('changing filter type toggles value input visibility', () => {
       SettingsModal.open(makeTracker(), container, {});
-      const sel = container.querySelector('[data-field="filterType"]');
+      const dropdown = container.querySelector('[data-field="filterType"]');
       const val = container.querySelector('[data-field="filterValue"]');
 
       expect(val.style.display).toBe('none');
 
-      sel.value = 'contains';
-      sel.dispatchEvent(new Event('change'));
+      // Helper to simulate selecting a dropdown item by value
+      function selectFilterType(value) {
+        const item = dropdown.querySelector('.custom-dropdown-item[data-value="' + value + '"]');
+        item.click();
+      }
+
+      selectFilterType('contains');
       expect(val.style.display).not.toBe('none');
 
-      sel.value = 'decreased';
-      sel.dispatchEvent(new Event('change'));
+      selectFilterType('decreased');
       expect(val.style.display).toBe('none');
 
-      sel.value = 'increased';
-      sel.dispatchEvent(new Event('change'));
+      selectFilterType('increased');
       expect(val.style.display).toBe('none');
 
-      sel.value = 'greaterThan';
-      sel.dispatchEvent(new Event('change'));
+      selectFilterType('greaterThan');
       expect(val.style.display).not.toBe('none');
 
-      sel.value = 'none';
-      sel.dispatchEvent(new Event('change'));
+      selectFilterType('none');
       expect(val.style.display).toBe('none');
     });
   });

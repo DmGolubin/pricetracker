@@ -75,6 +75,6 @@
 
 ## API Base URL
 
-- Захардкожен в нескольких местах: `apiClient.js`, `dashboard.js`, `globalSettings.js`, `popup.js`.
+- Захардкожен в нескольких местах: `apiClient.js`, `dashboard.js`, `globalSettings.js`.
 - Значение: `https://pricetracker-production-ac69.up.railway.app`
 - При изменении — обновлять во всех местах.

@@ -48,6 +48,92 @@ const SettingsModal = (function () {
     return { ADAPTIVE: 'adaptive', ABSOLUTE: 'absolute', PERCENTAGE: 'percentage' };
   }
 
+  // ─── Custom Dropdown for Settings Modal ──────────────────────────
+
+  /**
+   * Create a custom styled dropdown (same pattern as Toolbar.createCustomDropdown).
+   * @param {Object} opts
+   * @param {Array<{value:string, text:string}>} opts.options
+   * @param {string} opts.selected - initial selected value
+   * @param {string} opts.ariaLabel
+   * @param {string} opts.dataField - data-field attribute for form collection
+   * @param {Function} opts.onChange - callback(value)
+   * @returns {HTMLElement}
+   */
+  function createSettingsDropdown(opts) {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'custom-dropdown';
+    wrapper.setAttribute('role', 'listbox');
+    wrapper.setAttribute('aria-label', opts.ariaLabel || '');
+    wrapper.setAttribute('data-field', opts.dataField || '');
+    wrapper.tabIndex = 0;
+
+    var selectedOpt = opts.options.find(function (o) { return o.value === opts.selected; }) || opts.options[0];
+
+    var trigger = document.createElement('div');
+    trigger.className = 'custom-dropdown-trigger';
+    trigger.innerHTML = '<span class="custom-dropdown-text">' + escapeHtml(selectedOpt.text) + '</span>'
+      + '<span class="custom-dropdown-arrow">' + (_Icons ? _Icons.el('arrow-down', 12) : '▾') + '</span>';
+
+    var menu = document.createElement('div');
+    menu.className = 'custom-dropdown-menu';
+
+    opts.options.forEach(function (opt) {
+      var item = document.createElement('div');
+      item.className = 'custom-dropdown-item' + (opt.value === selectedOpt.value ? ' active' : '');
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', opt.value === selectedOpt.value ? 'true' : 'false');
+      item.setAttribute('data-value', opt.value);
+      item.textContent = opt.text;
+      item.addEventListener('click', function (e) {
+        e.stopPropagation();
+        menu.querySelectorAll('.custom-dropdown-item').forEach(function (el) {
+          el.classList.remove('active');
+          el.setAttribute('aria-selected', 'false');
+        });
+        item.classList.add('active');
+        item.setAttribute('aria-selected', 'true');
+        trigger.querySelector('.custom-dropdown-text').textContent = opt.text;
+        wrapper.classList.remove('open');
+        wrapper.setAttribute('data-value', opt.value);
+        if (typeof opts.onChange === 'function') opts.onChange(opt.value);
+      });
+      menu.appendChild(item);
+    });
+
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(menu);
+    wrapper.setAttribute('data-value', selectedOpt.value);
+
+    trigger.addEventListener('click', function (e) {
+      e.stopPropagation();
+      document.querySelectorAll('.custom-dropdown.open').forEach(function (dd) {
+        if (dd !== wrapper) dd.classList.remove('open');
+      });
+      wrapper.classList.toggle('open');
+    });
+
+    wrapper.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        wrapper.classList.toggle('open');
+      } else if (e.key === 'Escape') {
+        wrapper.classList.remove('open');
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        var items = menu.querySelectorAll('.custom-dropdown-item');
+        var currentIdx = -1;
+        items.forEach(function (el, i) { if (el.classList.contains('active')) currentIdx = i; });
+        var nextIdx = e.key === 'ArrowDown'
+          ? Math.min(currentIdx + 1, items.length - 1)
+          : Math.max(currentIdx - 1, 0);
+        if (items[nextIdx]) items[nextIdx].click();
+      }
+    });
+
+    return wrapper;
+  }
+
   var currentTracker = null;
   var currentContainer = null;
   var currentCallbacks = null;
@@ -665,33 +751,29 @@ const SettingsModal = (function () {
     // Divider after check mode
     body.appendChild(createSectionDivider());
 
-    // Notification filter
+    // Notification filter (custom dropdown — no native <select>)
     var filterGroup = createFormGroup('Фильтр уведомлений');
-    var filterSelect = document.createElement('select');
-    filterSelect.className = 'input';
-    filterSelect.setAttribute('data-field', 'filterType');
-    filterSelect.setAttribute('aria-label', 'Тип фильтра уведомлений');
 
     var filterTypes = [
-      { value: 'none', label: 'Нет фильтра' },
-      { value: 'contains', label: 'Содержит' },
-      { value: 'greaterThan', label: 'Больше значения' },
-      { value: 'lessThan', label: 'Меньше значения' },
-      { value: 'increased', label: 'Увеличилось' },
-      { value: 'decreased', label: 'Уменьшилось' },
+      { value: 'none', text: 'Нет фильтра' },
+      { value: 'contains', text: 'Содержит' },
+      { value: 'greaterThan', text: 'Больше значения' },
+      { value: 'lessThan', text: 'Меньше значения' },
+      { value: 'increased', text: 'Увеличилось' },
+      { value: 'decreased', text: 'Уменьшилось' },
     ];
 
     var currentFilterType = (tracker.notificationFilter && tracker.notificationFilter.type) || 'none';
     var currentFilterValue = (tracker.notificationFilter && tracker.notificationFilter.value) || '';
 
-    filterTypes.forEach(function (opt) {
-      var option = document.createElement('option');
-      option.value = opt.value;
-      option.textContent = opt.label;
-      if (opt.value === currentFilterType) {
-        option.selected = true;
-      }
-      filterSelect.appendChild(option);
+    var filterDropdown = createSettingsDropdown({
+      options: filterTypes,
+      selected: currentFilterType,
+      ariaLabel: 'Тип фильтра уведомлений',
+      dataField: 'filterType',
+      onChange: function (value) {
+        updateFilterValueVisibility(value);
+      },
     });
 
     var filterValueInput = document.createElement('input');
@@ -704,19 +786,18 @@ const SettingsModal = (function () {
     filterValueInput.style.marginTop = 'var(--spacing-sm)';
 
     // Show/hide filter value based on type
-    function updateFilterValueVisibility() {
+    function updateFilterValueVisibility(type) {
       var noValueTypes = ['none', 'increased', 'decreased'];
-      if (noValueTypes.indexOf(filterSelect.value) !== -1) {
+      if (noValueTypes.indexOf(type) !== -1) {
         filterValueInput.style.display = 'none';
       } else {
         filterValueInput.style.display = '';
       }
     }
 
-    filterSelect.addEventListener('change', updateFilterValueVisibility);
-    updateFilterValueVisibility();
+    updateFilterValueVisibility(currentFilterType);
 
-    filterGroup.appendChild(filterSelect);
+    filterGroup.appendChild(filterDropdown);
     filterGroup.appendChild(filterValueInput);
     body.appendChild(filterGroup);
 
@@ -839,8 +920,8 @@ const SettingsModal = (function () {
     var groupInput = modal.querySelector('input[data-field="productGroup"]');
     var productGroup = groupInput ? groupInput.value : '';
 
-    var filterTypeSelect = modal.querySelector('[data-field="filterType"]');
-    var filterType = filterTypeSelect ? filterTypeSelect.value : 'none';
+    var filterTypeDropdown = modal.querySelector('[data-field="filterType"]');
+    var filterType = filterTypeDropdown ? (filterTypeDropdown.getAttribute('data-value') || 'none') : 'none';
 
     var filterValueInput = modal.querySelector('[data-field="filterValue"]');
     var filterValue = filterValueInput ? filterValueInput.value : '';
