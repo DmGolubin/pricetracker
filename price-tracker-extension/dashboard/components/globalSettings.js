@@ -289,29 +289,17 @@ const GlobalSettings = (function () {
     apiGroup.appendChild(apiInput);
     body.appendChild(apiGroup);
 
-    // Telegram Bot Token
-    var tokenGroup = createFormGroup('Telegram Bot Token');
-    var tokenInput = document.createElement('input');
-    tokenInput.type = 'text';
-    tokenInput.className = 'input';
-    tokenInput.value = s.telegramBotToken || '';
-    tokenInput.placeholder = 'Введите токен бота';
-    tokenInput.setAttribute('data-field', 'telegramBotToken');
-    tokenInput.setAttribute('aria-label', 'Telegram Bot Token');
-    tokenGroup.appendChild(tokenInput);
-    body.appendChild(tokenGroup);
-
-    // Telegram Chat ID
-    var chatGroup = createFormGroup('Telegram Chat ID');
-    var chatInput = document.createElement('input');
-    chatInput.type = 'text';
-    chatInput.className = 'input';
-    chatInput.value = s.telegramChatId || '';
-    chatInput.placeholder = 'Введите Chat ID';
-    chatInput.setAttribute('data-field', 'telegramChatId');
-    chatInput.setAttribute('aria-label', 'Telegram Chat ID');
-    chatGroup.appendChild(chatInput);
-    body.appendChild(chatGroup);
+    // Telegram info note (fields removed — auto-configured by bot)
+    var tgNote = document.createElement('div');
+    tgNote.className = 'form-group';
+    var tgNoteLabel = document.createElement('label');
+    tgNoteLabel.textContent = 'Telegram';
+    tgNote.appendChild(tgNoteLabel);
+    var tgNoteText = document.createElement('p');
+    tgNoteText.className = 'settings-info-note';
+    tgNoteText.textContent = 'Telegram настраивается автоматически при отправке /start боту. Chat ID и токен задаются на сервере.';
+    tgNote.appendChild(tgNoteText);
+    body.appendChild(tgNote);
 
     // Permanent Pin Tab toggle
     var pinGroup = createFormGroup('Постоянная вкладка для Pin Tab');
@@ -373,11 +361,7 @@ const GlobalSettings = (function () {
     var apiInput = modal.querySelector('[data-field="apiBaseUrl"]');
     var apiBaseUrl = apiInput ? apiInput.value : '';
 
-    var tokenInput = modal.querySelector('[data-field="telegramBotToken"]');
-    var telegramBotToken = tokenInput ? tokenInput.value : '';
-
-    var chatInput = modal.querySelector('[data-field="telegramChatId"]');
-    var telegramChatId = chatInput ? chatInput.value : '';
+    // Telegram fields removed — auto-configured by bot
 
     var pinCheckbox = modal.querySelector('[data-field="permanentPinTab"]');
     var permanentPinTab = pinCheckbox ? pinCheckbox.checked : false;
@@ -406,8 +390,6 @@ const GlobalSettings = (function () {
 
     return {
       apiBaseUrl: apiBaseUrl,
-      telegramBotToken: telegramBotToken,
-      telegramChatId: telegramChatId,
       permanentPinTab: permanentPinTab,
       thresholdConfig: thresholdConfig,
       telegramDigestEnabled: telegramDigestEnabled,

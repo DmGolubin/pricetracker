@@ -13,8 +13,6 @@ function makeSettings(overrides) {
   return Object.assign(
     {
       apiBaseUrl: 'https://api.example.com',
-      telegramBotToken: 'bot123:ABC',
-      telegramChatId: '987654',
       permanentPinTab: false,
     },
     overrides || {}
@@ -121,7 +119,7 @@ describe('GlobalSettings', () => {
       expect(svg.getAttribute('aria-hidden')).toBe('true');
     });
 
-    test('modal has all four form fields', async () => {
+    test('modal has key form fields', async () => {
       chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
         if (cb) cb({ settings: makeSettings() });
       });
@@ -130,9 +128,10 @@ describe('GlobalSettings', () => {
       await flushPromises();
 
       expect(container.querySelector('[data-field="apiBaseUrl"]')).not.toBeNull();
-      expect(container.querySelector('[data-field="telegramBotToken"]')).not.toBeNull();
-      expect(container.querySelector('[data-field="telegramChatId"]')).not.toBeNull();
       expect(container.querySelector('[data-field="permanentPinTab"]')).not.toBeNull();
+      // Telegram fields removed — auto-configured by bot
+      expect(container.querySelector('[data-field="telegramBotToken"]')).toBeNull();
+      expect(container.querySelector('[data-field="telegramChatId"]')).toBeNull();
     });
 
     test('modal has save button in footer', async () => {
@@ -235,28 +234,6 @@ describe('GlobalSettings', () => {
       expect(container.querySelector('[data-field="apiBaseUrl"]').value).toBe('https://my-api.test');
     });
 
-    test('Telegram Bot Token is pre-filled', async () => {
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (cb) cb({ settings: makeSettings({ telegramBotToken: 'tok-xyz' }) });
-      });
-
-      GlobalSettings.open(container);
-      await flushPromises();
-
-      expect(container.querySelector('[data-field="telegramBotToken"]').value).toBe('tok-xyz');
-    });
-
-    test('Telegram Chat ID is pre-filled', async () => {
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (cb) cb({ settings: makeSettings({ telegramChatId: '12345' }) });
-      });
-
-      GlobalSettings.open(container);
-      await flushPromises();
-
-      expect(container.querySelector('[data-field="telegramChatId"]').value).toBe('12345');
-    });
-
     test('Permanent Pin Tab toggle reflects true', async () => {
       chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
         if (cb) cb({ settings: makeSettings({ permanentPinTab: true }) });
@@ -293,8 +270,6 @@ describe('GlobalSettings', () => {
 
       // Modify fields
       container.querySelector('[data-field="apiBaseUrl"]').value = 'https://new-api.test';
-      container.querySelector('[data-field="telegramBotToken"]').value = 'new-token';
-      container.querySelector('[data-field="telegramChatId"]').value = '999';
       container.querySelector('[data-field="permanentPinTab"]').checked = true;
 
       // Reset mock to track save call
@@ -311,8 +286,6 @@ describe('GlobalSettings', () => {
           action: 'saveSettings',
           settings: expect.objectContaining({
             apiBaseUrl: 'https://new-api.test',
-            telegramBotToken: 'new-token',
-            telegramChatId: '999',
             permanentPinTab: true,
           }),
         }),
@@ -407,8 +380,6 @@ describe('GlobalSettings', () => {
       await flushPromises();
 
       expect(container.querySelector('[data-field="apiBaseUrl"]').value).toBe('');
-      expect(container.querySelector('[data-field="telegramBotToken"]').value).toBe('');
-      expect(container.querySelector('[data-field="telegramChatId"]').value).toBe('');
       expect(container.querySelector('[data-field="permanentPinTab"]').checked).toBe(false);
     });
 
@@ -541,8 +512,7 @@ describe('GlobalSettings', () => {
       await flushPromises();
 
       expect(container.querySelector('[data-field="apiBaseUrl"]').getAttribute('aria-label')).toBe('API Base URL');
-      expect(container.querySelector('[data-field="telegramBotToken"]').getAttribute('aria-label')).toBe('Telegram Bot Token');
-      expect(container.querySelector('[data-field="telegramChatId"]').getAttribute('aria-label')).toBe('Telegram Chat ID');
+      // Telegram fields removed — no longer in UI
     });
 
     test('save button has aria-label', async () => {

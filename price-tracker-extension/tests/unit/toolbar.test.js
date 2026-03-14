@@ -11,6 +11,8 @@ describe('Toolbar', () => {
 
   beforeEach(() => {
     container = document.createElement('div');
+    document.body.innerHTML = '';
+    document.body.appendChild(container);
   });
 
   // ─── Rendering ──────────────────────────────────────────────────
@@ -36,10 +38,17 @@ describe('Toolbar', () => {
       expect(input.type).toBe('text');
     });
 
-    test('renders filter select with input class', () => {
+    test('renders custom filter dropdown', () => {
       Toolbar.init(container, {});
-      const select = container.querySelector('select.input');
-      expect(select).not.toBeNull();
+      const dropdown = container.querySelector('.toolbar-filter-dropdown');
+      expect(dropdown).not.toBeNull();
+      expect(dropdown.classList.contains('custom-dropdown')).toBe(true);
+    });
+
+    test('renders custom sort dropdown', () => {
+      Toolbar.init(container, {});
+      const dropdown = container.querySelector('.toolbar-sort-dropdown');
+      expect(dropdown).not.toBeNull();
     });
 
     test('renders settings icon button with btn-icon class and SVG icon', () => {
@@ -94,7 +103,7 @@ describe('Toolbar', () => {
       const centerGroup = container.querySelector('.toolbar-group-center');
       expect(centerGroup).not.toBeNull();
       expect(centerGroup.querySelector('.toolbar-search-wrapper')).not.toBeNull();
-      expect(centerGroup.querySelector('select.input')).not.toBeNull();
+      expect(centerGroup.querySelector('.custom-dropdown')).not.toBeNull();
     });
 
     test('has right group with settings button', () => {
@@ -163,46 +172,41 @@ describe('Toolbar', () => {
     });
   });
 
-  // ─── Filter select ─────────────────────────────────────────────
+  // ─── Custom filter dropdown ─────────────────────────────────────
 
-  describe('filter select', () => {
+  describe('custom filter dropdown', () => {
     test('has four options: all, down, up, groups', () => {
       Toolbar.init(container, {});
-      const select = container.querySelector('select.input');
-      const options = select.querySelectorAll('option');
+      const dropdown = container.querySelector('.toolbar-filter-dropdown');
+      const items = dropdown.querySelectorAll('.custom-dropdown-item');
 
-      expect(options).toHaveLength(4);
-      expect(options[0].value).toBe('all');
-      expect(options[0].textContent).toBe('Все');
-      expect(options[1].value).toBe('down');
-      expect(options[1].textContent).toBe('Цена снизилась');
-      expect(options[2].value).toBe('up');
-      expect(options[2].textContent).toBe('Цена выросла');
-      expect(options[3].value).toBe('groups');
-      expect(options[3].textContent).toBe('Группы товаров');
+      expect(items).toHaveLength(4);
+      expect(items[0].getAttribute('data-value')).toBe('all');
+      expect(items[1].getAttribute('data-value')).toBe('down');
+      expect(items[2].getAttribute('data-value')).toBe('up');
+      expect(items[3].getAttribute('data-value')).toBe('groups');
     });
 
-    test('triggers onFilter callback on change event', () => {
+    test('triggers onFilter callback when item is clicked', () => {
       const onFilter = jest.fn();
       Toolbar.init(container, { onFilter });
 
-      const select = container.querySelector('select.input');
-      select.value = 'down';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      const dropdown = container.querySelector('.toolbar-filter-dropdown');
+      const items = dropdown.querySelectorAll('.custom-dropdown-item');
+      items[1].click(); // "down"
 
       expect(onFilter).toHaveBeenCalledTimes(1);
       expect(onFilter).toHaveBeenCalledWith('down');
     });
 
-    test('triggers onFilter with "up" value', () => {
-      const onFilter = jest.fn();
-      Toolbar.init(container, { onFilter });
+    test('updates trigger text when item is selected', () => {
+      Toolbar.init(container, {});
+      const dropdown = container.querySelector('.toolbar-filter-dropdown');
+      const items = dropdown.querySelectorAll('.custom-dropdown-item');
+      items[2].click(); // "up"
 
-      const select = container.querySelector('select.input');
-      select.value = 'up';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-
-      expect(onFilter).toHaveBeenCalledWith('up');
+      const text = dropdown.querySelector('.custom-dropdown-text');
+      expect(text.textContent).toContain('Цена выросла');
     });
   });
 
@@ -218,28 +222,6 @@ describe('Toolbar', () => {
 
       expect(onRefreshAll).toHaveBeenCalledTimes(1);
     });
-
-    test('adds toolbar-refresh-spin class to SVG on click', () => {
-      Toolbar.init(container, {});
-      const btn = container.querySelector('.btn.btn-primary');
-      const svg = btn.querySelector('svg');
-
-      btn.click();
-
-      expect(svg.classList.contains('toolbar-refresh-spin')).toBe(true);
-    });
-
-    test('removes toolbar-refresh-spin class after animationend', () => {
-      Toolbar.init(container, {});
-      const btn = container.querySelector('.btn.btn-primary');
-      const svg = btn.querySelector('svg');
-
-      btn.click();
-      expect(svg.classList.contains('toolbar-refresh-spin')).toBe(true);
-
-      svg.dispatchEvent(new Event('animationend'));
-      expect(svg.classList.contains('toolbar-refresh-spin')).toBe(false);
-    });
   });
 
   // ─── Settings button ──────────────────────────────────────────
@@ -250,7 +232,7 @@ describe('Toolbar', () => {
       Toolbar.init(container, { onSettingsClick });
 
       const btns = container.querySelectorAll('.toolbar-group-right .btn-icon');
-      const settingsBtn = btns[btns.length - 1]; // settings is last
+      const settingsBtn = btns[btns.length - 1];
       settingsBtn.click();
 
       expect(onSettingsClick).toHaveBeenCalledTimes(1);
@@ -281,6 +263,22 @@ describe('Toolbar', () => {
     });
   });
 
+  // ─── Group chips ──────────────────────────────────────────────
+
+  describe('group chips', () => {
+    test('group chips container is hidden by default', () => {
+      Toolbar.init(container, {});
+      const chips = container.querySelector('.toolbar-group-chips');
+      expect(chips).not.toBeNull();
+      expect(chips.hidden).toBe(true);
+    });
+
+    test('setGroups updates available groups', () => {
+      Toolbar.init(container, {});
+      expect(() => Toolbar.setGroups(['Group A', 'Group B'])).not.toThrow();
+    });
+  });
+
   // ─── Accessibility ─────────────────────────────────────────────
 
   describe('accessibility', () => {
@@ -308,10 +306,10 @@ describe('Toolbar', () => {
       expect(input.getAttribute('aria-label')).toBeTruthy();
     });
 
-    test('filter select has aria-label', () => {
+    test('custom filter dropdown has aria-label', () => {
       Toolbar.init(container, {});
-      const select = container.querySelector('select.input');
-      expect(select.getAttribute('aria-label')).toBeTruthy();
+      const dropdown = container.querySelector('.toolbar-filter-dropdown');
+      expect(dropdown.getAttribute('aria-label')).toBeTruthy();
     });
 
     test('settings button has aria-label', () => {
@@ -350,13 +348,11 @@ describe('Toolbar', () => {
     test('does not throw when callback functions are undefined', () => {
       Toolbar.init(container, {});
       const input = container.querySelector('input.input');
-      const select = container.querySelector('select.input');
       const refreshBtn = container.querySelector('.btn.btn-primary');
       const settingsBtn = container.querySelector('.btn-icon');
 
       expect(() => {
         input.dispatchEvent(new Event('input'));
-        select.dispatchEvent(new Event('change'));
         refreshBtn.click();
         settingsBtn.click();
       }).not.toThrow();

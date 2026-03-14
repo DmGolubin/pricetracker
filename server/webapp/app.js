@@ -729,6 +729,7 @@ async function loadHistory(id) {
 
 async function renderSettings() {
   const settings = await api('/settings/global').catch(()=>({})) || {};
+  const tc = settings.thresholdConfig || { mode: 'adaptive', absoluteValue: 50, percentageValue: 5 };
 
   let html = `
     <div class="settings-section">
@@ -741,6 +742,41 @@ async function renderSettings() {
         <span class="settings-label">Дайджест в Telegram</span>
         <label class="toggle"><input type="checkbox" id="setDigest" ${settings.telegramDigestEnabled!==false?'checked':''}><span class="toggle-slider"></span></label>
       </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-title">📊 Порог уведомлений</div>
+      <div class="settings-row">
+        <span class="settings-label">Режим</span>
+        <select id="setThresholdMode" class="settings-select">
+          <option value="adaptive" ${tc.mode==='adaptive'?'selected':''}>Адаптивный</option>
+          <option value="absolute" ${tc.mode==='absolute'?'selected':''}>Абсолютный</option>
+          <option value="percentage" ${tc.mode==='percentage'?'selected':''}>Процентный</option>
+        </select>
+      </div>
+      <div id="thresholdAbsPanel" class="settings-threshold-panel" style="display:${tc.mode==='absolute'?'block':'none'}">
+        <div class="settings-row">
+          <span class="settings-label">Порог (грн)</span>
+          <input type="number" id="setThresholdAbs" class="settings-input" value="${tc.absoluteValue||50}" min="0" step="1">
+        </div>
+      </div>
+      <div id="thresholdPctPanel" class="settings-threshold-panel" style="display:${tc.mode==='percentage'?'block':'none'}">
+        <div class="settings-row">
+          <span class="settings-label">Порог (%)</span>
+          <input type="number" id="setThresholdPct" class="settings-input" value="${tc.percentageValue||5}" min="0" step="0.5">
+        </div>
+      </div>
+      <div id="thresholdAdaptivePanel" class="settings-threshold-panel" style="display:${tc.mode==='adaptive'?'block':'none'}">
+        <div class="settings-info">Адаптивные пороги по диапазонам цен:</div>
+        <table class="settings-tiers-table">
+          <tr><td>0 — 1 000</td><td>8%</td></tr>
+          <tr><td>1 001 — 5 000</td><td>5%</td></tr>
+          <tr><td>5 001 — 20 000</td><td>4%</td></tr>
+          <tr><td>20 001 — 50 000</td><td>3%</td></tr>
+          <tr><td>50 001+</td><td>2%</td></tr>
+        </table>
+      </div>
+      <button class="action-btn full-width" id="btnSaveThreshold" style="margin-top:8px">💾 Сохранить порог</button>
     </div>
 
     <div class="settings-section">
@@ -757,12 +793,12 @@ async function renderSettings() {
       <div class="settings-row"><span class="settings-label">На паузе</span><span class="settings-value">${allTrackers.filter(t=>t.status==='paused').length}</span></div>
       <div class="settings-row"><span class="settings-label">С ошибками</span><span class="settings-value">${allTrackers.filter(t=>t.status==='error').length}</span></div>
       <div class="settings-row"><span class="settings-label">Групп</span><span class="settings-value">${new Set(allTrackers.filter(t=>t.productGroup).map(t=>t.productGroup)).size}</span></div>
-      <div class="settings-row"><span class="settings-label">Chat ID</span><span class="settings-value">${settings.telegramChatId||'—'}</span></div>
+      <div class="settings-row"><span class="settings-label">Personal Chat ID</span><span class="settings-value">${settings.telegramPersonalChatId||'—'}</span></div>
     </div>
 
     <div class="settings-section">
       <div class="settings-title">ℹ️ О приложении</div>
-      <div class="settings-row"><span class="settings-label">Версия</span><span class="settings-value">2.0.0</span></div>
+      <div class="settings-row"><span class="settings-label">Версия</span><span class="settings-value">2.1.0</span></div>
       <div class="settings-row"><span class="settings-label">Трекеры добавляются</span><span class="settings-value">Через расширение</span></div>
     </div>
   `;
@@ -777,6 +813,39 @@ async function renderSettings() {
   document.getElementById('setDigest')?.addEventListener('change', async (e) => {
     haptic('light');
     await apiPut('/settings/global', { telegramDigestEnabled: e.target.checked });
+  });
+
+  // Threshold mode switcher
+  document.getElementById('setThresholdMode')?.addEventListener('change', (e) => {
+    haptic('light');
+    const mode = e.target.value;
+    document.getElementById('thresholdAbsPanel').style.display = mode==='absolute'?'block':'none';
+    document.getElementById('thresholdPctPanel').style.display = mode==='percentage'?'block':'none';
+    document.getElementById('thresholdAdaptivePanel').style.display = mode==='adaptive'?'block':'none';
+  });
+
+  // Save threshold
+  document.getElementById('btnSaveThreshold')?.addEventListener('click', async () => {
+    haptic('medium');
+    const mode = document.getElementById('setThresholdMode').value;
+    const absVal = parseFloat(document.getElementById('setThresholdAbs')?.value) || 50;
+    const pctVal = parseFloat(document.getElementById('setThresholdPct')?.value) || 5;
+    const thresholdConfig = {
+      mode: mode,
+      absoluteValue: absVal,
+      percentageValue: pctVal,
+      adaptiveTiers: [
+        { min: 0, max: 1000, percent: 8 },
+        { min: 1001, max: 5000, percent: 5 },
+        { min: 5001, max: 20000, percent: 4 },
+        { min: 20001, max: 50000, percent: 3 },
+        { min: 50001, max: 999999999, percent: 2 },
+      ],
+    };
+    try {
+      await apiPut('/settings/global', { thresholdConfig });
+      tg.showAlert('✅ Порог уведомлений сохранён');
+    } catch(e) { tg.showAlert('Ошибка: '+e.message); }
   });
 
   // Check now
@@ -815,6 +884,7 @@ async function renderSettings() {
     });
   });
 }
+
 
 // ─── Shared Components ────────────────────────────────────────────
 

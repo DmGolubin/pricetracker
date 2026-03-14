@@ -172,9 +172,9 @@ async function runCheckCycle(pool) {
 
   if (collector.hasChanges() && settings.telegramDigestEnabled) {
     var messages = collector.compose();
-    if (messages.length > 0 && settings.telegramBotToken && settings.telegramChatId) {
+    if (messages.length > 0 && settings.telegramBotToken && (settings.telegramChatId || settings.telegramPersonalChatId)) {
       console.log('[ServerCheck] 📨 Sending digest (' + messages.length + ' message(s), ' + digestEntries.length + ' changes)...');
-      var sent = await telegram.sendDigest(settings.telegramBotToken, settings.telegramChatId, messages);
+      var sent = await telegram.sendDigest(settings.telegramBotToken, settings.telegramChatId, messages, settings.telegramPersonalChatId);
       var icon = sent === messages.length ? '✅' : '⚠';
       console.log('[ServerCheck] ' + icon + ' Digest sent: ' + sent + '/' + messages.length + ' messages');
     } else if (messages.length === 0) {

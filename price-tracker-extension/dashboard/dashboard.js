@@ -13,9 +13,11 @@ const Dashboard = (function () {
   let allTrackers = [];
   let filteredTrackers = [];
   let searchQuery = '';
-  let priceFilter = 'all'; // 'all' | 'down' | 'up'
+  let priceFilter = 'all'; // 'all' | 'down' | 'up' | 'groups'
+  let selectedGroup = null; // specific group name or null for all
   let selectedIds = new Set();
   let selectMode = false;
+  let refreshAbortController = null;
 
   // Sort state — persisted in localStorage
   var SORT_STORAGE_KEY = 'priceTracker_sortBy';
@@ -178,6 +180,11 @@ const Dashboard = (function () {
         if (!name.includes(searchQuery.toLowerCase())) {
           return false;
         }
+      }
+
+      // Group filter (when a specific group is selected)
+      if (priceFilter === 'groups' && selectedGroup) {
+        return tracker.productGroup === selectedGroup;
       }
 
       // Price direction filter
@@ -545,6 +552,121 @@ const Dashboard = (function () {
     });
   }
 
+  /**
+   * Called by Toolbar when a specific group is selected.
+   */
+  function onGroupSelect(groupName) {
+    selectedGroup = groupName;
+    applyFilters();
+    animateFilterChange(function () {
+      renderGrid();
+    });
+  }
+
+  // ─── Server-side Refresh ──────────────────────────────────────────
+
+  /**
+   * Trigger server-side price check with progress UI.
+   */
+  async function handleServerRefresh() {
+    var refreshBtn = document.getElementById('toolbar-refresh-btn');
+    var toolbarContainer = document.getElementById('toolbar-container');
+
+    // Check if already running
+    try {
+      var statusRes = await fetch(API_BASE + '/server-check/status');
+      var status = await statusRes.json();
+      if (status.running) {
+        showRefreshStatus('Проверка уже выполняется...', true);
+        return;
+      }
+    } catch (_) {}
+
+    // Update button state
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.innerHTML = '<span class="save-spinner"></span> Проверка...';
+    }
+
+    showRefreshStatus('Запуск проверки цен на сервере...', true);
+
+    // Start the check
+    refreshAbortController = new AbortController();
+    try {
+      var res = await fetch(API_BASE + '/server-check', {
+        method: 'POST',
+        signal: refreshAbortController.signal,
+      });
+      var result = await res.json();
+
+      if (result.skipped) {
+        showRefreshStatus('Проверка уже выполняется. Дождитесь завершения.', true);
+      } else if (result.error) {
+        showRefreshStatus('Ошибка: ' + result.error, false);
+      } else {
+        showRefreshStatus(
+          '✅ Проверено: ' + result.checked + ' | Изменилось: ' + result.changed + ' | Ошибок: ' + result.errors,
+          false
+        );
+        // Reload trackers to show updated prices
+        await loadTrackers();
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        showRefreshStatus('Проверка отменена', false);
+      } else {
+        showRefreshStatus('Ошибка: ' + (err.message || 'неизвестная ошибка'), false);
+      }
+    } finally {
+      refreshAbortController = null;
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        var refreshIcon = (typeof Icons !== 'undefined') ? Icons.el('refresh', 18) : '';
+        refreshBtn.innerHTML = refreshIcon + ' Обновить все';
+      }
+      // Auto-hide status after 8 seconds
+      setTimeout(hideRefreshStatus, 8000);
+    }
+  }
+
+  function showRefreshStatus(text, showCancel) {
+    var existing = document.getElementById('refresh-status-bar');
+    if (!existing) {
+      existing = document.createElement('div');
+      existing.id = 'refresh-status-bar';
+      existing.className = 'refresh-status-bar';
+      var toolbarEl = document.querySelector('.toolbar');
+      if (toolbarEl && toolbarEl.parentNode) {
+        toolbarEl.parentNode.insertBefore(existing, toolbarEl.nextSibling);
+      } else {
+        document.body.prepend(existing);
+      }
+    }
+
+    existing.innerHTML = '';
+    var textSpan = document.createElement('span');
+    textSpan.className = 'refresh-status-text';
+    textSpan.textContent = text;
+    existing.appendChild(textSpan);
+
+    if (showCancel) {
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn';
+      cancelBtn.textContent = 'Отменить';
+      cancelBtn.addEventListener('click', function () {
+        if (refreshAbortController) {
+          refreshAbortController.abort();
+        }
+      });
+      existing.appendChild(cancelBtn);
+    }
+  }
+
+  function hideRefreshStatus() {
+    var el = document.getElementById('refresh-status-bar');
+    if (el) el.remove();
+  }
+
   // ─── Data loading ──────────────────────────────────────────────────
 
   /**
@@ -570,6 +692,15 @@ const Dashboard = (function () {
 
     applyFilters();
     renderGrid();
+
+    // Update group chips in toolbar
+    var groups = {};
+    allTrackers.forEach(function (t) {
+      if (t.productGroup) groups[t.productGroup] = true;
+    });
+    if (typeof Toolbar !== 'undefined' && Toolbar.setGroups) {
+      Toolbar.setGroups(Object.keys(groups).sort());
+    }
 
     // Load sparklines after a short delay to ensure DOM is ready
     setTimeout(function () { loadSparklines(); }, 300);
@@ -886,9 +1017,7 @@ const Dashboard = (function () {
         onSearch: onSearchChange,
         onFilter: onFilterChange,
         onSort: onSortChange,
-        onRefreshAll: () => {
-          sendMessage({ action: 'checkAllPrices' }).catch(() => {});
-        },
+        onRefreshAll: handleServerRefresh,
         onSettingsClick: () => {
           if (typeof GlobalSettings !== 'undefined' && GlobalSettings.open) {
             GlobalSettings.open(modalContainer);
@@ -897,6 +1026,7 @@ const Dashboard = (function () {
         onExport: handleExport,
         onImport: handleImport,
         onSelectMode: toggleSelectMode,
+        onGroupSelect: onGroupSelect,
       });
     }
 
@@ -937,6 +1067,8 @@ const Dashboard = (function () {
     onCardClick,
     onTrackerUpdated,
     onTrackerDeleted,
+    onGroupSelect,
+    handleServerRefresh,
     applyFilters,
     renderGrid,
     renderSkeletons,
