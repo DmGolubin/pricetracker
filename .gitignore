@@ -13,8 +13,9 @@ Desktop.ini
 *.swo
 *~
 
-# Kiro
-.kiro/
+# Kiro (keep steering rules tracked)
+.kiro/*
+!.kiro/steering/
 
 # Logs
 *.log
