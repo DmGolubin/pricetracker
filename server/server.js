@@ -159,6 +159,22 @@ async function initDB() {
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "lastCheckedAt" TIMESTAMP DEFAULT NULL;
   `);
 
+  // Migration: deduplicate trackers by pageUrl+cssSelector (keep oldest with most history)
+  await pool.query(`
+    DELETE FROM trackers
+    WHERE id NOT IN (
+      SELECT DISTINCT ON ("pageUrl", "cssSelector") id
+      FROM trackers
+      ORDER BY "pageUrl", "cssSelector", "createdAt" ASC
+    );
+  `);
+
+  // Migration: add unique index to prevent future duplicates
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_trackers_url_selector
+    ON trackers ("pageUrl", "cssSelector");
+  `);
+
   console.log('Database tables initialized');
 }
 
@@ -188,6 +204,14 @@ app.get('/trackers/:id', async (req, res) => {
 app.post('/trackers', async (req, res) => {
   try {
     const d = req.body;
+    // Check for existing tracker with same URL + selector
+    const existing = await pool.query(
+      'SELECT * FROM trackers WHERE "pageUrl" = $1 AND "cssSelector" = $2',
+      [d.pageUrl, d.cssSelector]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Tracker already exists', tracker: existing.rows[0] });
+    }
     const { rows } = await pool.query(
       `INSERT INTO trackers (
         "pageUrl", "cssSelector", "productName", "imageUrl",

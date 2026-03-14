@@ -385,9 +385,9 @@
 /* ===== Sparkline ===== */
 .tracker-card-sparkline {
   margin-top: var(--spacing-sm);
-  height: 32px;
+  height: 40px;
   overflow: hidden;
-  opacity: 0.8;
+  opacity: 0.85;
   transition: opacity var(--transition-fast);
 }
 
@@ -398,7 +398,7 @@
 .tracker-card-sparkline svg {
   display: block;
   width: 100%;
-  height: 32px;
+  height: 40px;
 }
 
 
@@ -1189,4 +1189,49 @@
 .refresh-status-bar .btn {
   font-size: 12px;
   padding: 3px 10px;
+}
+
+
+/* ===== Product Group Sections ===== */
+.product-group-section {
+  margin-bottom: var(--spacing-xl);
+}
+
+.product-group-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.product-group-title {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.product-group-count {
+  font-size: var(--font-xs);
+  font-weight: 500;
+  color: var(--accent-primary);
+  background: var(--accent-primary-glow);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.product-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+@media (min-width: 1200px) {
+  .product-group-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
 }

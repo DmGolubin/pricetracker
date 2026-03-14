@@ -249,7 +249,7 @@ const Dashboard = (function () {
 
   /**
    * Render trackers grouped by productGroup field.
-   * Uses ComparisonTable for groups with >1 tracker, single card for groups with 1 tracker.
+   * Shows group header + card grid for each group.
    */
   function renderGroupedView() {
     var groups = {};
@@ -265,73 +265,64 @@ const Dashboard = (function () {
     });
 
     var groupNames = Object.keys(groups).sort();
+    var cardIndex = 0;
 
     groupNames.forEach(function (name) {
       var trackersInGroup = groups[name];
 
-      if (trackersInGroup.length === 1) {
-        // Single tracker in group — render as a regular card
-        var cardEl = renderTrackerCard(trackersInGroup[0]);
-        cardEl.classList.add('tracker-card-enter', 'visible');
-        trackerGrid.appendChild(cardEl);
-        return;
-      }
+      var section = document.createElement('div');
+      section.className = 'product-group-section';
 
-      // Multiple trackers — use ComparisonTable
-      if (_comparisonTable && _comparisonTable.create) {
-        var section = document.createElement('div');
-        section.className = 'product-group-section';
-        section.style.cssText = 'grid-column:1/-1;margin-bottom:var(--spacing-lg)';
+      var header = document.createElement('div');
+      header.className = 'product-group-header';
+      header.innerHTML = '<h3 class="product-group-title">' + escapeHtml(name)
+        + ' <span class="product-group-count">' + trackersInGroup.length + '</span></h3>';
+      section.appendChild(header);
 
-        var header = document.createElement('h3');
-        header.className = 'product-group-title';
-        header.textContent = name;
-        header.style.cssText = 'color:var(--text-primary);margin-bottom:var(--spacing-sm);font-size:var(--font-lg)';
-        section.appendChild(header);
+      var grid = document.createElement('div');
+      grid.className = 'product-group-grid';
 
-        var tableEl = _comparisonTable.create(name, trackersInGroup, {
-          onRowClick: function (tracker) {
-            onCardClick(tracker);
-          }
+      trackersInGroup.forEach(function (tracker) {
+        var cardEl = renderTrackerCard(tracker);
+        cardEl.classList.add('tracker-card-enter');
+        grid.appendChild(cardEl);
+        var idx = cardIndex++;
+        requestAnimationFrame(function () {
+          setTimeout(function () { cardEl.classList.add('visible'); }, 50 * idx);
         });
-        section.appendChild(tableEl);
-        trackerGrid.appendChild(section);
-      } else {
-        // Fallback: render as card grid (same as before)
-        var section = document.createElement('div');
-        section.className = 'product-group-section';
-        section.style.cssText = 'grid-column:1/-1;margin-bottom:var(--spacing-lg)';
+      });
 
-        var header = document.createElement('h3');
-        header.className = 'product-group-title';
-        header.textContent = name;
-        header.style.cssText = 'color:var(--text-primary);margin-bottom:var(--spacing-sm);font-size:var(--font-lg)';
-        section.appendChild(header);
-
-        var table = document.createElement('div');
-        table.className = 'product-group-table';
-        table.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:var(--spacing-sm)';
-
-        trackersInGroup.forEach(function (tracker) {
-          var cardEl = renderTrackerCard(tracker);
-          cardEl.classList.add('tracker-card-enter', 'visible');
-          table.appendChild(cardEl);
-        });
-
-        section.appendChild(table);
-        trackerGrid.appendChild(section);
-      }
+      section.appendChild(grid);
+      trackerGrid.appendChild(section);
     });
 
     // Ungrouped trackers
-    ungrouped.forEach(function (tracker, index) {
-      var cardEl = renderTrackerCard(tracker);
-      cardEl.classList.add('tracker-card-enter');
-      trackerGrid.appendChild(cardEl);
-      requestAnimationFrame(function () {
-        setTimeout(function () { cardEl.classList.add('visible'); }, 50 * index);
+    if (ungrouped.length > 0) {
+      var section = document.createElement('div');
+      section.className = 'product-group-section';
+
+      var header = document.createElement('div');
+      header.className = 'product-group-header';
+      header.innerHTML = '<h3 class="product-group-title">Без группы'
+        + ' <span class="product-group-count">' + ungrouped.length + '</span></h3>';
+      section.appendChild(header);
+
+      var grid = document.createElement('div');
+      grid.className = 'product-group-grid';
+
+      ungrouped.forEach(function (tracker) {
+        var cardEl = renderTrackerCard(tracker);
+        cardEl.classList.add('tracker-card-enter');
+        grid.appendChild(cardEl);
+        var idx = cardIndex++;
+        requestAnimationFrame(function () {
+          setTimeout(function () { cardEl.classList.add('visible'); }, 50 * idx);
+        });
       });
-    });
+
+      section.appendChild(grid);
+      trackerGrid.appendChild(section);
+    }
   }
 
   /**

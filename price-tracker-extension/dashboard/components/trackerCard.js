@@ -211,7 +211,7 @@ const TrackerCard = (function () {
             + ' role="img" aria-label="' + getDirectionLabel(direction) + '">'
             + getDirectionSymbol(direction) + '</span>';
       if (tracker.currentPrice === tracker.minPrice && tracker.currentPrice < tracker.initialPrice) {
-        html += '<span class="hist-min-badge" title="Історичний мінімум!" aria-label="Historical minimum price">🏆</span>';
+        html += '<span class="hist-min-badge" title="Исторический минимум!" aria-label="Historical minimum price">🏆</span>';
       }
       html += '</div>';
 
@@ -290,7 +290,7 @@ const TrackerCard = (function () {
   function renderSparkline(container, prices) {
     if (!container || !prices || prices.length < 2) return;
 
-    var w = 120, h = 28, pad = 2;
+    var w = 200, h = 40, pad = 2;
     var min = Math.min.apply(null, prices);
     var max = Math.max.apply(null, prices);
     var range = max - min || 1;
@@ -302,10 +302,23 @@ const TrackerCard = (function () {
       points.push(x.toFixed(1) + ',' + y.toFixed(1));
     }
 
-    var color = prices[prices.length - 1] <= prices[0] ? 'var(--accent-green)' : 'var(--accent-red)';
+    var isDown = prices[prices.length - 1] <= prices[0];
+    var color = isDown ? 'var(--accent-green)' : 'var(--accent-red)';
+    var gradId = 'sg-' + (container.getAttribute('data-tracker-id') || Math.random().toString(36).slice(2));
 
-    var svg = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">'
-      + '<polyline fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="' + points.join(' ') + '"/>'
+    // Build area fill path (line + close along bottom)
+    var firstX = points[0].split(',')[0];
+    var lastX = points[points.length - 1].split(',')[0];
+    var areaPoints = points.join(' ') + ' ' + lastX + ',' + h + ' ' + firstX + ',' + h;
+
+    var svg = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h
+      + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">'
+      + '<defs><linearGradient id="' + gradId + '" x1="0" y1="0" x2="0" y2="1">'
+      + '<stop offset="0%" stop-color="' + color + '" stop-opacity="0.3"/>'
+      + '<stop offset="100%" stop-color="' + color + '" stop-opacity="0.02"/>'
+      + '</linearGradient></defs>'
+      + '<polygon fill="url(#' + gradId + ')" points="' + areaPoints + '"/>'
+      + '<polyline fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="' + points.join(' ') + '"/>'
       + '</svg>';
 
     container.innerHTML = svg;
