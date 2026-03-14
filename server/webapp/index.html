@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Price Tracker</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header id="header">
+      <div class="header-title">
+        <span class="header-icon">💰</span>
+        <h1>Price Tracker</h1>
+      </div>
+      <div class="header-stats" id="headerStats"></div>
+    </header>
+
+    <!-- Navigation tabs -->
+    <nav id="tabs">
+      <button class="tab active" data-tab="best">🏆 Лучшие</button>
+      <button class="tab" data-tab="groups">📦 Группы</button>
+      <button class="tab" data-tab="all">📋 Все</button>
+      <button class="tab" data-tab="settings">⚙️</button>
+    </nav>
+
+    <!-- Content area -->
+    <main id="content">
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Загрузка...</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

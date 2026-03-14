@@ -1,8 +1,10 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { Pool } = require('pg');
 const autoGrouper = require('./autoGrouper.js');
 const scheduler = require('./scheduler.js');
+const TelegramBot = require('./telegramBot.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -385,7 +387,19 @@ app.put('/settings/global', async (req, res) => {
   }
 });
 
-// ─── Start ──────────────────────────────────────────────────────────
+// ─── Telegram Mini App (static files) ───────────────────────────────
+
+app.use('/webapp', express.static(path.join(__dirname, 'webapp')));
+
+// Mini App API: trigger price check
+app.post('/webapp/api/check', async (req, res) => {
+  try {
+    const result = await scheduler.triggerManualCheck(pool);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ─── Server-side Price Check (Scheduler) ────────────────────────────
 
@@ -625,7 +639,7 @@ app.post('/server-check/diagnose', async (req, res) => {
 // ─── Server Start ───────────────────────────────────────────────────
 
 initDB()
-  .then(() => {
+  .then(async () => {
     app.listen(PORT, () => {
       console.log('═══════════════════════════════════════════════');
       console.log('🚀 Server running on port ' + PORT);
@@ -640,6 +654,14 @@ initDB()
       const cronExpr = process.env.CRON_SCHEDULE || '0 */3 * * *';
       scheduler.start(pool, cronExpr);
     });
+
+    // Initialize Telegram Bot (polling mode)
+    try {
+      const bot = new TelegramBot(pool);
+      await bot.init();
+    } catch (err) {
+      console.error('[TelegramBot] Failed to initialize:', err.message);
+    }
   })
   .catch((err) => {
     console.error('❌ Failed to initialize database:', err);
