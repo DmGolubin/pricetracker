@@ -197,7 +197,11 @@ async function autoGroupAll(pool) {
       // Use the shortest product name as the group name (usually the cleanest)
       const groupName = cluster
         .map(t => cleanGroupName(t.productName))
+        .filter(n => n.length > 0)
         .sort((a, b) => a.length - b.length)[0];
+
+      // Skip if no valid group name could be derived
+      if (!groupName) continue;
 
       for (const t of cluster) {
         await pool.query(
@@ -238,8 +242,26 @@ function cleanGroupName(name) {
     }
   }
 
-  return result.replace(/\s+/g, ' ').trim();
+  // Remove trailing "— купити на ▷ EVA.UA" and similar patterns
+  result = result.replace(/\s*[-–—]\s*(купить|купити)\s+на\s+.*$/i, '');
+  // Remove "Большой ассортимент..." / "Великий асортимент..."
+  result = result.replace(/\s*Большой ассортимент.*$/i, '');
+  result = result.replace(/\s*Великий асортимент.*$/i, '');
+  // Remove trailing "| domain"
+  result = result.replace(/\s*\|\s*[\w.]+\s*$/, '');
+  // Remove trailing variant info: "— 100", "— 50ml — 5334"
+  result = result.replace(/\s*[-–—]\s*\d+\s*(ml)?\s*([-–—]\s*\d+)?\s*$/i, '');
+  // Remove trailing volume: "100 мл (ТЕСТЕР)" etc
+  result = result.replace(/\s*,?\s*\d+\s*мл\s*(\([^)]*\))?\s*$/i, '');
+
+  result = result.replace(/\s+/g, ' ').trim();
+
+  // If result is empty or only special chars, return empty to skip grouping
+  if (!result || /^[\s?!.,;:]+$/.test(result)) return '';
+
+  return result;
 }
+
 
 module.exports = {
   normalizeName,
