@@ -134,18 +134,18 @@ function sortTrackers(trackers, sortBy) {
 }
 
 /**
- * Available sort options with Ukrainian labels.
+ * Available sort options with labels.
  * @returns {Array<{value: string, label: string}>}
  */
 function getSortOptions() {
   return [
-    { value: 'discount', label: 'За знижкою' },
-    { value: 'priceChange', label: 'За зміною ціни' },
-    { value: 'lastUpdated', label: 'За датою оновлення' },
-    { value: 'minPrice', label: 'За мін. ціною' },
-    { value: 'priceAsc', label: 'Ціна: за зростанням' },
-    { value: 'priceDesc', label: 'Ціна: за спаданням' },
-    { value: 'name', label: 'За назвою' },
+    { value: 'discount', label: 'По скидке' },
+    { value: 'priceChange', label: 'По изменению цены' },
+    { value: 'lastUpdated', label: 'По дате обновления' },
+    { value: 'minPrice', label: 'По мин. цене' },
+    { value: 'priceAsc', label: 'Цена: по возрастанию' },
+    { value: 'priceDesc', label: 'Цена: по убыванию' },
+    { value: 'name', label: 'По названию' },
   ];
 }
 

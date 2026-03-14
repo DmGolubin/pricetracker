@@ -180,9 +180,33 @@ function renderBest() {
   if (!groups.length) { content.innerHTML = emptyHtml('🏆','Нет данных о ценах'); return; }
 
   let html = sortBarHtml();
-  const sorted = sortBy === 'name'
-    ? groups.sort((a,b)=>a.name.localeCompare(b.name))
-    : groups.sort((a,b)=>(a.bestPrice||Infinity)-(b.bestPrice||Infinity));
+  let sorted;
+  switch(sortBy) {
+    case 'priceDesc':
+      sorted = groups.sort((a,b)=>(b.bestPrice||0)-(a.bestPrice||0));
+      break;
+    case 'discount':
+      sorted = groups.sort((a,b)=>{
+        const bestA = a.trackers.reduce((x,y)=>(Number(x.currentPrice)||Infinity)<=(Number(y.currentPrice)||Infinity)?x:y);
+        const bestB = b.trackers.reduce((x,y)=>(Number(x.currentPrice)||Infinity)<=(Number(y.currentPrice)||Infinity)?x:y);
+        const da = Number(bestA.initialPrice)>0?(Number(bestA.currentPrice)-Number(bestA.initialPrice))/Number(bestA.initialPrice):0;
+        const db = Number(bestB.initialPrice)>0?(Number(bestB.currentPrice)-Number(bestB.initialPrice))/Number(bestB.initialPrice):0;
+        return da-db;
+      });
+      break;
+    case 'updated':
+      sorted = groups.sort((a,b)=>{
+        const latestA = Math.max(...a.trackers.map(t=>new Date(t.updatedAt||0).getTime()));
+        const latestB = Math.max(...b.trackers.map(t=>new Date(t.updatedAt||0).getTime()));
+        return latestB-latestA;
+      });
+      break;
+    case 'name':
+      sorted = groups.sort((a,b)=>a.name.localeCompare(b.name));
+      break;
+    default: // priceAsc
+      sorted = groups.sort((a,b)=>(a.bestPrice||Infinity)-(b.bestPrice||Infinity));
+  }
 
   for (const g of sorted) {
     const volumes = groupByVolume(g.trackers);
@@ -748,11 +772,17 @@ async function renderSettings() {
       <div class="settings-title">📊 Порог уведомлений</div>
       <div class="settings-row">
         <span class="settings-label">Режим</span>
-        <select id="setThresholdMode" class="settings-select">
-          <option value="adaptive" ${tc.mode==='adaptive'?'selected':''}>Адаптивный</option>
-          <option value="absolute" ${tc.mode==='absolute'?'selected':''}>Абсолютный</option>
-          <option value="percentage" ${tc.mode==='percentage'?'selected':''}>Процентный</option>
-        </select>
+        <div class="custom-select" id="thresholdModeSelect">
+          <div class="custom-select-trigger" tabindex="0">
+            <span class="custom-select-text">${tc.mode==='adaptive'?'Адаптивный':tc.mode==='absolute'?'Абсолютный':'Процентный'}</span>
+            <span class="custom-select-arrow">▾</span>
+          </div>
+          <div class="custom-select-menu">
+            <div class="custom-select-item${tc.mode==='adaptive'?' active':''}" data-value="adaptive">Адаптивный</div>
+            <div class="custom-select-item${tc.mode==='absolute'?' active':''}" data-value="absolute">Абсолютный</div>
+            <div class="custom-select-item${tc.mode==='percentage'?' active':''}" data-value="percentage">Процентный</div>
+          </div>
+        </div>
       </div>
       <div id="thresholdAbsPanel" class="settings-threshold-panel" style="display:${tc.mode==='absolute'?'block':'none'}">
         <div class="settings-row">
@@ -798,7 +828,7 @@ async function renderSettings() {
 
     <div class="settings-section">
       <div class="settings-title">ℹ️ О приложении</div>
-      <div class="settings-row"><span class="settings-label">Версия</span><span class="settings-value">2.1.0</span></div>
+      <div class="settings-row"><span class="settings-label">Версия</span><span class="settings-value">2.2.0</span></div>
       <div class="settings-row"><span class="settings-label">Трекеры добавляются</span><span class="settings-value">Через расширение</span></div>
     </div>
   `;
@@ -815,19 +845,45 @@ async function renderSettings() {
     await apiPut('/settings/global', { telegramDigestEnabled: e.target.checked });
   });
 
-  // Threshold mode switcher
-  document.getElementById('setThresholdMode')?.addEventListener('change', (e) => {
-    haptic('light');
-    const mode = e.target.value;
-    document.getElementById('thresholdAbsPanel').style.display = mode==='absolute'?'block':'none';
-    document.getElementById('thresholdPctPanel').style.display = mode==='percentage'?'block':'none';
-    document.getElementById('thresholdAdaptivePanel').style.display = mode==='adaptive'?'block':'none';
-  });
+  // Threshold mode custom dropdown
+  const modeSelect = document.getElementById('thresholdModeSelect');
+  if (modeSelect) {
+    const trigger = modeSelect.querySelector('.custom-select-trigger');
+    const menu = modeSelect.querySelector('.custom-select-menu');
+    const textEl = modeSelect.querySelector('.custom-select-text');
+
+    trigger.addEventListener('click', () => {
+      modeSelect.classList.toggle('open');
+      haptic('light');
+    });
+
+    menu.querySelectorAll('.custom-select-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const mode = item.dataset.value;
+        textEl.textContent = item.textContent;
+        menu.querySelectorAll('.custom-select-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        modeSelect.classList.remove('open');
+        modeSelect.dataset.value = mode;
+        haptic('light');
+        document.getElementById('thresholdAbsPanel').style.display = mode==='absolute'?'block':'none';
+        document.getElementById('thresholdPctPanel').style.display = mode==='percentage'?'block':'none';
+        document.getElementById('thresholdAdaptivePanel').style.display = mode==='adaptive'?'block':'none';
+      });
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!modeSelect.contains(e.target)) modeSelect.classList.remove('open');
+    });
+
+    modeSelect.dataset.value = tc.mode || 'adaptive';
+  }
 
   // Save threshold
   document.getElementById('btnSaveThreshold')?.addEventListener('click', async () => {
     haptic('medium');
-    const mode = document.getElementById('setThresholdMode').value;
+    const mode = document.getElementById('thresholdModeSelect')?.dataset.value || 'adaptive';
     const absVal = parseFloat(document.getElementById('setThresholdAbs')?.value) || 50;
     const pctVal = parseFloat(document.getElementById('setThresholdPct')?.value) || 5;
     const thresholdConfig = {
