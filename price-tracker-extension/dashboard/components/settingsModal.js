@@ -176,11 +176,11 @@ const SettingsModal = (function () {
     section.setAttribute('data-section', 'threshold-override');
 
     var sectionLabel = document.createElement('label');
-    sectionLabel.textContent = 'Порог уведомлень (override)';
+    sectionLabel.textContent = 'Порог уведомлений (override)';
     sectionLabel.className = 'section-label';
     section.appendChild(sectionLabel);
 
-    // Toggle: "Використовувати свій поріг"
+    // Toggle: "Использовать свой порог"
     var toggleWrapper = document.createElement('div');
     toggleWrapper.className = 'threshold-override-toggle-wrapper';
 
@@ -197,7 +197,7 @@ const SettingsModal = (function () {
 
     var toggleText = document.createElement('span');
     toggleText.className = 'threshold-override-toggle-text';
-    toggleText.textContent = 'Використовувати свій поріг';
+    toggleText.textContent = 'Использовать свой порог';
     toggleText.style.marginLeft = '8px';
 
     toggleWrapper.appendChild(toggleLabel);
@@ -212,7 +212,7 @@ const SettingsModal = (function () {
     // Global fallback message (shown when toggle is OFF)
     var globalMsg = document.createElement('p');
     globalMsg.className = 'threshold-global-msg';
-    globalMsg.textContent = 'Використовуються глобальні налаштування';
+    globalMsg.textContent = 'Используются глобальные настройки';
     globalMsg.style.cssText = 'color:var(--text-muted);font-style:italic;margin:8px 0 0 0;font-size:13px';
     globalMsg.style.display = hasOverride ? 'none' : '';
 
@@ -225,12 +225,12 @@ const SettingsModal = (function () {
     var radioGroup = document.createElement('div');
     radioGroup.className = 'threshold-mode-group';
     radioGroup.setAttribute('role', 'radiogroup');
-    radioGroup.setAttribute('aria-label', 'Режим порогу уведомлень (override)');
+    radioGroup.setAttribute('aria-label', 'Режим порога уведомлений (override)');
 
     var modeOptions = [
-      { value: modes.ADAPTIVE, label: 'Адаптивний' },
-      { value: modes.ABSOLUTE, label: 'Абсолютний' },
-      { value: modes.PERCENTAGE, label: 'Відсотковий' },
+      { value: modes.ADAPTIVE, label: 'Адаптивный' },
+      { value: modes.ABSOLUTE, label: 'Абсолютный' },
+      { value: modes.PERCENTAGE, label: 'Процентный' },
     ];
 
     for (var i = 0; i < modeOptions.length; i++) {
@@ -262,7 +262,7 @@ const SettingsModal = (function () {
     absolutePanel.style.display = currentMode === modes.ABSOLUTE ? '' : 'none';
 
     var absLabel = document.createElement('label');
-    absLabel.textContent = 'Порогове значення (UAH)';
+    absLabel.textContent = 'Пороговое значение (UAH)';
     var absInput = document.createElement('input');
     absInput.type = 'number';
     absInput.className = 'input';
@@ -270,7 +270,7 @@ const SettingsModal = (function () {
     absInput.step = '1';
     absInput.value = config.absoluteValue != null ? config.absoluteValue : 50;
     absInput.setAttribute('data-field', 'thresholdOverrideAbsoluteValue');
-    absInput.setAttribute('aria-label', 'Порогове значення override (UAH)');
+    absInput.setAttribute('aria-label', 'Пороговое значение override (UAH)');
     absolutePanel.appendChild(absLabel);
     absolutePanel.appendChild(absInput);
     overrideControls.appendChild(absolutePanel);
@@ -282,7 +282,7 @@ const SettingsModal = (function () {
     percentagePanel.style.display = currentMode === modes.PERCENTAGE ? '' : 'none';
 
     var pctLabel = document.createElement('label');
-    pctLabel.textContent = 'Порогове значення (%)';
+    pctLabel.textContent = 'Пороговое значение (%)';
     var pctInput = document.createElement('input');
     pctInput.type = 'number';
     pctInput.className = 'input';
@@ -290,7 +290,7 @@ const SettingsModal = (function () {
     pctInput.step = '0.1';
     pctInput.value = config.percentageValue != null ? config.percentageValue : 5;
     pctInput.setAttribute('data-field', 'thresholdOverridePercentageValue');
-    pctInput.setAttribute('aria-label', 'Порогове значення override (%)');
+    pctInput.setAttribute('aria-label', 'Пороговое значение override (%)');
     percentagePanel.appendChild(pctLabel);
     percentagePanel.appendChild(pctInput);
     overrideControls.appendChild(percentagePanel);
@@ -306,7 +306,7 @@ const SettingsModal = (function () {
     table.className = 'adaptive-tiers-table';
     var thead = document.createElement('thead');
     var headRow = document.createElement('tr');
-    var headers = ['Діапазон цін (UAH)', 'Поріг (%)'];
+    var headers = ['Диапазон цен (UAH)', 'Порог (%)'];
     for (var h = 0; h < headers.length; h++) {
       var th = document.createElement('th');
       th.textContent = headers[h];

@@ -80,7 +80,7 @@ const GlobalSettings = (function () {
     section.setAttribute('data-section', 'threshold');
 
     var sectionLabel = document.createElement('label');
-    sectionLabel.textContent = 'Порог уведомлень';
+    sectionLabel.textContent = 'Порог уведомлений';
     sectionLabel.className = 'section-label';
     section.appendChild(sectionLabel);
 
@@ -88,12 +88,12 @@ const GlobalSettings = (function () {
     var radioGroup = document.createElement('div');
     radioGroup.className = 'threshold-mode-group';
     radioGroup.setAttribute('role', 'radiogroup');
-    radioGroup.setAttribute('aria-label', 'Режим порогу уведомлень');
+    radioGroup.setAttribute('aria-label', 'Режим порога уведомлений');
 
     var modeOptions = [
-      { value: modes.ADAPTIVE, label: 'Адаптивний' },
-      { value: modes.ABSOLUTE, label: 'Абсолютний' },
-      { value: modes.PERCENTAGE, label: 'Відсотковий' },
+      { value: modes.ADAPTIVE, label: 'Адаптивный' },
+      { value: modes.ABSOLUTE, label: 'Абсолютный' },
+      { value: modes.PERCENTAGE, label: 'Процентный' },
     ];
 
     for (var i = 0; i < modeOptions.length; i++) {
@@ -125,7 +125,7 @@ const GlobalSettings = (function () {
     absolutePanel.style.display = currentMode === modes.ABSOLUTE ? '' : 'none';
 
     var absLabel = document.createElement('label');
-    absLabel.textContent = 'Порогове значення (UAH)';
+    absLabel.textContent = 'Пороговое значение (UAH)';
     var absInput = document.createElement('input');
     absInput.type = 'number';
     absInput.className = 'input';
@@ -133,7 +133,7 @@ const GlobalSettings = (function () {
     absInput.step = '1';
     absInput.value = config.absoluteValue != null ? config.absoluteValue : 50;
     absInput.setAttribute('data-field', 'thresholdAbsoluteValue');
-    absInput.setAttribute('aria-label', 'Порогове значення (UAH)');
+    absInput.setAttribute('aria-label', 'Пороговое значение (UAH)');
     absolutePanel.appendChild(absLabel);
     absolutePanel.appendChild(absInput);
     section.appendChild(absolutePanel);
@@ -144,7 +144,7 @@ const GlobalSettings = (function () {
     percentagePanel.style.display = currentMode === modes.PERCENTAGE ? '' : 'none';
 
     var pctLabel = document.createElement('label');
-    pctLabel.textContent = 'Порогове значення (%)';
+    pctLabel.textContent = 'Пороговое значение (%)';
     var pctInput = document.createElement('input');
     pctInput.type = 'number';
     pctInput.className = 'input';
@@ -152,7 +152,7 @@ const GlobalSettings = (function () {
     pctInput.step = '0.1';
     pctInput.value = config.percentageValue != null ? config.percentageValue : 5;
     pctInput.setAttribute('data-field', 'thresholdPercentageValue');
-    pctInput.setAttribute('aria-label', 'Порогове значення (%)');
+    pctInput.setAttribute('aria-label', 'Пороговое значение (%)');
     percentagePanel.appendChild(pctLabel);
     percentagePanel.appendChild(pctInput);
     section.appendChild(percentagePanel);
@@ -167,7 +167,7 @@ const GlobalSettings = (function () {
     table.className = 'adaptive-tiers-table';
     var thead = document.createElement('thead');
     var headRow = document.createElement('tr');
-    var headers = ['Діапазон цін (UAH)', 'Поріг (%)'];
+    var headers = ['Диапазон цен (UAH)', 'Порог (%)'];
     for (var h = 0; h < headers.length; h++) {
       var th = document.createElement('th');
       th.textContent = headers[h];
