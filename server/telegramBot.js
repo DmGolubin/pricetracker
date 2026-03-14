@@ -248,12 +248,18 @@ class TelegramBot {
   }
 
   /**
-   * Save chatId to settings so notifications go to this user's DM.
+   * Save personal chatId (bot DM) separately from group chatId.
+   * This way bot DM notifications don't overwrite the group chat setting.
    */
   async saveChatId(chatId) {
     try {
       await this.pool.query(
-        `UPDATE settings SET "telegramChatId" = $1 WHERE id = 'global'`,
+        `UPDATE settings SET "telegramPersonalChatId" = $1 WHERE id = 'global'`,
+        [String(chatId)]
+      );
+      // Also set telegramChatId if it's empty (first-time setup)
+      await this.pool.query(
+        `UPDATE settings SET "telegramChatId" = $1 WHERE id = 'global' AND ("telegramChatId" IS NULL OR "telegramChatId" = '')`,
         [String(chatId)]
       );
     } catch (err) {

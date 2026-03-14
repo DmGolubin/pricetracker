@@ -144,6 +144,11 @@ async function initDB() {
     ALTER TABLE settings ADD COLUMN IF NOT EXISTS "telegramDigestEnabled" BOOLEAN DEFAULT true;
   `);
 
+  // Migration: add telegramPersonalChatId for bot DM notifications (separate from group chat)
+  await pool.query(`
+    ALTER TABLE settings ADD COLUMN IF NOT EXISTS "telegramPersonalChatId" TEXT DEFAULT '';
+  `);
+
   // Migration: add per-tracker notification threshold override
   await pool.query(`
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "notificationThreshold" JSONB DEFAULT NULL;
@@ -357,6 +362,7 @@ app.put('/settings/global', async (req, res) => {
       'apiBaseUrl', 'notificationsEnabled', 'telegramBotToken',
       'telegramChatId', 'persistentPinTab',
       'thresholdConfig', 'telegramDigestEnabled',
+      'telegramPersonalChatId',
     ];
 
     const jsonbFields = ['thresholdConfig'];
