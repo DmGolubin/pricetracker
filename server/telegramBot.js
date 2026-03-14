@@ -224,6 +224,18 @@ class TelegramBot {
       const groupName = data.slice(6);
       return this.showGroup(chatId, msgId, groupName);
     }
+    if (data === 'check:confirm') {
+      return this.doCheck(chatId, msgId);
+    }
+    if (data === 'check:cancel') {
+      return this.editMessage(chatId, msgId, '❌ Проверка отменена.');
+    }
+    if (data === 'check:stop') {
+      const scheduler = require('./scheduler');
+      const cancelled = scheduler.requestCancel();
+      const text = cancelled ? '⛔ Запрос на отмену отправлен. Проверка остановится после текущего трекера.' : '⚠️ Проверка не выполняется.';
+      return this.editMessage(chatId, msgId, text);
+    }
     if (data.startsWith('tracker:')) {
       const trackerId = parseInt(data.slice(8));
       return this.showTracker(chatId, msgId, trackerId);
@@ -644,23 +656,41 @@ class TelegramBot {
   }
 
   async cmdCheck(chatId) {
-    await this.sendMessage(chatId, '🔄 Запускаю проверку цен...');
+    await this.sendMessage(chatId, '🔄 Запустить проверку цен?', {
+      keyboard: [
+        [
+          { text: '✅ Да, запустить', callback_data: 'check:confirm' },
+          { text: '❌ Отмена', callback_data: 'check:cancel' },
+        ],
+      ],
+    });
+  }
+
+  async doCheck(chatId, msgId) {
+    await this.editMessage(chatId, msgId, '🔄 Проверка цен запущена...', [
+      [{ text: '⛔ Отменить проверку', callback_data: 'check:stop' }],
+    ]);
 
     try {
       const scheduler = require('./scheduler');
       const result = await scheduler.triggerManualCheck(this.pool);
 
       if (result.skipped) {
-        await this.sendMessage(chatId, '⚠️ Проверка уже выполняется. Подожди немного.');
+        await this.editMessage(chatId, msgId, '⚠️ Проверка уже выполняется. Подожди немного.');
+      } else if (result.cancelled) {
+        let text = `⛔ Проверка отменена.\n\n`;
+        text += `📋 Проверено: ${result.checked}\n`;
+        text += `🔄 Изменилось: ${result.changed}`;
+        await this.editMessage(chatId, msgId, text);
       } else {
         let text = `✅ Проверка завершена!\n\n`;
         text += `📋 Проверено: ${result.checked}\n`;
         text += `🔄 Изменилось: ${result.changed}\n`;
         text += `❌ Ошибок: ${result.errors}`;
-        await this.sendMessage(chatId, text);
+        await this.editMessage(chatId, msgId, text);
       }
     } catch (err) {
-      await this.sendMessage(chatId, `❌ Ошибка проверки: ${err.message}`);
+      await this.editMessage(chatId, msgId, `❌ Ошибка проверки: ${err.message}`);
     }
   }
 

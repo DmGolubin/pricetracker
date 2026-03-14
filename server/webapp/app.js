@@ -904,17 +904,41 @@ async function renderSettings() {
     } catch(e) { tg.showAlert('Ошибка: '+e.message); }
   });
 
-  // Check now
-  document.getElementById('btnCheckNow')?.addEventListener('click', async () => {
-    haptic('medium');
-    const btn = document.getElementById('btnCheckNow');
-    btn.textContent = '⏳ Проверка...'; btn.disabled = true;
-    try {
-      const r = await apiPost('/server-check');
-      if (r.skipped) { tg.showAlert('Проверка уже выполняется'); }
-      else { tg.showAlert(`✅ Проверено: ${r.checked}, изменилось: ${r.changed}, ошибок: ${r.errors}`); await loadData(); }
-    } catch(e) { tg.showAlert('Ошибка: '+e.message); }
-    btn.textContent = '🔄 Запустить проверку цен'; btn.disabled = false;
+  // Check now (with confirmation and cancel support)
+  document.getElementById('btnCheckNow')?.addEventListener('click', () => {
+    tg.showConfirm('Запустить проверку цен? Это может занять несколько минут.', async (ok) => {
+      if (!ok) return;
+      haptic('medium');
+      const btn = document.getElementById('btnCheckNow');
+      btn.textContent = '⏳ Проверка...'; btn.disabled = true;
+
+      // Show cancel button
+      let cancelBtn = document.getElementById('btnCancelCheck');
+      if (!cancelBtn) {
+        cancelBtn = document.createElement('button');
+        cancelBtn.id = 'btnCancelCheck';
+        cancelBtn.className = 'action-btn full-width';
+        cancelBtn.style.marginTop = '4px';
+        cancelBtn.textContent = '⛔ Отменить проверку';
+        btn.parentNode.insertBefore(cancelBtn, btn.nextSibling);
+      }
+      cancelBtn.style.display = '';
+      cancelBtn.onclick = async () => {
+        haptic('light');
+        try { await apiPost('/server-check/cancel'); } catch(_){}
+        cancelBtn.textContent = '⏳ Отмена...';
+        cancelBtn.disabled = true;
+      };
+
+      try {
+        const r = await apiPost('/server-check');
+        if (r.skipped) { tg.showAlert('Проверка уже выполняется'); }
+        else if (r.cancelled) { tg.showAlert(`⛔ Проверка отменена. Проверено: ${r.checked}, изменилось: ${r.changed}`); await loadData(); }
+        else { tg.showAlert(`✅ Проверено: ${r.checked}, изменилось: ${r.changed}, ошибок: ${r.errors}`); await loadData(); }
+      } catch(e) { tg.showAlert('Ошибка: '+e.message); }
+      btn.textContent = '🔄 Запустить проверку цен'; btn.disabled = false;
+      if (cancelBtn) { cancelBtn.style.display = 'none'; cancelBtn.textContent = '⛔ Отменить проверку'; cancelBtn.disabled = false; }
+    });
   });
 
   // Auto-group

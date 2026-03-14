@@ -43,6 +43,7 @@ Price Tracker — система отслеживания цен на товар
 - `GET/PUT /settings/global`
 - `POST /server-check` — ручной запуск проверки цен
 - `GET /server-check/status` — статус текущей проверки
+- `POST /server-check/cancel` — отмена текущей проверки цен
 
 ## Chrome-расширение (`price-tracker-extension/`)
 

@@ -452,6 +452,11 @@ app.get('/server-check/status', (req, res) => {
   res.json(scheduler.getStatus());
 });
 
+app.post('/server-check/cancel', (req, res) => {
+  const cancelled = scheduler.requestCancel();
+  res.json({ cancelled, message: cancelled ? 'Cancel requested' : 'No check running' });
+});
+
 // Test single tracker extraction (debug)
 app.post('/server-check/test/:id', async (req, res) => {
   const scraper = require('./scraper');

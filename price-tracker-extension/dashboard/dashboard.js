@@ -563,7 +563,7 @@ const Dashboard = (function () {
     var refreshBtn = document.getElementById('toolbar-refresh-btn');
     var toolbarContainer = document.getElementById('toolbar-container');
 
-    // Check if already running
+    // Check if already running — show cancel option
     try {
       var statusRes = await fetch(API_BASE + '/server-check/status');
       var status = await statusRes.json();
@@ -572,6 +572,9 @@ const Dashboard = (function () {
         return;
       }
     } catch (_) {}
+
+    // Confirmation dialog
+    if (!confirm('Запустить проверку цен? Это может занять несколько минут.')) return;
 
     // Update button state
     if (refreshBtn) {
@@ -592,6 +595,9 @@ const Dashboard = (function () {
 
       if (result.skipped) {
         showRefreshStatus('Проверка уже выполняется. Дождитесь завершения.', true);
+      } else if (result.cancelled) {
+        showRefreshStatus('⛔ Проверка отменена. Проверено: ' + result.checked + ' | Изменилось: ' + result.changed, false);
+        await loadTrackers();
       } else if (result.error) {
         showRefreshStatus('Ошибка: ' + result.error, false);
       } else {
@@ -645,6 +651,9 @@ const Dashboard = (function () {
       cancelBtn.className = 'btn';
       cancelBtn.textContent = 'Отменить';
       cancelBtn.addEventListener('click', function () {
+        // Cancel server-side check
+        fetch(API_BASE + '/server-check/cancel', { method: 'POST' }).catch(function () {});
+        // Cancel client-side fetch
         if (refreshAbortController) {
           refreshAbortController.abort();
         }

@@ -14,6 +14,7 @@ let scheduledTask = null;
 let isRunning = false;
 let lastRunAt = null;
 let lastResult = null;
+let cancelRequested = false;
 
 // Default cron: every 3 hours
 const DEFAULT_CRON = '0 */3 * * *';
@@ -50,10 +51,11 @@ function start(pool, cronExpression) {
 
     console.log('[Scheduler] ⏰ Cron tick — starting check cycle...');
     isRunning = true;
+    cancelRequested = false;
     lastRunAt = new Date().toISOString();
 
     try {
-      lastResult = await runCheckCycle(pool);
+      lastResult = await runCheckCycle(pool, function() { return cancelRequested; });
       console.log('[Scheduler] ✅ Check cycle completed:', JSON.stringify(lastResult));
     } catch (err) {
       lastResult = { error: err.message };
@@ -90,11 +92,17 @@ async function triggerManualCheck(pool) {
 
   console.log('[Scheduler] 🔄 Manual check triggered.');
   isRunning = true;
+  cancelRequested = false;
   lastRunAt = new Date().toISOString();
 
   try {
-    lastResult = await runCheckCycle(pool);
-    console.log('[Scheduler] ✅ Manual check completed:', JSON.stringify(lastResult));
+    lastResult = await runCheckCycle(pool, function() { return cancelRequested; });
+    if (cancelRequested) {
+      lastResult = Object.assign({}, lastResult, { cancelled: true });
+      console.log('[Scheduler] ⛔ Manual check was cancelled.');
+    } else {
+      console.log('[Scheduler] ✅ Manual check completed:', JSON.stringify(lastResult));
+    }
     return lastResult;
   } catch (err) {
     lastResult = { error: err.message };
@@ -102,7 +110,19 @@ async function triggerManualCheck(pool) {
     throw err;
   } finally {
     isRunning = false;
+    cancelRequested = false;
   }
+}
+
+/**
+ * Request cancellation of the currently running check cycle.
+ * @returns {boolean} true if a cycle was running and cancel was requested
+ */
+function requestCancel() {
+  if (!isRunning) return false;
+  cancelRequested = true;
+  console.log('[Scheduler] ⛔ Cancel requested.');
+  return true;
 }
 
 /**
@@ -126,4 +146,4 @@ function getStatus() {
   };
 }
 
-module.exports = { start, stop, triggerManualCheck, getIsRunning, getStatus };
+module.exports = { start, stop, triggerManualCheck, requestCancel, getIsRunning, getStatus };

@@ -55,7 +55,8 @@ function randomDelay(minMs, maxMs) {
  * @param {Pool} pool
  * @returns {Promise<{checked: number, changed: number, errors: number}>}
  */
-async function runCheckCycle(pool) {
+async function runCheckCycle(pool, isCancelled) {
+  if (typeof isCancelled !== 'function') isCancelled = function() { return false; };
   const startTime = Date.now();
   console.log('[ServerCheck] ═══════════════════════════════════════════════');
   console.log('[ServerCheck] 🚀 Starting price check cycle');
@@ -118,6 +119,10 @@ async function runCheckCycle(pool) {
 
   async function processNext() {
     while (index < priceTrackers.length) {
+      if (isCancelled()) {
+        console.log('[ServerCheck] ⛔ Check cancelled by user.');
+        break;
+      }
       var tracker = priceTrackers[index++];
       var domain = getDomain(tracker.pageUrl || '');
 
