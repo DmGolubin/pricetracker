@@ -79,6 +79,47 @@ function fmtDate(d) {
 
 function pctCh(o,n) { return o&&o!==0?((n-o)/o*100):null; }
 
+/**
+ * Extract volume (ml) from product name.
+ */
+function extractVolume(name) {
+  if (!name) return { volume: null, isTester: false, volumeLabel: '' };
+  const isTester = /тестер|tester/i.test(name);
+  let m = name.match(/(\d+)\s*(?:ml|мл)\b/i);
+  if (m) { const v=parseInt(m[1]); return { volume:v, isTester, volumeLabel: v+' мл'+(isTester?' (тестер)':'') }; }
+  m = name.match(/\/(\d+)\s*ml/i);
+  if (m) { const v=parseInt(m[1]); return { volume:v, isTester, volumeLabel: v+' мл'+(isTester?' (тестер)':'') }; }
+  m = name.match(/[-–—]\s*(\d{2,3})\s*$/);
+  if (m) { const v=parseInt(m[1]); if (v>=5&&v<=200) return { volume:v, isTester, volumeLabel: v+' мл'+(isTester?' (тестер)':'') }; }
+  m = name.match(/,\s*(\d+)\s*мл/i);
+  if (m) { const v=parseInt(m[1]); return { volume:v, isTester, volumeLabel: v+' мл'+(isTester?' (тестер)':'') }; }
+  return { volume: null, isTester, volumeLabel: isTester ? '(тестер)' : '' };
+}
+
+/**
+ * Group trackers by volume. Returns sorted array of { volume, volumeLabel, trackers, bestPrice }.
+ */
+function groupByVolume(trackers) {
+  const map = {};
+  for (const t of trackers) {
+    const { volume, volumeLabel } = extractVolume(t.productName);
+    const key = volume !== null ? String(volume) : 'none';
+    if (!map[key]) map[key] = { volume, volumeLabel: volume ? (volume+' мл') : '', trackers: [] };
+    map[key].trackers.push(t);
+    t._volume = volume;
+    t._volumeLabel = volumeLabel;
+  }
+  return Object.values(map).map(g => {
+    const prices = g.trackers.map(t=>Number(t.currentPrice)).filter(p=>p>0);
+    g.bestPrice = prices.length ? Math.min(...prices) : 0;
+    return g;
+  }).sort((a,b) => {
+    if (a.volume===null) return 1;
+    if (b.volume===null) return -1;
+    return a.volume - b.volume;
+  });
+}
+
 function haptic(type) { try { tg.HapticFeedback.impactOccurred(type||'light'); } catch(_){} }
 
 function sortTrackers(list) {
@@ -144,12 +185,24 @@ function renderBest() {
     : groups.sort((a,b)=>(a.bestPrice||Infinity)-(b.bestPrice||Infinity));
 
   for (const g of sorted) {
+    const volumes = groupByVolume(g.trackers);
+    const name = cleanName(g.name).slice(0,50);
+    const hasVolumes = volumes.length > 1 || (volumes.length === 1 && volumes[0].volume !== null);
+
+    // Volume summary line
+    let volSummary = '';
+    if (hasVolumes) {
+      const parts = volumes.filter(v=>v.volume!==null && v.bestPrice>0).map(v=>`${v.volumeLabel}: ${fmtP(v.bestPrice)}`);
+      if (parts.length) volSummary = `<div class="card-volumes">${parts.map(p=>`<span class="vol-chip">� ${esc(p)}</span>`).join('')}</div>`;
+    }
+
     const best = g.trackers.reduce((a,b)=>(Number(a.currentPrice)||Infinity)<=(Number(b.currentPrice)||Infinity)?a:b);
     const price = Number(best.currentPrice);
     const initial = Number(best.initialPrice);
     const pct = pctCh(initial, price);
     const shop = getShop(best.pageUrl);
-    const name = cleanName(g.name).slice(0,50);
+    const bestVol = extractVolume(best.productName);
+    const volLabel = bestVol.volumeLabel ? ` · ${bestVol.volumeLabel}` : '';
 
     let badge = '';
     if (pct !== null && pct < -5) badge = `<span class="card-badge badge-drop">📉 ${pct.toFixed(1)}%</span>`;
@@ -158,8 +211,9 @@ function renderBest() {
     html += `<div class="card" data-action="group" data-group="${esc(g.name)}">
       <div class="card-header"><div class="card-name">${esc(name)}</div>${badge}</div>
       <div class="card-price">${fmtP(price)} <span class="currency">грн</span></div>
-      <div class="card-meta"><span>🏪 ${esc(shop)}</span><span>📦 ${g.trackers.length} магаз.</span>
-      ${Number(best.minPrice)>0?`<span>📉 мін: ${fmtP(best.minPrice)}</span>`:''}</div></div>`;
+      <div class="card-meta"><span>🏪 ${esc(shop)}${esc(volLabel)}</span><span>📦 ${g.trackers.length} магаз.</span>
+      ${Number(best.minPrice)>0?`<span>📉 мін: ${fmtP(best.minPrice)}</span>`:''}</div>
+      ${volSummary}</div>`;
   }
   content.innerHTML = html;
   bindCards();
@@ -366,37 +420,83 @@ function showGroupDetail(groupName) {
   if (!trackers.length) { content.innerHTML = emptyHtml('📦','Группа пуста'); return; }
 
   pushBack(() => renderTab());
-  const bestPrice = Math.min(...trackers.filter(t=>Number(t.currentPrice)>0).map(t=>Number(t.currentPrice)));
+
+  const volumes = groupByVolume(trackers);
+  const hasVolumes = volumes.length > 1 || (volumes.length === 1 && volumes[0].volume !== null);
 
   let html = `<div class="detail-header">
     <div class="detail-title" id="groupTitle">${esc(groupName.slice(0,50))}</div>
     <button class="icon-btn" id="btnEditGroup" title="Переименовать">✏️</button>
   </div>`;
 
-  for (const t of trackers) {
-    const price = Number(t.currentPrice);
-    const isBest = price>0 && price===bestPrice;
-    const name = cleanName(t.productName).slice(0,45);
-    const shop = getShop(t.pageUrl);
-    let badge = `<span class="card-badge badge-shop">${esc(shop)}</span>`;
-    if (isBest) badge = `<span class="card-badge badge-best">🏆 Лучшая</span>`;
+  // Volume filter chips (if multiple volumes)
+  if (hasVolumes) {
+    html += `<div class="filter-chips" id="volumeChips">`;
+    html += `<button class="chip active" data-vol="all">Все</button>`;
+    for (const vg of volumes) {
+      if (vg.volume !== null) {
+        html += `<button class="chip" data-vol="${vg.volume}">📏 ${vg.volumeLabel}</button>`;
+      }
+    }
+    html += `</div>`;
+  }
 
-    const min=Number(t.minPrice), max=Number(t.maxPrice);
-    let range = '';
-    if (min>0 && max>0 && max>min && price>0) {
-      const pos = Math.min(100,Math.max(0,((price-min)/(max-min))*100));
-      range = `<div class="card-range"><div class="card-range-fill" style="width:${pos}%"></div><div class="card-range-marker" style="left:${pos}%"></div></div>`;
+  html += '<div id="groupTrackerList">';
+
+  for (const vg of volumes) {
+    const volTitle = vg.volumeLabel || '📎 Без объёма';
+    if (hasVolumes) {
+      html += `<div class="volume-section" data-volume="${vg.volume !== null ? vg.volume : 'none'}">`;
+      html += `<div class="volume-header"><span class="volume-title">📏 ${esc(volTitle)}</span>`;
+      if (vg.bestPrice > 0) html += `<span class="volume-best">� ${fmtP(vg.bestPrice)} грн</span>`;
+      html += `</div>`;
     }
 
-    html += `<div class="card" data-action="tracker" data-id="${t.id}">
-      <div class="card-header"><div class="card-name">${esc(name)}</div>${badge}</div>
-      <div class="card-price">${fmtP(price)} <span class="currency">грн</span></div>
-      <div class="card-meta"><span>🏪 ${esc(shop)}</span>${min>0?`<span>мін: ${fmtP(min)}</span>`:''}${max>0?`<span>макс: ${fmtP(max)}</span>`:''}</div>
-      ${range}</div>`;
+    for (const t of vg.trackers) {
+      const price = Number(t.currentPrice);
+      const isBest = price>0 && price===vg.bestPrice;
+      const name = cleanName(t.productName).slice(0,45);
+      const shop = getShop(t.pageUrl);
+      let badge = `<span class="card-badge badge-shop">${esc(shop)}</span>`;
+      if (isBest) badge = `<span class="card-badge badge-best">🏆 Лучшая</span>`;
+
+      const volInfo = t._volumeLabel ? `<span class="card-vol-tag">${esc(t._volumeLabel)}</span>` : '';
+
+      const min=Number(t.minPrice), max=Number(t.maxPrice);
+      let range = '';
+      if (min>0 && max>0 && max>min && price>0) {
+        const pos = Math.min(100,Math.max(0,((price-min)/(max-min))*100));
+        range = `<div class="card-range"><div class="card-range-fill" style="width:${pos}%"></div><div class="card-range-marker" style="left:${pos}%"></div></div>`;
+      }
+
+      html += `<div class="card" data-action="tracker" data-id="${t.id}">
+        <div class="card-header"><div class="card-name">${esc(name)}</div>${badge}</div>
+        <div class="card-price">${fmtP(price)} <span class="currency">грн</span>${volInfo}</div>
+        <div class="card-meta"><span>🏪 ${esc(shop)}</span>${min>0?`<span>мін: ${fmtP(min)}</span>`:''}${max>0?`<span>макс: ${fmtP(max)}</span>`:''}</div>
+        ${range}</div>`;
+    }
+
+    if (hasVolumes) html += `</div>`;
   }
+
+  html += '</div>';
 
   content.innerHTML = html;
   bindCards();
+
+  // Volume filter chip handlers
+  document.querySelectorAll('#volumeChips .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#volumeChips .chip').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      haptic('light');
+      const vol = chip.dataset.vol;
+      document.querySelectorAll('.volume-section').forEach(sec => {
+        if (vol === 'all') { sec.style.display = ''; }
+        else { sec.style.display = sec.dataset.volume === vol ? '' : 'none'; }
+      });
+    });
+  });
 
   document.getElementById('btnEditGroup')?.addEventListener('click', () => {
     const input = document.createElement('input');
@@ -440,6 +540,7 @@ async function showTrackerDetail(id) {
   const shop = getShop(t.pageUrl);
   const price = Number(t.currentPrice), initial = Number(t.initialPrice);
   const min = Number(t.minPrice), max = Number(t.maxPrice), prev = Number(t.previousPrice);
+  const volInfo = extractVolume(t.productName);
 
   let changeHtml = '';
   if (prev>0 && prev!==price) {
@@ -456,7 +557,7 @@ async function showTrackerDetail(id) {
     <div class="detail-price-block">
       <div class="detail-current-price">${fmtP(price)} <span class="currency">грн</span></div>
       ${changeHtml}
-      <div style="font-size:12px;color:var(--hint);margin-top:6px">🏪 ${esc(shop)}</div>
+      <div style="font-size:12px;color:var(--hint);margin-top:6px">🏪 ${esc(shop)}${volInfo.volumeLabel ? ' · 📏 '+esc(volInfo.volumeLabel) : ''}</div>
     </div>
 
     <div class="detail-stats">
@@ -723,6 +824,8 @@ function trackerCardHtml(t) {
   const price = Number(t.currentPrice), prev = Number(t.previousPrice);
   const pct = prev>0 && price!==prev ? pctCh(prev,price) : null;
   const min = Number(t.minPrice), max = Number(t.maxPrice);
+  const volInfo = extractVolume(t.productName);
+  const volTag = volInfo.volumeLabel ? `<span class="card-vol-tag">${esc(volInfo.volumeLabel)}</span>` : '';
 
   let badge = '';
   if (t.status==='error') badge = `<span class="card-badge badge-rise">❌</span>`;
@@ -740,7 +843,7 @@ function trackerCardHtml(t) {
 
   return `<div class="card" data-action="tracker" data-id="${t.id}">
     <div class="card-header">${checkbox}<div class="card-name">${esc(name)}</div>${badge}</div>
-    <div class="card-price">${fmtP(price)} <span class="currency">грн</span></div>
+    <div class="card-price">${fmtP(price)} <span class="currency">грн</span>${volTag}</div>
     <div class="card-meta"><span>🏪 ${esc(shop)}</span>${min>0?`<span>📉 ${fmtP(min)}</span>`:''}${max>0?`<span>📈 ${fmtP(max)}</span>`:''}</div>
     ${range}</div>`;
 }

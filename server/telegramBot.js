@@ -322,7 +322,8 @@ class TelegramBot {
       const name = row.productGroup;
       const shortName = name.length > 35 ? name.slice(0, 35) + '…' : name;
       const best = row.bestPrice ? `${Number(row.bestPrice).toFixed(0)} грн` : '—';
-      text += `• <b>${escapeHtml(shortName)}</b>\n  ${row.cnt} трекеров · лучшая: ${best}\n\n`;
+      const volCount = row.volCount ? `, ${row.volCount} объёмов` : '';
+      text += `• <b>${escapeHtml(shortName)}</b>\n  ${row.cnt} трекеров${volCount} · лучшая: ${best}\n\n`;
       keyboard.push([{ text: `📦 ${shortName}`, callback_data: `group:${name.slice(0, 60)}` }]);
     }
 
@@ -340,11 +341,10 @@ class TelegramBot {
   }
 
   async cmdBestPrices(chatId, editMsgId) {
-    // For each group, find the tracker with the lowest current price
+    // Get all active trackers with groups
     const { rows } = await this.pool.query(`
-      SELECT DISTINCT ON ("productGroup")
-        t.id, t."productName", t."pageUrl", t."currentPrice", t."previousPrice",
-        t."minPrice", t."maxPrice", t."productGroup", t."initialPrice"
+      SELECT t.id, t."productName", t."pageUrl", t."currentPrice", t."previousPrice",
+             t."minPrice", t."maxPrice", t."productGroup", t."initialPrice"
       FROM trackers t
       WHERE t."productGroup" IS NOT NULL AND t."productGroup" != ''
         AND t."currentPrice" > 0 AND t.status != 'paused'
@@ -357,30 +357,41 @@ class TelegramBot {
       return this.sendMessage(chatId, text);
     }
 
+    // Group by productGroup, then sub-group by volume
+    const groupMap = {};
+    for (const t of rows) {
+      if (!groupMap[t.productGroup]) groupMap[t.productGroup] = [];
+      groupMap[t.productGroup].push(t);
+    }
+
     let text = `🏆 <b>Лучшие цены по группам</b>\n\n`;
     const keyboard = [];
 
-    for (const t of rows) {
-      const name = cleanName(t.productName);
-      const shortName = name.length > 40 ? name.slice(0, 40) + '…' : name;
-      const domain = extractDomain(t.pageUrl);
-      const shop = getShopLabel(domain);
-      const price = Number(t.currentPrice).toFixed(0);
-      const initial = Number(t.initialPrice);
-      const current = Number(t.currentPrice);
-      let trend = '';
-      if (initial > 0 && current < initial) {
-        const pct = (((initial - current) / initial) * 100).toFixed(1);
-        trend = ` 📉 -${pct}%`;
-      } else if (initial > 0 && current > initial) {
-        const pct = (((current - initial) / initial) * 100).toFixed(1);
-        trend = ` 📈 +${pct}%`;
+    for (const [groupName, trackers] of Object.entries(groupMap).sort((a, b) => a[0].localeCompare(b[0]))) {
+      const volumes = groupByVolume(trackers);
+      const shortGroup = groupName.length > 40 ? groupName.slice(0, 40) + '…' : groupName;
+
+      text += `🏷 <b>${escapeHtml(shortGroup)}</b>\n`;
+
+      if (volumes.length === 1 && volumes[0].volume === null) {
+        // No volume info — show single best price
+        const best = trackers.reduce((a, b) => (Number(a.currentPrice) || Infinity) <= (Number(b.currentPrice) || Infinity) ? a : b);
+        const shop = getShopLabel(extractDomain(best.pageUrl));
+        const price = Number(best.currentPrice).toFixed(0);
+        text += `   💰 ${price} грн · ${shop}\n\n`;
+      } else {
+        // Show best price per volume
+        for (const vg of volumes) {
+          const best = vg.trackers.reduce((a, b) => (Number(a.currentPrice) || Infinity) <= (Number(b.currentPrice) || Infinity) ? a : b);
+          const shop = getShopLabel(extractDomain(best.pageUrl));
+          const price = Number(best.currentPrice).toFixed(0);
+          const volLabel = vg.volumeLabel || 'без объёма';
+          text += `   📏 <b>${volLabel}</b>: ${price} грн · ${shop}\n`;
+        }
+        text += '\n';
       }
 
-      text += `🏷 <b>${escapeHtml(shortName)}</b>\n`;
-      text += `   💰 ${price} грн · ${shop}${trend}\n\n`;
-
-      keyboard.push([{ text: `🔍 ${shortName.slice(0, 30)}`, callback_data: `group:${t.productGroup.slice(0, 60)}` }]);
+      keyboard.push([{ text: `🔍 ${shortGroup.slice(0, 30)}`, callback_data: `group:${groupName.slice(0, 60)}` }]);
     }
 
     const refreshBtn = [{ text: '🔄 Обновить', callback_data: 'refresh:best' }];
@@ -407,36 +418,48 @@ class TelegramBot {
     let text = `📦 <b>${escapeHtml(shortGroup)}</b>\n`;
     text += `${rows.length} трекеров\n\n`;
 
-    // Find best price in group
-    const bestPrice = Math.min(...rows.filter(r => Number(r.currentPrice) > 0).map(r => Number(r.currentPrice)));
-
+    const volumes = groupByVolume(rows);
     const keyboard = [];
-    for (const t of rows) {
-      const name = cleanName(t.productName);
-      const shortName = name.length > 35 ? name.slice(0, 35) + '…' : name;
-      const domain = extractDomain(t.pageUrl);
-      const shop = getShopLabel(domain);
-      const price = Number(t.currentPrice);
-      const priceStr = price > 0 ? `${price.toFixed(0)} грн` : '—';
-      const isBest = price > 0 && price === bestPrice;
-      const bestTag = isBest ? ' 🏆' : '';
-      const min = Number(t.minPrice);
-      const isHistMin = price > 0 && min > 0 && price <= min;
-      const histTag = isHistMin && !isBest ? ' ⭐' : '';
 
-      text += `${isBest ? '🏆' : '•'} <b>${escapeHtml(shortName)}</b>\n`;
-      text += `   ${priceStr} · ${shop}${bestTag}${histTag}\n`;
-
-      // Show price range
-      if (min > 0) {
-        text += `   📊 мин: ${min.toFixed(0)} / макс: ${Number(t.maxPrice).toFixed(0)} грн\n`;
+    for (const vg of volumes) {
+      const volTitle = vg.volumeLabel || '📎 Без объёма';
+      if (volumes.length > 1 || vg.volume !== null) {
+        text += `━━━ 📏 <b>${volTitle}</b> ━━━\n`;
+        if (vg.bestPrice > 0) {
+          text += `🏆 Лучшая: ${vg.bestPrice.toFixed(0)} грн\n\n`;
+        } else {
+          text += '\n';
+        }
       }
-      text += '\n';
 
-      keyboard.push([{
-        text: `${isBest ? '🏆' : '📊'} ${shop} — ${priceStr}`,
-        callback_data: `tracker:${t.id}`,
-      }]);
+      for (const t of vg.trackers) {
+        const name = cleanName(t.productName);
+        const shortName = name.length > 35 ? name.slice(0, 35) + '…' : name;
+        const domain = extractDomain(t.pageUrl);
+        const shop = getShopLabel(domain);
+        const price = Number(t.currentPrice);
+        const priceStr = price > 0 ? `${price.toFixed(0)} грн` : '—';
+        const isBest = price > 0 && price === vg.bestPrice;
+        const bestTag = isBest ? ' 🏆' : '';
+        const min = Number(t.minPrice);
+        const isHistMin = price > 0 && min > 0 && price <= min;
+        const histTag = isHistMin && !isBest ? ' ⭐' : '';
+        const volInfo = t._volumeLabel ? ` · ${t._volumeLabel}` : '';
+
+        text += `${isBest ? '🏆' : '•'} <b>${escapeHtml(shortName)}</b>\n`;
+        text += `   ${priceStr} · ${shop}${volInfo}${bestTag}${histTag}\n`;
+
+        if (min > 0) {
+          text += `   📊 мін: ${min.toFixed(0)} / макс: ${Number(t.maxPrice).toFixed(0)} грн\n`;
+        }
+        text += '\n';
+
+        const btnLabel = `${isBest ? '🏆' : '📊'} ${shop}${t._volumeLabel ? ' ' + t._volumeLabel : ''} — ${priceStr}`;
+        keyboard.push([{
+          text: btnLabel.slice(0, 60),
+          callback_data: `tracker:${t.id}`,
+        }]);
+      }
     }
 
     keyboard.push([{ text: '⬅️ Назад к группам', callback_data: 'back:groups' }]);
@@ -461,7 +484,9 @@ class TelegramBot {
     const prev = Number(t.previousPrice);
 
     let text = `🏷 <b>${escapeHtml(name)}</b>\n\n`;
+    const { volumeLabel } = extractVolume(t.productName);
     text += `🏪 Магазин: ${shop}\n`;
+    if (volumeLabel) text += `📏 Объём: ${volumeLabel}\n`;
     text += `💰 Текущая цена: <b>${current > 0 ? current.toFixed(0) + ' грн' : '—'}</b>\n`;
 
     if (prev > 0 && prev !== current) {
@@ -710,6 +735,85 @@ function cleanName(name) {
     .replace(/\s*Великий асортимент.*$/i, '')
     .replace(/\s*\|\s*[\w.]+\s*$/, '')
     .trim();
+}
+
+/**
+ * Extract volume (ml) from product name.
+ * Handles patterns: "50ml", "100 мл", "— 50", "edp/100ml", ", 30 мл (ТЕСТЕР)"
+ * Also detects "ТЕСТЕР" / "тестер" / "tester" flag.
+ * @param {string} name
+ * @returns {{ volume: number|null, isTester: boolean, volumeLabel: string }}
+ */
+function extractVolume(name) {
+  if (!name) return { volume: null, isTester: false, volumeLabel: '' };
+
+  const isTester = /тестер|tester/i.test(name);
+
+  // Pattern 1: "50ml" or "100 ml" or "50 мл"
+  let m = name.match(/(\d+)\s*(?:ml|мл)\b/i);
+  if (m) {
+    const vol = parseInt(m[1]);
+    return { volume: vol, isTester, volumeLabel: vol + ' мл' + (isTester ? ' (тестер)' : '') };
+  }
+
+  // Pattern 2: "edp/100ml" (sets)
+  m = name.match(/\/(\d+)\s*ml/i);
+  if (m) {
+    const vol = parseInt(m[1]);
+    return { volume: vol, isTester, volumeLabel: vol + ' мл' + (isTester ? ' (тестер)' : '') };
+  }
+
+  // Pattern 3: trailing "— 50" or "— 100" (EVA pattern, only 2-3 digit numbers)
+  m = name.match(/[-–—]\s*(\d{2,3})\s*$/);
+  if (m) {
+    const vol = parseInt(m[1]);
+    // Sanity check: typical perfume volumes are 5-200ml
+    if (vol >= 5 && vol <= 200) {
+      return { volume: vol, isTester, volumeLabel: vol + ' мл' + (isTester ? ' (тестер)' : '') };
+    }
+  }
+
+  // Pattern 4: ", 30 мл" or ", 100 мл (ТЕСТЕР)"
+  m = name.match(/,\s*(\d+)\s*мл/i);
+  if (m) {
+    const vol = parseInt(m[1]);
+    return { volume: vol, isTester, volumeLabel: vol + ' мл' + (isTester ? ' (тестер)' : '') };
+  }
+
+  return { volume: null, isTester, volumeLabel: isTester ? '(тестер)' : '' };
+}
+
+/**
+ * Group trackers by volume within a product group.
+ * Returns array of { volume, volumeLabel, trackers, bestPrice }
+ * sorted by volume ascending. Trackers without volume go into "Без объёма" bucket.
+ */
+function groupByVolume(trackers) {
+  const volumeMap = {};
+
+  for (const t of trackers) {
+    const { volume, volumeLabel } = extractVolume(t.productName);
+    const key = volume !== null ? String(volume) : 'none';
+    if (!volumeMap[key]) {
+      volumeMap[key] = { volume, volumeLabel: volume ? (volume + ' мл') : '', trackers: [] };
+    }
+    volumeMap[key].trackers.push(t);
+    // Enrich tracker with extracted volume info
+    t._volume = volume;
+    t._volumeLabel = volumeLabel;
+  }
+
+  return Object.values(volumeMap)
+    .map(g => {
+      const prices = g.trackers.map(t => Number(t.currentPrice)).filter(p => p > 0);
+      g.bestPrice = prices.length ? Math.min(...prices) : 0;
+      return g;
+    })
+    .sort((a, b) => {
+      if (a.volume === null) return 1;
+      if (b.volume === null) return -1;
+      return a.volume - b.volume;
+    });
 }
 
 function formatDate(d) {

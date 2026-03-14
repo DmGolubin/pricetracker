@@ -168,6 +168,51 @@ header {
   transform: translateX(-50%);
 }
 
+/* Volume chips on best prices tab */
+.card-volumes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.vol-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  color: var(--hint);
+  white-space: nowrap;
+}
+.card-vol-tag {
+  font-size: 11px;
+  color: var(--hint);
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  vertical-align: middle;
+}
+
+/* Volume section headers in group detail */
+.volume-section { margin-bottom: 4px; }
+.volume-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px 6px;
+  margin-top: 8px;
+}
+.volume-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.volume-best {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* Group card */
 .group-card { padding: 12px 14px; }
 .group-header {
