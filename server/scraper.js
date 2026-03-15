@@ -792,6 +792,20 @@ async function extractPrice(tracker) {
       for (var notinoAttempt = 0; notinoAttempt < 2; notinoAttempt++) {
         try {
           notinoPrice = await page.evaluate(function() {
+        // Notino promo/voucher price: span.dlmrqim contains the discounted
+        // price (e.g. "2 675 грн с кодом TOP"). This is always lower than
+        // the regular price and should be preferred when present.
+        var promoWrapper = document.querySelector('span.dlmrqim span[data-testid="pd-price-wrapper"]');
+        if (promoWrapper) {
+          var promoSpan = promoWrapper.querySelector('span[content]');
+          if (promoSpan) {
+            var promoContent = promoSpan.getAttribute('content');
+            if (promoContent && /\d/.test(promoContent)) return promoContent;
+            var promoText = (promoSpan.textContent || '').trim();
+            if (promoText && /\d/.test(promoText)) return promoText;
+          }
+        }
+        // Regular price: span[data-testid="pd-price"] content attribute
         // Try content attribute first (most reliable)
         var span = document.querySelector('span[data-testid="pd-price"]');
         if (span) {

@@ -634,6 +634,22 @@
   function detectPriceSelector() {
     var CURRENCY_DETECT_RE = /₴|грн|UAH|USD|\$|€|₽|руб|£|¥|₩|zł|kr/i;
 
+    // 0. Notino promo/voucher price (span.dlmrqim > pd-price-wrapper > span[content])
+    // This is the discounted price with a promo code — always preferred over regular.
+    try {
+      var promoWrapper = document.querySelector('span.dlmrqim span[data-testid="pd-price-wrapper"]');
+      if (promoWrapper) {
+        var promoSpan = promoWrapper.querySelector('span[content]');
+        if (promoSpan) {
+          var promoContent = (promoSpan.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+          if (promoContent && parsePrice(promoContent) !== null) {
+            var promoSel = generateSelector(promoSpan);
+            if (promoSel) return promoSel;
+          }
+        }
+      }
+    } catch (_) {}
+
     // 1. Well-known price selectors
     var PRICE_SELECTORS = [
       '[data-testid="product-price"]', '[data-testid="price"]',

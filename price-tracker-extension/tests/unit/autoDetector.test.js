@@ -222,6 +222,29 @@ describe('AutoDetector', () => {
       expect(r.selector).toBeTruthy();
     });
 
+    test('prefers Notino promo/voucher price over regular price', () => {
+      var restore = setupPriceElement(
+        '<div>' +
+          '<div id="pd-price"><span data-testid="pd-price" content="3&nbsp;150">3 150</span> <span data-testid="currency-variant">₴</span></div>' +
+          '<span class="dlmrqim"><span data-testid="pd-price-wrapper"><span content="2&nbsp;675">2 675</span> <span data-testid="currency-variant">₴</span></span></span>' +
+        '</div>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(2675);
+    });
+
+    test('falls back to regular Notino price when no promo price', () => {
+      var restore = setupPriceElement(
+        '<div id="pd-price"><span data-testid="pd-price" content="3&nbsp;150">3 150</span> <span data-testid="currency-variant">₴</span></div>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(3150);
+    });
+
     test('detects price from Notino content attr with non-breaking space', () => {
       var restore = setupPriceElement(
         '<span data-testid="pd-price" content="1\u00A0250">1\u00A0250</span>'

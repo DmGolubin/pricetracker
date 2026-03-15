@@ -228,7 +228,26 @@
    * Returns { element, price, confidence } or null.
    */
   function checkSiteSpecific() {
-    // Notino.ua: price in span[data-testid="pd-price"] content attribute
+    // Notino.ua: promo/voucher price takes priority over regular price.
+    // Promo price lives in: span.dlmrqim > span[data-testid="pd-price-wrapper"] > span[content]
+    // Regular price lives in: span[data-testid="pd-price"][content]
+    try {
+      var promoWrapper = document.querySelector('span.dlmrqim span[data-testid="pd-price-wrapper"]');
+      if (promoWrapper) {
+        var promoSpan = promoWrapper.querySelector('span[content]');
+        if (promoSpan) {
+          var promoContent = (promoSpan.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+          if (promoContent) {
+            var promoPrice = parsePrice(promoContent);
+            if (promoPrice !== null && promoPrice > 0) {
+              return { element: promoSpan, price: promoPrice, confidence: 0.97 };
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Notino.ua: regular price in span[data-testid="pd-price"] content attribute
     var notinoSelectors = [
       'span[data-testid="pd-price"]',
       '#pd-price span[data-testid="pd-price"]'
