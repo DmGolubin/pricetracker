@@ -300,22 +300,24 @@ async function extractPrice(tracker) {
         timeout: PAGE_TIMEOUT_MS,
       });
     } catch (navErr) {
-      // If networkidle2 times out, retry with domcontentloaded — some sites
-      // (e.g. Kasta) keep persistent connections open (analytics, websockets)
-      // that prevent networkidle2 from ever firing.
+      // If networkidle2 times out, the page content is likely already loaded —
+      // sites like Kasta keep persistent connections open (analytics, websockets)
+      // that prevent networkidle2 from ever firing. Don't reload, just continue
+      // with the already-loaded page and wait for the tracker's CSS selector.
       if (navErr.message && navErr.message.indexOf('timeout') !== -1) {
-        console.log(`[Scraper] #${trackerId} networkidle2 timed out, retrying with domcontentloaded...`);
-        try {
-          await page.goto(navigateUrl, {
-            waitUntil: 'domcontentloaded',
-            timeout: PAGE_TIMEOUT_MS,
-          });
-          // Give JS some time to render after DOM is ready
-          await new Promise(function(r) { setTimeout(r, 3000); });
-        } catch (navErr2) {
-          var elapsed = Date.now() - pageStart;
-          console.error(`[Scraper] #${trackerId} ❌ Error (${elapsed}ms): ${navErr2.message} — ${shortName}`);
-          return { success: false, error: navErr2.message };
+        console.log(`[Scraper] #${trackerId} networkidle2 timed out — page likely loaded, waiting for selector...`);
+        // Wait for the tracker's CSS selector to appear (JS rendering)
+        var selectorToWait = tracker.cssSelector;
+        if (selectorToWait) {
+          try {
+            await page.waitForSelector(selectorToWait, { timeout: 10000 });
+            console.log(`[Scraper] #${trackerId} Selector found after networkidle2 timeout`);
+          } catch (_) {
+            console.log(`[Scraper] #${trackerId} Selector not found after 10s wait, continuing anyway...`);
+          }
+        } else {
+          // No specific selector — just wait a bit for JS rendering
+          await new Promise(function(r) { setTimeout(r, 5000); });
         }
       } else {
         throw navErr;
