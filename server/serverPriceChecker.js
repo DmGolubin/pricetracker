@@ -136,10 +136,14 @@ async function runCheckCycle(pool, isCancelled) {
         }
       }
 
-      // Random delay between trackers (5-15 seconds)
+      // Random delay between trackers
+      // Notino needs longer delays to avoid bot detection (wait page)
       if (index > 1) {
-        var delayMs = 5000 + Math.floor(Math.random() * 10000);
-        console.log('[ServerCheck] ⏳ Delay ' + Math.round(delayMs / 1000) + 's before #' + tracker.id);
+        var isNotinoDomain = domain.indexOf('notino') !== -1;
+        var delayMs = isNotinoDomain
+          ? 20000 + Math.floor(Math.random() * 15000)   // 20-35s for Notino
+          : 5000 + Math.floor(Math.random() * 10000);    // 5-15s for others
+        console.log('[ServerCheck] ⏳ Delay ' + Math.round(delayMs / 1000) + 's before #' + tracker.id + (isNotinoDomain ? ' (notino)' : ''));
         await new Promise(function(r) { setTimeout(r, delayMs); });
       }
 

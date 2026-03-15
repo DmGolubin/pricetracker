@@ -315,6 +315,38 @@ async function extractPrice(tracker) {
     const isEva = (tracker.pageUrl || '').indexOf('eva.ua') !== -1;
     const isNotino = (tracker.pageUrl || '').indexOf('notino.ua') !== -1;
 
+    // ─── Notino wait-page detection ──────────────────────────────────
+    // Notino shows "Трохи зачекайте…" (Please wait) page as bot protection.
+    // Unlike Cloudflare WAF, this page sometimes resolves after a few seconds.
+    // Strategy: detect it, wait up to 30s for the real page, then treat as WAF if stuck.
+    if (isNotino) {
+      var notinoTitle = '';
+      try { notinoTitle = await page.title(); } catch(_) {}
+      var isWaitPage = /зачекайте|please wait|moment/i.test(notinoTitle);
+      if (isWaitPage) {
+        console.log(`[Scraper] #${trackerId} Notino: wait page detected ("${notinoTitle}"), waiting for real page...`);
+        var waitPageResolved = false;
+        for (var waitAttempt = 0; waitAttempt < 6; waitAttempt++) {
+          await new Promise(function(r) { setTimeout(r, 5000); });
+          try {
+            var currentTitle = await page.title();
+            if (!/зачекайте|please wait|moment/i.test(currentTitle)) {
+              console.log(`[Scraper] #${trackerId} Notino: wait page resolved after ${(waitAttempt + 1) * 5}s — "${currentTitle}"`);
+              waitPageResolved = true;
+              // Give React app time to hydrate after page resolves
+              await new Promise(function(r) { setTimeout(r, 3000); });
+              break;
+            }
+          } catch(_) {}
+        }
+        if (!waitPageResolved) {
+          var elapsed = Date.now() - pageStart;
+          console.log(`[Scraper] #${trackerId} ⛔ Notino wait page did not resolve after 30s (${elapsed}ms) — ${shortName}`);
+          return { success: false, error: 'NOTINO_WAIT_PAGE: ' + notinoTitle, wafBlocked: true };
+        }
+      }
+    }
+
     // ─── EVA.UA variant: click variant button found by title pattern ──────────
     // EVA is a Vue/Nuxt SPA. The variant buttons have title="VOLUME (PRODUCT_ID)".
     // Hash navigation doesn't work (EVA ignores the hash on initial load).
