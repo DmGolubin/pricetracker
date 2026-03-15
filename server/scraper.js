@@ -294,10 +294,33 @@ async function extractPrice(tracker) {
     }
     console.log(`[Scraper] #${trackerId} Loading: ${navigateUrl}`);
     const navStart = Date.now();
-    await page.goto(navigateUrl, {
-      waitUntil: 'networkidle2',
-      timeout: PAGE_TIMEOUT_MS,
-    });
+    try {
+      await page.goto(navigateUrl, {
+        waitUntil: 'networkidle2',
+        timeout: PAGE_TIMEOUT_MS,
+      });
+    } catch (navErr) {
+      // If networkidle2 times out, retry with domcontentloaded — some sites
+      // (e.g. Kasta) keep persistent connections open (analytics, websockets)
+      // that prevent networkidle2 from ever firing.
+      if (navErr.message && navErr.message.indexOf('timeout') !== -1) {
+        console.log(`[Scraper] #${trackerId} networkidle2 timed out, retrying with domcontentloaded...`);
+        try {
+          await page.goto(navigateUrl, {
+            waitUntil: 'domcontentloaded',
+            timeout: PAGE_TIMEOUT_MS,
+          });
+          // Give JS some time to render after DOM is ready
+          await new Promise(function(r) { setTimeout(r, 3000); });
+        } catch (navErr2) {
+          var elapsed = Date.now() - pageStart;
+          console.error(`[Scraper] #${trackerId} ❌ Error (${elapsed}ms): ${navErr2.message} — ${shortName}`);
+          return { success: false, error: navErr2.message };
+        }
+      } else {
+        throw navErr;
+      }
+    }
     console.log(`[Scraper] #${trackerId} Page loaded in ${Date.now() - navStart}ms`);
 
     // WAF/Cloudflare block detection — if blocked, return error with special flag

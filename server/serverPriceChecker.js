@@ -112,7 +112,12 @@ async function runCheckCycle(pool, isCancelled) {
 
   // WAF cooldown tracker: domain → timestamp of last WAF block
   var wafCooldowns = {};
-  var WAF_COOLDOWN_MS = 60000; // 60s cooldown per domain after WAF block
+  // WAF block counter: domain → consecutive block count
+  var wafBlockCounts = {};
+  var WAF_COOLDOWN_MS = 60000; // 60s cooldown per domain after WAF block (default)
+  var WAF_COOLDOWN_NOTINO_MS = 180000; // 3 min cooldown for Notino
+  var WAF_SKIP_THRESHOLD = 3; // Skip remaining domain trackers after N consecutive blocks
+  var skippedByWaf = 0;
 
   // 4. Process price trackers with concurrency limit
   var index = 0;
@@ -126,11 +131,21 @@ async function runCheckCycle(pool, isCancelled) {
       var tracker = priceTrackers[index++];
       var domain = getDomain(tracker.pageUrl || '');
 
+      // Skip domain entirely if too many consecutive WAF blocks
+      if (wafBlockCounts[domain] >= WAF_SKIP_THRESHOLD) {
+        console.log('[ServerCheck] ⏭ Skipping #' + tracker.id + ' — ' + domain + ' blocked ' + wafBlockCounts[domain] + ' times, skipping rest');
+        collector.addUnchanged();
+        checked++;
+        skippedByWaf++;
+        continue;
+      }
+
       // Check WAF cooldown for this domain
+      var domainCooldownMs = domain.indexOf('notino') !== -1 ? WAF_COOLDOWN_NOTINO_MS : WAF_COOLDOWN_MS;
       if (wafCooldowns[domain]) {
         var elapsed = Date.now() - wafCooldowns[domain];
-        if (elapsed < WAF_COOLDOWN_MS) {
-          var waitMs = WAF_COOLDOWN_MS - elapsed;
+        if (elapsed < domainCooldownMs) {
+          var waitMs = domainCooldownMs - elapsed;
           console.log('[ServerCheck] ⏳ WAF cooldown for ' + domain + ' — waiting ' + Math.round(waitMs / 1000) + 's');
           await new Promise(function(r) { setTimeout(r, waitMs); });
         }
@@ -155,7 +170,11 @@ async function runCheckCycle(pool, isCancelled) {
         else if (result === 'waf_blocked') {
           errors++;
           wafCooldowns[domain] = Date.now();
-          console.log('[ServerCheck] ⛔ WAF block detected for ' + domain + ' — cooldown activated');
+          wafBlockCounts[domain] = (wafBlockCounts[domain] || 0) + 1;
+          console.log('[ServerCheck] ⛔ WAF block detected for ' + domain + ' (' + wafBlockCounts[domain] + '/' + WAF_SKIP_THRESHOLD + ')');
+        } else {
+          // Successful check — reset consecutive block counter for this domain
+          wafBlockCounts[domain] = 0;
         }
       } catch (err) {
         console.error('[ServerCheck] ❌ Unexpected error for #' + tracker.id + ': ' + err.message);
@@ -211,7 +230,7 @@ async function runCheckCycle(pool, isCancelled) {
 
   console.log('[ServerCheck] ═══════════════════════════════════════════════');
   console.log('[ServerCheck] ✅ Cycle complete in ' + elapsed + 's');
-  console.log('[ServerCheck]    Checked: ' + checked + ' | Changed: ' + changed + ' | Errors: ' + errors);
+  console.log('[ServerCheck]    Checked: ' + checked + ' | Changed: ' + changed + ' | Errors: ' + errors + (skippedByWaf > 0 ? ' | WAF-skipped: ' + skippedByWaf : ''));
   console.log('[ServerCheck] ═══════════════════════════════════════════════');
 
   return { checked: checked, changed: changed, errors: errors };
