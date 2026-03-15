@@ -159,20 +159,25 @@ async function initDB() {
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "lastCheckedAt" TIMESTAMP DEFAULT NULL;
   `);
 
-  // Migration: deduplicate trackers by pageUrl+cssSelector (keep oldest with most history)
+  // Migration: drop old unique index that didn't account for variantSelector
+  await pool.query(`
+    DROP INDEX IF EXISTS idx_trackers_url_selector;
+  `);
+
+  // Migration: deduplicate trackers by pageUrl+cssSelector+variantSelector (keep oldest with most history)
   await pool.query(`
     DELETE FROM trackers
     WHERE id NOT IN (
-      SELECT DISTINCT ON ("pageUrl", "cssSelector") id
+      SELECT DISTINCT ON ("pageUrl", "cssSelector", COALESCE("variantSelector", '')) id
       FROM trackers
-      ORDER BY "pageUrl", "cssSelector", "createdAt" ASC
+      ORDER BY "pageUrl", "cssSelector", COALESCE("variantSelector", ''), "createdAt" ASC
     );
   `);
 
-  // Migration: add unique index to prevent future duplicates
+  // Migration: add unique index including variantSelector to allow different variants of same product
   await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_trackers_url_selector
-    ON trackers ("pageUrl", "cssSelector");
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_trackers_url_selector_variant
+    ON trackers ("pageUrl", "cssSelector", COALESCE("variantSelector", ''));
   `);
 
   console.log('Database tables initialized');
