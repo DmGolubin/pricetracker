@@ -5,6 +5,7 @@
  * the main product price using heuristics:
  *   1. Meta tags: og:price:amount, product:price:amount
  *   2. JSON-LD structured data (@type: Product with offers.price)
+ *   2.5. Site-specific elements (Notino content attr, data-testid price elements)
  *   3. DOM elements containing currency symbols, scored by font size and position
  *
  * Sends result via chrome.runtime.sendMessage:
@@ -221,6 +222,67 @@
     return null;
   }
 
+  /**
+   * Strategy 2.5: Check site-specific price elements (Notino, etc.)
+   * Some React SPAs store prices in content attributes rather than textContent.
+   * Returns { element, price, confidence } or null.
+   */
+  function checkSiteSpecific() {
+    // Notino.ua: price in span[data-testid="pd-price"] content attribute
+    var notinoSelectors = [
+      'span[data-testid="pd-price"]',
+      '#pd-price span[data-testid="pd-price"]'
+    ];
+    for (var i = 0; i < notinoSelectors.length; i++) {
+      try {
+        var el = document.querySelector(notinoSelectors[i]);
+        if (el) {
+          // Try content attribute first (most reliable on Notino)
+          var content = el.getAttribute('content');
+          if (content) {
+            var cleaned = content.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+            var price = parsePrice(cleaned);
+            if (price !== null && price > 0) {
+              return { element: el, price: price, confidence: 0.95 };
+            }
+          }
+          // Fallback to textContent
+          var text = (el.textContent || '').trim();
+          if (text) {
+            var price2 = parsePrice(text);
+            if (price2 !== null && price2 > 0) {
+              return { element: el, price: price2, confidence: 0.9 };
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Generic: elements with content attribute containing a price
+    var contentAttrSelectors = [
+      '[data-testid*="price"][content]',
+      '[itemprop="price"][content]'
+    ];
+    for (var j = 0; j < contentAttrSelectors.length; j++) {
+      try {
+        var els = document.querySelectorAll(contentAttrSelectors[j]);
+        for (var k = 0; k < els.length; k++) {
+          var elem = els[k];
+          var contentVal = (elem.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+          if (contentVal) {
+            var p = parsePrice(contentVal);
+            if (p !== null && p > 0) {
+              return { element: elem, price: p, confidence: 0.9 };
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+
   function extractPriceFromJsonLd(data) {
     if (!data) return null;
 
@@ -342,6 +404,21 @@
 
     // Strategy 2: JSON-LD
     var jsonLdResult = checkJsonLd();
+
+    // Strategy 2.5: Site-specific (Notino content attr, etc.)
+    // Check before DOM search — these are high-confidence matches
+    var siteResult = checkSiteSpecific();
+    if (siteResult) {
+      var siteSel = generateSelector(siteResult.element);
+      if (siteSel) {
+        return {
+          found: true,
+          selector: siteSel,
+          price: siteResult.price,
+          confidence: siteResult.confidence
+        };
+      }
+    }
 
     // Strategy 3: DOM search
     var domCandidates = searchDomElements();

@@ -272,4 +272,64 @@ describe('SelectorPicker', () => {
       expect(window.__ptPickerActive).toBe(false);
     });
   });
+
+  describe('Notino variant detection', () => {
+    test('detects Notino variant tiles with volume and price', () => {
+      document.body.innerHTML = `
+        <div data-testid="pd-variants-tile">
+          <ul>
+            <li><a data-testid="pd-variant-16219283" href="https://www.notino.ua/product/p-16219283/" class="pd-variant-selected" style="width:100px;height:50px;">
+              <span class="pd-variant-label">100 мл</span>
+              <span data-testid="price-variant" content="3&nbsp;065">3 065</span>
+              <span data-testid="currency-variant">₴</span>
+            </a></li>
+            <li><a data-testid="pd-variant-16219282" href="https://www.notino.ua/product/p-16219282/" style="width:100px;height:50px;">
+              <span class="pd-variant-label">50 мл</span>
+              <span data-testid="price-variant" content="2&nbsp;100">2 100</span>
+              <span data-testid="currency-variant">₴</span>
+            </a></li>
+            <li><a data-testid="pd-variant-16219281" href="https://www.notino.ua/product/p-16219281/" style="width:100px;height:50px;">
+              <span class="pd-variant-label">30 мл</span>
+              <span data-testid="price-variant" content="1&nbsp;500">1 500</span>
+              <span data-testid="currency-variant">₴</span>
+            </a></li>
+          </ul>
+        </div>
+        <span id="price" style="width:100px;height:50px;">3 065 ₴</span>
+      `;
+
+      // Make elements visible for the picker
+      document.querySelectorAll('*').forEach(el => {
+        Object.defineProperty(el, 'offsetParent', { get: () => document.body, configurable: true });
+        el.getBoundingClientRect = () => ({ top: 100, left: 0, right: 200, bottom: 150, width: 100, height: 50 });
+      });
+
+      injectPicker();
+
+      // Click the price element to select it
+      const priceEl = document.getElementById('price');
+      priceEl.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      // Click confirm to open the form
+      const nav = document.querySelector('.pt-picker-nav');
+      const confirmBtn = Array.from(nav.querySelectorAll('button')).find(
+        b => b.textContent.includes('Подтвердить')
+      );
+      confirmBtn.click();
+
+      // The form should show variant items
+      const formOverlay = document.querySelector('.pt-picker-form-overlay');
+      expect(formOverlay).not.toBeNull();
+
+      // Should have variant parameter buttons (Объём group)
+      const variantItems = formOverlay.querySelectorAll('.pt-picker-variant-items .pt-picker-type-btn');
+      expect(variantItems.length).toBe(3);
+
+      // Check that variant labels contain volume info
+      const labels = Array.from(variantItems).map(b => b.textContent);
+      expect(labels.some(l => l.includes('100 мл'))).toBe(true);
+      expect(labels.some(l => l.includes('50 мл'))).toBe(true);
+      expect(labels.some(l => l.includes('30 мл'))).toBe(true);
+    });
+  });
 });

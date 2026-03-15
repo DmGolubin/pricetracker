@@ -210,6 +210,49 @@ describe('AutoDetector', () => {
     });
   });
 
+  describe('Site-specific detection (Notino)', () => {
+    test('detects price from Notino span[data-testid="pd-price"] content attribute', () => {
+      var restore = setupPriceElement(
+        '<div id="pd-price"><span data-testid="pd-price" content="3&nbsp;065">3&nbsp;065</span> <span data-testid="pd-currency">₴</span></div>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(3065);
+      expect(r.selector).toBeTruthy();
+    });
+
+    test('detects price from Notino content attr with non-breaking space', () => {
+      var restore = setupPriceElement(
+        '<span data-testid="pd-price" content="1\u00A0250">1\u00A0250</span>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(1250);
+    });
+
+    test('detects price from generic data-testid price element with content attr', () => {
+      var restore = setupPriceElement(
+        '<span data-testid="price-variant" content="2&nbsp;500">2 500</span>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(2500);
+    });
+
+    test('falls back to textContent when content attr is missing on Notino', () => {
+      var restore = setupPriceElement(
+        '<span data-testid="pd-price">3 065 ₴</span>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(3065);
+    });
+  });
+
   describe('Scoring and candidate selection', () => {
     test('prefers structured data price when DOM element matches', () => {
       var jsonLd = { '@type': 'Product', offers: { '@type': 'Offer', price: 99.99 } };

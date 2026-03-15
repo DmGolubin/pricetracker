@@ -543,6 +543,54 @@
       }
     }
 
+    // ── Strategy 3: Notino.ua variant tiles ──────────────────────────
+    // Notino uses <a data-testid="pd-variant-XXXXX"> links inside
+    // div[data-testid="pd-variants-tile"]. Each tile has its own URL,
+    // a volume label (.pd-variant-label), and a price
+    // (span[data-testid="price-variant"] with content attribute).
+    var notinoContainer = document.querySelector('[data-testid="pd-variants-tile"]');
+    if (notinoContainer) {
+      var notinoLinks = notinoContainer.querySelectorAll('a[data-testid^="pd-variant-"]');
+      if (notinoLinks.length >= 2) {
+        var notinoGroupName = 'Объём';
+        if (!paramGroups[notinoGroupName]) paramGroups[notinoGroupName] = [];
+
+        for (var ni = 0; ni < notinoLinks.length; ni++) {
+          var nLink = notinoLinks[ni];
+          if (!isVisible(nLink)) continue;
+
+          var nSel = generateSelector(nLink);
+          if (!nSel || seen[nSel]) continue;
+          seen[nSel] = true;
+
+          // Extract volume from .pd-variant-label
+          var labelEl = nLink.querySelector('.pd-variant-label');
+          var nLabel = labelEl ? (labelEl.textContent || '').trim().replace(/\s+/g, ' ') : '';
+
+          // Extract price from span[data-testid="price-variant"] content attr
+          var priceSpan = nLink.querySelector('[data-testid="price-variant"]');
+          var nPriceStr = '';
+          if (priceSpan) {
+            var contentAttr = priceSpan.getAttribute('content') || '';
+            // content uses &nbsp; → replace with space
+            nPriceStr = contentAttr.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+            if (!nPriceStr) {
+              nPriceStr = (priceSpan.textContent || '').trim().replace(/\s+/g, ' ');
+            }
+          }
+
+          var displayLabel = nLabel;
+
+          paramGroups[notinoGroupName].push({
+            label: displayLabel,
+            value: nLabel,
+            selector: nSel,
+            allAttrs: nPriceStr ? { 'data-price': nPriceStr } : {}
+          });
+        }
+      }
+    }
+
     // Keep only groups with 2–30 items
     var filtered = {};
     for (var key in paramGroups) {
