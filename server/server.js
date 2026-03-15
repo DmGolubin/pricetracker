@@ -180,6 +180,11 @@ async function initDB() {
     ON trackers ("pageUrl", "cssSelector", COALESCE("variantSelector", ''));
   `);
 
+  // Migration: add retryCount for automatic retry of failed checks
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "retryCount" INTEGER DEFAULT 0;
+  `);
+
   console.log('Database tables initialized');
 }
 

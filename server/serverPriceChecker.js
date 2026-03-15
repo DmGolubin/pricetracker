@@ -224,7 +224,7 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
     if (result.wafBlocked) {
       console.warn('[ServerCheck] #' + tracker.id + ' ⛔ WAF blocked: ' + result.error);
       await pool.query(
-        'UPDATE trackers SET "errorMessage" = $1, "lastCheckedAt" = NOW(), "updatedAt" = NOW() WHERE id = $2',
+        'UPDATE trackers SET "errorMessage" = $1, "retryCount" = COALESCE("retryCount", 0) + 1, "lastCheckedAt" = NOW(), "updatedAt" = NOW() WHERE id = $2',
         [result.error, tracker.id]
       );
       return 'waf_blocked';
@@ -233,7 +233,7 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
     console.warn('[ServerCheck] #' + tracker.id + ' ❌ Extraction failed: ' + result.error);
 
     await pool.query(
-      'UPDATE trackers SET status = $1, "errorMessage" = $2, "lastCheckedAt" = NOW(), "updatedAt" = NOW() WHERE id = $3',
+      'UPDATE trackers SET status = $1, "errorMessage" = $2, "retryCount" = COALESCE("retryCount", 0) + 1, "lastCheckedAt" = NOW(), "updatedAt" = NOW() WHERE id = $3',
       ['error', result.error, tracker.id]
     );
 
@@ -271,6 +271,8 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
     maxPrice: updatedMax,
     lastCheckedAt: now,
     status: 'active',
+    retryCount: 0,
+    errorMessage: null,
   };
 
   if (isFirstVariantCheck) {

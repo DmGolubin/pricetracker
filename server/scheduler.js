@@ -8,16 +8,24 @@
  */
 
 const cron = require('node-cron');
-const { runCheckCycle } = require('./serverPriceChecker');
+const { runCheckCycle, checkSingleTracker } = require('./serverPriceChecker');
+const scraper = require('./scraper');
 
 let scheduledTask = null;
+let retryInterval = null;
 let isRunning = false;
+let isRetrying = false;
 let lastRunAt = null;
 let lastResult = null;
 let cancelRequested = false;
 
 // Default cron: every 3 hours
 const DEFAULT_CRON = '0 */3 * * *';
+
+// Retry settings
+const RETRY_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_RETRIES = 3;
+const RETRY_DELAY_BETWEEN_MS = 8000; // 8s between retried trackers
 
 /**
  * Start the cron scheduler.
@@ -41,6 +49,7 @@ function start(pool, cronExpression) {
   console.log('[Scheduler] Starting cron scheduler');
   console.log('[Scheduler] Cron expression:', expr);
   console.log('[Scheduler] Current time:', new Date().toISOString());
+  console.log('[Scheduler] Retry interval: every ' + (RETRY_INTERVAL_MS / 60000) + ' min, max ' + MAX_RETRIES + ' retries');
   console.log('[Scheduler] ═══════════════════════════════════════');
 
   scheduledTask = cron.schedule(expr, async () => {
@@ -54,6 +63,11 @@ function start(pool, cronExpression) {
     cancelRequested = false;
     lastRunAt = new Date().toISOString();
 
+    // Reset retryCount for all error trackers at the start of a new cycle
+    try {
+      await pool.query('UPDATE trackers SET "retryCount" = 0 WHERE status = $1', ['error']);
+    } catch (_) {}
+
     try {
       lastResult = await runCheckCycle(pool, function() { return cancelRequested; });
       console.log('[Scheduler] ✅ Check cycle completed:', JSON.stringify(lastResult));
@@ -65,10 +79,13 @@ function start(pool, cronExpression) {
       isRunning = false;
     }
   });
+
+  // Start retry timer for failed trackers
+  startRetryTimer(pool);
 }
 
 /**
- * Stop the cron scheduler.
+ * Stop the cron scheduler and retry timer.
  */
 function stop() {
   if (scheduledTask) {
@@ -76,6 +93,99 @@ function stop() {
     scheduledTask = null;
     console.log('[Scheduler] Stopped.');
   }
+  if (retryInterval) {
+    clearInterval(retryInterval);
+    retryInterval = null;
+    console.log('[Scheduler] Retry timer stopped.');
+  }
+}
+
+/**
+ * Start the retry timer that periodically re-checks failed trackers.
+ * @param {import('pg').Pool} pool
+ */
+function startRetryTimer(pool) {
+  if (retryInterval) clearInterval(retryInterval);
+
+  retryInterval = setInterval(async () => {
+    // Don't retry while a full check cycle is running
+    if (isRunning || isRetrying) return;
+
+    try {
+      await retryFailedTrackers(pool);
+    } catch (err) {
+      console.error('[Retry] ❌ Unexpected error:', err.message);
+    }
+  }, RETRY_INTERVAL_MS);
+}
+
+/**
+ * Find trackers with status='error' and retryCount < MAX_RETRIES,
+ * and re-check them one by one with delays.
+ * @param {import('pg').Pool} pool
+ */
+async function retryFailedTrackers(pool) {
+  var result;
+  try {
+    result = await pool.query(
+      'SELECT * FROM trackers WHERE status = $1 AND COALESCE("retryCount", 0) < $2 ORDER BY "lastCheckedAt" ASC',
+      ['error', MAX_RETRIES]
+    );
+  } catch (err) {
+    console.error('[Retry] Failed to query error trackers:', err.message);
+    return;
+  }
+
+  var trackers = result.rows;
+  if (trackers.length === 0) return;
+
+  isRetrying = true;
+  console.log('[Retry] 🔄 Found ' + trackers.length + ' failed tracker(s) to retry (attempt ≤' + MAX_RETRIES + ')');
+
+  var settingsResult;
+  try {
+    settingsResult = await pool.query("SELECT * FROM settings WHERE id = 'global'");
+  } catch (err) {
+    console.error('[Retry] Failed to load settings:', err.message);
+    isRetrying = false;
+    return;
+  }
+  var settings = (settingsResult.rows && settingsResult.rows[0]) || {};
+  var noopCollector = { addChange: function() {}, addUnchanged: function() {} };
+
+  var retried = 0;
+  var fixed = 0;
+
+  for (var i = 0; i < trackers.length; i++) {
+    var tracker = trackers[i];
+    var retryNum = (tracker.retryCount || 0) + 1;
+    console.log('[Retry] #' + tracker.id + ' attempt ' + retryNum + '/' + MAX_RETRIES + ' — ' + (tracker.productName || '').substring(0, 50));
+
+    try {
+      var checkResult = await checkSingleTracker(pool, tracker, settings, noopCollector);
+      retried++;
+      if (checkResult !== 'error' && checkResult !== 'waf_blocked') {
+        fixed++;
+        console.log('[Retry] #' + tracker.id + ' ✅ Recovered! Status: ' + checkResult);
+      } else {
+        console.log('[Retry] #' + tracker.id + ' ❌ Still failing (retry ' + retryNum + '/' + MAX_RETRIES + ')');
+      }
+    } catch (err) {
+      console.error('[Retry] #' + tracker.id + ' ❌ Error: ' + err.message);
+      retried++;
+    }
+
+    // Delay between retries to avoid WAF
+    if (i < trackers.length - 1) {
+      await new Promise(function(r) { setTimeout(r, RETRY_DELAY_BETWEEN_MS); });
+    }
+  }
+
+  // Close browser after retry batch
+  try { await scraper.closeBrowser(); } catch (_) {}
+
+  console.log('[Retry] Done: ' + retried + ' retried, ' + fixed + ' recovered');
+  isRetrying = false;
 }
 
 /**
@@ -140,9 +250,11 @@ function getIsRunning() {
 function getStatus() {
   return {
     running: isRunning,
+    retrying: isRetrying,
     lastRunAt: lastRunAt,
     lastResult: lastResult,
     schedulerActive: scheduledTask !== null,
+    retryTimerActive: retryInterval !== null,
   };
 }
 
