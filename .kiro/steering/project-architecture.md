@@ -42,6 +42,7 @@ Price Tracker — система отслеживания цен на товар
 - `GET/POST /priceHistory`, `POST /priceHistory/clear-all`
 - `GET/PUT /settings/global`
 - `POST /server-check` — ручной запуск проверки цен
+- `POST /server-check/single/:id` — проверка одного трекера через Puppeteer (используется расширением при создании трекера)
 - `GET /server-check/status` — статус текущей проверки
 - `POST /server-check/cancel` — отмена текущей проверки цен
 
