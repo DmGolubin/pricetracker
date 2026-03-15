@@ -413,15 +413,19 @@ async function extractPrice(tracker) {
       }
     }
 
-    // Notino is a React SPA — wait for the price element to render
-    // Try multiple selectors: the main pd-price, or the price wrapper with content attr
+    // Notino is a React SPA — wait for the price element to render.
+    // Gift set pages may have a different layout (originalPriceWrapper + discount badge).
+    // Try multiple selectors including parent containers that appear earlier in render.
     if (isNotino) {
       var pdPriceFound = false;
       var notinoSelectors = [
         '#pd-price span[data-testid="pd-price"]',
         'span[data-testid="pd-price"]',
+        '#pd-price',
+        '#pdSelectedVariant',
         'div[data-testid="pd-price-wrapper"] span[content]',
         'span[data-testid="pd-price-wrapper"] span[content]',
+        '[data-testid="originalPriceWrapper"]',
       ];
       for (var nsi = 0; nsi < notinoSelectors.length && !pdPriceFound; nsi++) {
         try {
@@ -441,6 +445,24 @@ async function extractPrice(tracker) {
           }
         }
         if (!pdPriceFound) {
+          // Diagnostic: log what IS on the page to help debug
+          try {
+            var diagInfo = await page.evaluate(function() {
+              var title = document.title || '';
+              var bodyLen = (document.body && document.body.innerHTML) ? document.body.innerHTML.length : 0;
+              var hasReactRoot = !!document.querySelector('#__next') || !!document.querySelector('[data-reactroot]') || !!document.querySelector('#root');
+              var hasPdPage = !!document.querySelector('[class*="pd-"]') || !!document.querySelector('[data-testid*="pd-"]');
+              var priceTexts = [];
+              // Look for any element with "price" in data-testid
+              document.querySelectorAll('[data-testid*="price"]').forEach(function(el) {
+                priceTexts.push(el.getAttribute('data-testid') + ': ' + (el.getAttribute('content') || el.textContent || '').substring(0, 50));
+              });
+              return { title: title.substring(0, 80), bodyLen: bodyLen, hasReactRoot: hasReactRoot, hasPdPage: hasPdPage, priceElements: priceTexts.slice(0, 5) };
+            });
+            console.log(`[Scraper] #${trackerId} Notino diagnostic: title="${diagInfo.title}", bodyLen=${diagInfo.bodyLen}, react=${diagInfo.hasReactRoot}, pdElements=${diagInfo.hasPdPage}, priceEls=${JSON.stringify(diagInfo.priceElements)}`);
+          } catch (diagErr) {
+            console.log(`[Scraper] #${trackerId} Notino: diagnostic failed: ${diagErr.message}`);
+          }
           console.log(`[Scraper] #${trackerId} Notino: still not found after retry`);
         }
       }
@@ -817,22 +839,51 @@ async function extractPrice(tracker) {
         // Fallback: #pd-price textContent
         var pdPrice = document.querySelector('#pd-price');
         if (pdPrice) {
-          var text = (pdPrice.textContent || '').trim();
-          if (text && /\d/.test(text)) return text;
+          var text2 = (pdPrice.textContent || '').trim();
+          if (text2 && /\d/.test(text2)) return text2;
+        }
+        // Fallback: #pdSelectedVariant — gift set pages have price inside this container
+        var pdSelected = document.querySelector('#pdSelectedVariant');
+        if (pdSelected) {
+          // Look for span with content attribute inside
+          var innerSpan = pdSelected.querySelector('span[content]');
+          if (innerSpan) {
+            var ic = innerSpan.getAttribute('content');
+            if (ic && /\d/.test(ic)) return ic;
+          }
+          // Try any price-like text
+          var selText = (pdSelected.textContent || '').trim();
+          // Extract just the price part (digits and spaces before currency)
+          var priceMatch = selText.match(/([\d\s]+)\s*грн/);
+          if (priceMatch) return priceMatch[1].trim();
+          if (selText && /\d/.test(selText)) return selText;
+        }
+        // Fallback: originalPriceWrapper — gift sets with discount show current price here
+        var origWrapper = document.querySelector('[data-testid="originalPriceWrapper"]');
+        if (origWrapper) {
+          // The actual (discounted) price is usually a sibling or nearby element
+          var parent = origWrapper.parentElement;
+          if (parent) {
+            var priceSpan = parent.querySelector('span[content]');
+            if (priceSpan) {
+              var pc = priceSpan.getAttribute('content');
+              if (pc && /\d/.test(pc)) return pc;
+            }
+          }
         }
         // Fallback: selected variant tile price (multi-variant pages)
         var selectedVariant = document.querySelector('a.pd-variant-selected span[data-testid="price-variant"]');
         if (selectedVariant) {
-          var content = selectedVariant.getAttribute('content');
-          if (content && /\d/.test(content)) return content;
-          var text = (selectedVariant.textContent || '').trim();
-          if (text && /\d/.test(text)) return text;
+          var content3 = selectedVariant.getAttribute('content');
+          if (content3 && /\d/.test(content3)) return content3;
+          var text3 = (selectedVariant.textContent || '').trim();
+          if (text3 && /\d/.test(text3)) return text3;
         }
         // Last resort: first variant tile price
         var anyVariant = document.querySelector('span[data-testid="price-variant"]');
         if (anyVariant) {
-          var content = anyVariant.getAttribute('content');
-          if (content && /\d/.test(content)) return content;
+          var content4 = anyVariant.getAttribute('content');
+          if (content4 && /\d/.test(content4)) return content4;
         }
         return null;
       });
