@@ -41,6 +41,38 @@ const TrackerCard = (function () {
   }
 
   /**
+   * Format a relative time string from a date (e.g. "2ч назад", "3д назад").
+   */
+  function timeAgo(dateStr) {
+    if (!dateStr) return '';
+    var now = Date.now();
+    var then = new Date(dateStr).getTime();
+    if (isNaN(then)) return '';
+    var diffMs = now - then;
+    if (diffMs < 0) return 'только что';
+    var mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'только что';
+    if (mins < 60) return mins + 'м назад';
+    var hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + 'ч назад';
+    var days = Math.floor(hours / 24);
+    if (days < 30) return days + 'д назад';
+    var months = Math.floor(days / 30);
+    return months + 'мес назад';
+  }
+
+  /**
+   * Format a date as short string (e.g. "15 мар 2026").
+   */
+  function formatShortDate(dateStr) {
+    if (!dateStr) return '';
+    var d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    var months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+  }
+
+  /**
    * Escape HTML special characters to prevent XSS.
    */
   function escapeHtml(str) {
@@ -211,9 +243,34 @@ const TrackerCard = (function () {
             + ' role="img" aria-label="' + getDirectionLabel(direction) + '">'
             + getDirectionSymbol(direction) + '</span>';
       if (tracker.currentPrice === tracker.minPrice && tracker.currentPrice < tracker.initialPrice) {
-        html += '<span class="hist-min-badge" title="Исторический минимум!" aria-label="Historical minimum price">🏆</span>';
+        html += '<span class="hist-min-badge" title="Исторический минимум!" aria-label="Historical minimum price">'
+              + '🏆 мин</span>';
       }
       html += '</div>';
+
+      // Price change details (diff from previous + % from initial)
+      var curP = Number(tracker.currentPrice);
+      var prevP = Number(tracker.previousPrice);
+      var initP = Number(tracker.initialPrice);
+      if (prevP > 0 && curP !== prevP) {
+        var diff = curP - prevP;
+        var diffPct = ((diff / prevP) * 100).toFixed(1);
+        var diffSign = diff > 0 ? '+' : '';
+        var diffClass = diff < 0 ? 'price-change-down' : 'price-change-up';
+        html += '<div class="tracker-card-change ' + diffClass + '">';
+        html += '<span class="tracker-card-change-abs">' + diffSign + formatPrice(Math.round(diff)) + ' ₴</span>';
+        html += '<span class="tracker-card-change-pct">' + diffSign + diffPct + '%</span>';
+        html += '</div>';
+      }
+
+      // Savings from initial price
+      if (initP > 0 && curP < initP) {
+        var saved = initP - curP;
+        var savedPct = ((saved / initP) * 100).toFixed(0);
+        html += '<div class="tracker-card-savings">';
+        html += '💰 Экономия: ' + formatPrice(Math.round(saved)) + ' ₴ (−' + savedPct + '%)';
+        html += '</div>';
+      }
 
       // Price range bar (visual min–max indicator)
       var min = tracker.minPrice;
@@ -246,6 +303,22 @@ const TrackerCard = (function () {
     if (!isContent) {
       html += '<div class="tracker-card-sparkline" data-tracker-id="' + escapeHtml(String(tracker.id)) + '"></div>';
     }
+
+    // Footer: last checked + tracking since
+    html += '<div class="tracker-card-footer">';
+    if (tracker.lastCheckedAt) {
+      html += '<span class="tracker-card-meta" title="Последняя проверка: '
+            + escapeHtml(new Date(tracker.lastCheckedAt).toLocaleString()) + '">'
+            + (_Icons ? _Icons.el('clock', 12) : '🕐') + ' '
+            + escapeHtml(timeAgo(tracker.lastCheckedAt)) + '</span>';
+    }
+    if (tracker.createdAt) {
+      html += '<span class="tracker-card-meta" title="Отслеживается с '
+            + escapeHtml(formatShortDate(tracker.createdAt)) + '">'
+            + (_Icons ? _Icons.el('calendar', 12) : '📅') + ' с '
+            + escapeHtml(formatShortDate(tracker.createdAt)) + '</span>';
+    }
+    html += '</div>';
 
     html += '</div>'; // end card-body
 
@@ -333,6 +406,8 @@ const TrackerCard = (function () {
     formatPrice: formatPrice,
     escapeHtml: escapeHtml,
     getPriceDirection: getPriceDirection,
+    timeAgo: timeAgo,
+    formatShortDate: formatShortDate,
   };
 })();
 
