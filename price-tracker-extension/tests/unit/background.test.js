@@ -14,7 +14,6 @@ const apiClient = require('../../lib/apiClient');
 const badgeManager = require('../../lib/badgeManager');
 const notifier = require('../../lib/notifier');
 const alarmManager = require('../../lib/alarmManager');
-const priceChecker = require('../../lib/priceChecker');
 
 // Simulate the service worker namespace
 global.self = global;
@@ -24,7 +23,6 @@ global.self.PriceTracker = {
   badgeManager,
   notifier,
   alarmManager,
-  priceChecker,
 };
 
 // Now require background.js — it will read from self.PriceTracker
@@ -68,10 +66,8 @@ jest.spyOn(apiClient, 'getSettings').mockResolvedValue({ apiBaseUrl: 'https://ap
 jest.spyOn(apiClient, 'saveSettings').mockResolvedValue({ apiBaseUrl: 'https://api.test.com' });
 jest.spyOn(apiClient, 'getPriceHistory').mockResolvedValue([]);
 jest.spyOn(apiClient, 'setBaseUrl').mockImplementation(() => {});
-
-// Mock priceChecker
-jest.spyOn(priceChecker, 'checkPrice').mockResolvedValue();
-jest.spyOn(priceChecker, 'checkAllPrices').mockResolvedValue();
+jest.spyOn(apiClient, 'serverCheckSingle').mockResolvedValue({ status: 'unchanged', tracker: makeTracker() });
+jest.spyOn(apiClient, '_request').mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
 
 // Mock alarmManager
 jest.spyOn(alarmManager, 'scheduleTracker').mockImplementation(() => {});
@@ -288,16 +284,10 @@ describe('handleUpdateTracker', () => {
 // ─── handleCheckAllPrices ───────────────────────────────────────────
 
 describe('handleCheckAllPrices', () => {
-  test('delegates to priceChecker.checkAllPrices with deps', async () => {
+  test('triggers server-side check via API request', async () => {
     await background.handleCheckAllPrices();
 
-    expect(priceChecker.checkAllPrices).toHaveBeenCalledWith(
-      expect.objectContaining({
-        apiClient,
-        badgeManager,
-        notifier,
-      })
-    );
+    expect(apiClient._request).toHaveBeenCalledWith('/server-check', { method: 'POST' });
   });
 });
 

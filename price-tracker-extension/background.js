@@ -22,15 +22,13 @@ importScripts(
   'lib/thresholdEngine.js',
   'lib/digestComposer.js',
   'lib/notifier.js',
-  'lib/alarmManager.js',
-  'lib/priceChecker.js'
+  'lib/alarmManager.js'
 );
 
 (function () {
 
 // Module references from the global namespace
 var apiClient = self.PriceTracker.apiClient;
-var priceChecker = self.PriceTracker.priceChecker;
 var alarmManager = self.PriceTracker.alarmManager;
 var notifier = self.PriceTracker.notifier;
 var badgeManager = self.PriceTracker.badgeManager;
@@ -39,9 +37,6 @@ var MessageToSW = _c.MessageToSW;
 var MessageFromCS = _c.MessageFromCS;
 var TrackerStatus = _c.TrackerStatus;
 var DEFAULT_CHECK_INTERVAL = _c.DEFAULT_CHECK_INTERVAL;
-
-// Dependencies object passed to priceChecker
-const deps = { apiClient, badgeManager, notifier };
 
 /**
  * Initialize API base URL from saved settings.
@@ -103,7 +98,7 @@ function getMessageHandler(message, sender) {
       return handleCheckAllPrices();
 
     case MessageToSW.CHECK_PRICE:
-      return priceChecker.checkPrice(message.trackerId, deps);
+      return apiClient.serverCheckSingle(message.trackerId);
 
     case MessageToSW.GET_SETTINGS:
       return apiClient.getSettings();
@@ -133,7 +128,7 @@ function getMessageHandler(message, sender) {
     case MessageFromCS.AUTO_DETECT_FAILED:
       return Promise.resolve();
 
-    // Extraction results are handled by waitForExtractionMessage listener in priceChecker
+    // Extraction results from content scripts — no longer used (server-side checks)
     case MessageFromCS.PRICE_EXTRACTED:
     case MessageFromCS.CONTENT_EXTRACTED:
     case MessageFromCS.EXTRACTION_FAILED:
@@ -295,7 +290,8 @@ async function handleUpdateTracker(trackerId, data) {
  * Requirement: 7.1
  */
 async function handleCheckAllPrices() {
-  await priceChecker.checkAllPrices(deps);
+  // Trigger server-side check via API (Puppeteer on Railway)
+  await apiClient._request('/server-check', { method: 'POST' });
 }
 
 /**

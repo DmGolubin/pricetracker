@@ -18,7 +18,6 @@ const apiClient = require('../../lib/apiClient');
 const badgeManager = require('../../lib/badgeManager');
 const notifier = require('../../lib/notifier');
 const alarmManager = require('../../lib/alarmManager');
-const priceChecker = require('../../lib/priceChecker');
 
 global.self = global;
 global.self.PriceTracker = {
@@ -27,7 +26,6 @@ global.self.PriceTracker = {
   badgeManager,
   notifier,
   alarmManager,
-  priceChecker,
 };
 
 const background = require('../../background');
@@ -80,9 +78,8 @@ beforeEach(() => {
   jest.spyOn(apiClient, 'getPriceHistory').mockResolvedValue([]);
   jest.spyOn(apiClient, 'addPriceRecord').mockResolvedValue({ id: 'rec-1', price: 90 });
   jest.spyOn(apiClient, 'setBaseUrl').mockImplementation(() => {});
-
-  jest.spyOn(priceChecker, 'checkPrice').mockResolvedValue();
-  jest.spyOn(priceChecker, 'checkAllPrices').mockResolvedValue();
+  jest.spyOn(apiClient, 'serverCheckSingle').mockResolvedValue({ status: 'unchanged', tracker: makeTracker() });
+  jest.spyOn(apiClient, '_request').mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
 
   jest.spyOn(alarmManager, 'scheduleTracker').mockImplementation(() => {});
   jest.spyOn(alarmManager, 'cancelTracker').mockImplementation(() => {});
@@ -215,7 +212,7 @@ describe('Integration: Message passing popup → SW → content scripts', () => 
 // ═══════════════════════════════════════════════════════════════════
 
 describe('Integration: Tracker lifecycle chain', () => {
-  test('full chain: create tracker → alarm fires → checkPrice called → price saved → notification sent', async () => {
+  test('full chain: create tracker → alarm fires → server check triggered', async () => {
     // Step 1: Create tracker
     const tracker = makeTracker({ id: 'lifecycle-1', checkIntervalHours: 6 });
     apiClient.createTracker.mockResolvedValue(tracker);
@@ -241,7 +238,7 @@ describe('Integration: Tracker lifecycle chain', () => {
     // Verify the callback was invoked with the correct trackerId
     expect(checkPriceCallback).toHaveBeenCalledWith('lifecycle-1');
 
-    // Step 3: Verify checkPrice message handler exists (wiring check)
+    // Step 3: Verify CHECK_PRICE message handler exists (wiring check — now uses server)
     const handler = background.getMessageHandler(
       { action: MessageToSW.CHECK_PRICE, trackerId: 'lifecycle-1' },
       {}
@@ -249,16 +246,10 @@ describe('Integration: Tracker lifecycle chain', () => {
     expect(handler).toBeInstanceOf(Promise);
   });
 
-  test('checkAllPrices delegates to priceChecker with correct deps', async () => {
+  test('checkAllPrices triggers server-side check via API', async () => {
     await background.handleCheckAllPrices();
 
-    expect(priceChecker.checkAllPrices).toHaveBeenCalledWith(
-      expect.objectContaining({
-        apiClient: expect.any(Object),
-        badgeManager: expect.any(Object),
-        notifier: expect.any(Object),
-      })
-    );
+    expect(apiClient._request).toHaveBeenCalledWith('/server-check', { method: 'POST' });
   });
 
   test('update tracker interval → alarm rescheduled', async () => {
