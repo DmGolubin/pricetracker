@@ -107,17 +107,24 @@ class TelegramBot {
    * Send message with optional inline keyboard.
    */
   async sendMessage(chatId, text, options = {}) {
-    const body = {
-      chat_id: chatId,
-      text,
-      parse_mode: 'HTML',
-      disable_web_page_preview: options.disablePreview !== false,
-    };
-    if (options.keyboard) {
-      body.reply_markup = { inline_keyboard: options.keyboard };
+      const body = {
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: options.disablePreview !== false,
+      };
+      if (options.replyKeyboard) {
+        body.reply_markup = {
+          keyboard: options.replyKeyboard,
+          resize_keyboard: true,
+          is_persistent: true,
+        };
+      } else if (options.keyboard) {
+        body.reply_markup = { inline_keyboard: options.keyboard };
+      }
+      return this.api('sendMessage', body);
     }
-    return this.api('sendMessage', body);
-  }
+
 
   /**
    * Edit existing message.
@@ -221,6 +228,12 @@ class TelegramBot {
     if (text.startsWith('/settings')) return this.cmdSettings(chatId);
     if (text.startsWith('/help')) return this.cmdHelp(chatId);
 
+    // Reply keyboard button text
+    if (text === '🏆 Лучшие цены') return this.cmdBestPrices(chatId);
+    if (text === '📦 Группы') return this.cmdGroups(chatId);
+    if (text === '📋 Все трекеры') return this.cmdAllTrackers(chatId, 0);
+    if (text === '🔄 Проверить цены') return this.cmdCheck(chatId);
+
     // Unknown command
     await this.sendMessage(chatId, '🤔 Неизвестная команда. Нажми /help для справки.');
   }
@@ -304,22 +317,24 @@ class TelegramBot {
     text += `🔄 /check — запустить проверку\n`;
     text += `⚙️ /settings — настройки\n`;
 
-    const keyboard = [];
-
-    // Mini App button
+    // Reply keyboard with web_app button (shows "Открыть" in chat list)
+    const replyKeyboard = [];
     if (this.webAppUrl) {
-      keyboard.push([{
+      replyKeyboard.push([{
         text: '📱 Открыть Price Tracker',
         web_app: { url: this.webAppUrl },
       }]);
     }
-
-    keyboard.push([
-      { text: '🏆 Лучшие цены', callback_data: 'refresh:best' },
-      { text: '📦 Группы', callback_data: 'back:groups' },
+    replyKeyboard.push([
+      { text: '🏆 Лучшие цены' },
+      { text: '📦 Группы' },
+    ]);
+    replyKeyboard.push([
+      { text: '📋 Все трекеры' },
+      { text: '🔄 Проверить цены' },
     ]);
 
-    await this.sendMessage(chatId, text, { keyboard });
+    await this.sendMessage(chatId, text, { replyKeyboard });
   }
 
   async cmdGroups(chatId, editMsgId) {
