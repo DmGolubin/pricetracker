@@ -505,6 +505,72 @@
     return { found: false, confidence: 0 };
   }
 
+  // ─── Notino volume extraction ───────────────────────────────────
+  /**
+   * Extract volume (ml) from Notino product page.
+   * Looks at: selected variant label in #pdSelectedVariant,
+   * variant tiles (.pd-variant-selected .pd-variant-label),
+   * or the product specs area.
+   * @returns {string|null} e.g. "50 мл" or null
+   */
+  function extractNotinoVolume() {
+    if (!location.hostname.includes('notino')) return null;
+
+    // 1. Selected variant area: #pdSelectedVariant > .fwfy74o > .luz844u span
+    //    This contains e.g. "50 мл" right above the price
+    try {
+      var selectedArea = document.querySelector('#pdSelectedVariant [aria-live]');
+      if (selectedArea) {
+        var spans = selectedArea.querySelectorAll('span');
+        for (var i = 0; i < spans.length; i++) {
+          var txt = (spans[i].textContent || '').replace(/\u00A0/g, ' ').trim();
+          if (/^\d+\s*мл$/i.test(txt)) return txt;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Selected variant tile label
+    try {
+      var selectedTile = document.querySelector('.pd-variant-selected .pd-variant-label');
+      if (selectedTile) {
+        var label = (selectedTile.textContent || '').replace(/\u00A0/g, ' ').trim();
+        if (/^\d+\s*мл$/i.test(label)) return label;
+      }
+    } catch (_) {}
+
+    // 3. Product specs: "/ 100 мл" pattern
+    try {
+      var specs = document.querySelector('[data-testid="product-specifications"]');
+      if (specs) {
+        var specText = (specs.textContent || '').replace(/\u00A0/g, ' ');
+        var m = specText.match(/(\d+)\s*мл/i);
+        if (m) return m[0].trim();
+      }
+    } catch (_) {}
+
+    // 4. URL pattern: sometimes volume is in the URL slug
+    try {
+      var urlMatch = location.pathname.match(/(\d+)-ml\b/i);
+      if (urlMatch) return urlMatch[1] + ' мл';
+    } catch (_) {}
+
+    return null;
+  }
+
+  /**
+   * Append volume to title if not already present.
+   * @param {string} title
+   * @returns {string}
+   */
+  function appendVolumeToTitle(title) {
+    var volume = extractNotinoVolume();
+    if (!volume) return title;
+    // Check if title already contains volume info
+    if (/\d+\s*мл/i.test(title)) return title;
+    if (/\d+\s*ml\b/i.test(title)) return title;
+    return title + ' — ' + volume;
+  }
+
   // ─── Execute and store result ─────────────────────────────────────
   // Store result on DOM element (accessible across all execution contexts).
   // Popup reads this via chrome.scripting.executeScript.
@@ -517,7 +583,7 @@
       found: true,
       selector: result.selector,
       price: result.price,
-      title: document.title || '',
+      title: appendVolumeToTitle(document.title || ''),
       imageUrl: getProductImage(),
       pageUrl: location.href
     });

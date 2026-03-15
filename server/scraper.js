@@ -99,6 +99,60 @@ function extractPriceFromProductName(productName) {
   return null;
 }
 
+/**
+ * Extract volume (ml) from a Notino page via Puppeteer page.evaluate.
+ * Checks: selected variant area, variant tile label, product specs, URL.
+ * @param {import('puppeteer-core').Page} page
+ * @returns {Promise<string|null>} e.g. "50 мл" or null
+ */
+async function extractNotinoVolume(page) {
+  try {
+    return await page.evaluate(function() {
+      // 1. Selected variant area: #pdSelectedVariant [aria-live] span
+      try {
+        var selectedArea = document.querySelector('#pdSelectedVariant [aria-live]');
+        if (selectedArea) {
+          var spans = selectedArea.querySelectorAll('span');
+          for (var i = 0; i < spans.length; i++) {
+            var txt = (spans[i].textContent || '').replace(/\u00A0/g, ' ').trim();
+            if (/^\d+\s*мл$/i.test(txt)) return txt;
+          }
+        }
+      } catch (_) {}
+
+      // 2. Selected variant tile label
+      try {
+        var selectedTile = document.querySelector('.pd-variant-selected .pd-variant-label');
+        if (selectedTile) {
+          var label = (selectedTile.textContent || '').replace(/\u00A0/g, ' ').trim();
+          if (/^\d+\s*мл$/i.test(label)) return label;
+        }
+      } catch (_) {}
+
+      // 3. Product specs: "/ 100 мл" pattern
+      try {
+        var specs = document.querySelector('[data-testid="product-specifications"]');
+        if (specs) {
+          var specText = (specs.textContent || '').replace(/\u00A0/g, ' ');
+          var m = specText.match(/(\d+)\s*мл/i);
+          if (m) return m[0].trim();
+        }
+      } catch (_) {}
+
+      // 4. URL pattern: /N-ml/
+      try {
+        var urlMatch = location.pathname.match(/(\d+)-ml\b/i);
+        if (urlMatch) return urlMatch[1] + ' мл';
+      } catch (_) {}
+
+      return null;
+    });
+  } catch (err) {
+    console.log('[Scraper] extractNotinoVolume error: ' + err.message);
+    return null;
+  }
+}
+
 /** @type {import('puppeteer-core').Browser | null} */
 let browserInstance = null;
 
@@ -899,15 +953,19 @@ async function extractPrice(tracker) {
       if (notinoPrice) {
         var price = parsePrice(notinoPrice);
         if (price !== null && price > 0) {
+          var volume = await extractNotinoVolume(page);
           var elapsed = Date.now() - pageStart;
-          console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (notino content attr, ' + elapsed + 'ms) — ' + shortName);
-          return { success: true, price: price };
+          console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + (volume ? ' | Volume: ' + volume : '') + ' (notino content attr, ' + elapsed + 'ms) — ' + shortName);
+          return { success: true, price: price, volume: volume };
         }
         console.log('[Scraper] #' + trackerId + ' Notino: found text "' + notinoPrice + '" but parse failed');
       } else {
         console.log('[Scraper] #' + trackerId + ' Notino: no price element found at all');
       }
     }
+
+    // For Notino fallback paths: extract volume once before generic selectors
+    var notinoVolume = isNotino ? await extractNotinoVolume(page) : null;
 
     const result = await page.evaluate((cssSelector, excludedSelectors) => {
       const el = document.querySelector(cssSelector);
@@ -929,7 +987,7 @@ async function extractPrice(tracker) {
       if (price !== null && price > 0) {
         var elapsed = Date.now() - pageStart;
         console.log(`[Scraper] #${trackerId} ✅ Price: ${price} (from selector, ${elapsed}ms) — ${shortName}`);
-        return { success: true, price };
+        return { success: true, price, volume: notinoVolume };
       }
       console.log(`[Scraper] #${trackerId} Selector found but parse failed: "${result.text.substring(0, 80)}"`);
     } else {
@@ -942,7 +1000,7 @@ async function extractPrice(tracker) {
     if (fallbackPrice !== null) {
       var elapsed = Date.now() - pageStart;
       console.log(`[Scraper] #${trackerId} ✅ Price: ${fallbackPrice} (auto-detect, ${elapsed}ms) — ${shortName}`);
-      return { success: true, price: fallbackPrice };
+      return { success: true, price: fallbackPrice, volume: notinoVolume };
     }
 
     // CSS selector element not found — try fallback selectors
@@ -952,7 +1010,7 @@ async function extractPrice(tracker) {
       if (fallbackResult !== null) {
         var elapsed = Date.now() - pageStart;
         console.log(`[Scraper] #${trackerId} ✅ Price: ${fallbackResult} (fallback selector, ${elapsed}ms) — ${shortName}`);
-        return { success: true, price: fallbackResult };
+        return { success: true, price: fallbackResult, volume: notinoVolume };
       }
     }
 

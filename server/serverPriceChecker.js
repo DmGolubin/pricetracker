@@ -286,6 +286,16 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
     updateFields.previousPrice = oldPrice;
   }
 
+  // Append volume to productName if scraper returned it and name doesn't already have it
+  if (result.volume && tracker.productName) {
+    var nameHasVolume = /\d+\s*мл/i.test(tracker.productName) || /\d+\s*ml\b/i.test(tracker.productName);
+    if (!nameHasVolume) {
+      var newName = tracker.productName + ' — ' + result.volume;
+      updateFields.productName = newName;
+      console.log('[ServerCheck] #' + tracker.id + ' 📏 Volume appended: "' + newName + '"');
+    }
+  }
+
   // Execute update — build parameterized query
   var setClauses = [];
   var values = [];
