@@ -1112,8 +1112,19 @@
 
       if (selectedVariants.length === 0) {
         // No variants selected — single tracker ("Текущий")
-        chrome.runtime.sendMessage(basePayload);
-        cleanup();
+        chrome.runtime.sendMessage(basePayload, function (response) {
+          if (response && !response.success) {
+            if (response.code === 'DUPLICATE') {
+              showError('Этот товар уже отслеживается');
+            } else if (response.code === 'NETWORK_ERROR') {
+              showError('Нет связи с сервером');
+            } else {
+              showError(response.error || 'Ошибка создания трекера');
+            }
+            return;
+          }
+          cleanup();
+        });
       } else {
         // Multi-variant: create one tracker per selected variant.
         // We do NOT click variant buttons here — the SPA may re-render

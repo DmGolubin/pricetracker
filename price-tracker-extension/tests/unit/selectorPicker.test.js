@@ -215,7 +215,8 @@ describe('SelectorPicker', () => {
           action: 'elementSelected',
           price: 15.5,
           trackingType: 'price'
-        })
+        }),
+        expect.any(Function)
       );
     });
 

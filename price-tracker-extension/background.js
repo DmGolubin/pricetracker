@@ -63,7 +63,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Handle async responses
   handler
     .then((result) => sendResponse({ success: true, data: result }))
-    .catch((err) => sendResponse({ success: false, error: err.message || String(err) }));
+    .catch((err) => sendResponse({
+      success: false,
+      error: err.message || String(err),
+      code: err.code || '',
+      status: err.status || 0,
+    }));
 
   // Return true to indicate async sendResponse
   return true;

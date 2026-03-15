@@ -83,8 +83,24 @@ btnTrackAuto.addEventListener('click', () => {
     imageUrl: autoDetectData.imageUrl,
     pageUrl: autoDetectData.pageUrl,
   }, (response) => {
-    if (chrome.runtime.lastError || (response && response.error)) {
-      showStatus('Ошибка создания трекера', true);
+    if (chrome.runtime.lastError) {
+      showStatus('Нет связи с расширением', true);
+      btnTrackAuto.disabled = false;
+      btnTrackAuto.textContent = 'Повторить';
+      return;
+    }
+    if (response && !response.success) {
+      var msg = 'Ошибка создания трекера';
+      if (response.code === 'DUPLICATE') {
+        msg = 'Этот товар уже отслеживается';
+      } else if (response.code === 'NETWORK_ERROR') {
+        msg = 'Нет связи с сервером';
+      } else if (response.status >= 500) {
+        msg = 'Ошибка сервера: ' + (response.error || 'попробуйте позже');
+      } else if (response.error) {
+        msg = response.error;
+      }
+      showStatus(msg, true);
       btnTrackAuto.disabled = false;
       btnTrackAuto.textContent = 'Повторить';
       return;
