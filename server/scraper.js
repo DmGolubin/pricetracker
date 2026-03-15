@@ -972,9 +972,66 @@ async function extractPrice(tracker, options) {
       for (var notinoAttempt = 0; notinoAttempt < 2; notinoAttempt++) {
         try {
           notinoPrice = await page.evaluate(function() {
-        // Notino: use the regular price, NOT the promo/voucher price.
-        // The promo price (span.dlmrqim) is conditional — requires a code + minimum purchase,
-        // so it's not the actual price the user will pay without the promo.
+        // Notino promo/voucher price detection.
+        // The promo price block contains a span[data-testid="pd-price-wrapper"]
+        // with a lower price than the regular #pd-price. It may be inside a
+        // CSS-in-JS class (e.g. span.dlmrqim) which can change between builds.
+        // Strategy: find all pd-price-wrapper spans outside #pd-price, pick the
+        // one with the lowest price. If lower than regular price, use it.
+        var regularPrice = null;
+        var regularSpan = document.querySelector('#pd-price span[data-testid="pd-price"]');
+        if (!regularSpan) regularSpan = document.querySelector('span[data-testid="pd-price"]');
+        if (regularSpan) {
+          var rc = regularSpan.getAttribute('content');
+          if (rc && /\d/.test(rc)) {
+            var rNum = parseFloat(rc.replace(/[\s\u00A0]/g, '').replace(',', '.'));
+            if (!isNaN(rNum) && rNum > 0) regularPrice = rNum;
+          }
+        }
+
+        // Look for promo price wrappers outside #pd-price
+        var allWrappers = document.querySelectorAll('span[data-testid="pd-price-wrapper"]');
+        var pdPriceEl = document.querySelector('#pd-price');
+        var bestPromo = null;
+        for (var i = 0; i < allWrappers.length; i++) {
+          var wrapper = allWrappers[i];
+          // Skip the main price wrapper inside #pd-price
+          if (pdPriceEl && pdPriceEl.contains(wrapper)) continue;
+          // Find span with content attribute (the price value)
+          var priceSpan = wrapper.querySelector('span[content]');
+          if (!priceSpan) continue;
+          var pc = priceSpan.getAttribute('content');
+          if (!pc || !/\d/.test(pc)) continue;
+          // Skip currency spans (content="UAH")
+          if (/^[A-Z]{3}$/.test(pc.trim())) continue;
+          var pNum = parseFloat(pc.replace(/[\s\u00A0]/g, '').replace(',', '.'));
+          if (isNaN(pNum) || pNum <= 0) continue;
+          if (bestPromo === null || pNum < bestPromo) bestPromo = pNum;
+        }
+
+        // Also try the legacy CSS-in-JS selector as fallback
+        if (bestPromo === null) {
+          var legacyPromo = document.querySelector('span.dlmrqim span[data-testid="pd-price-wrapper"]');
+          if (legacyPromo) {
+            var lps = legacyPromo.querySelector('span[content]');
+            if (lps) {
+              var lpc = lps.getAttribute('content');
+              if (lpc && /\d/.test(lpc) && !/^[A-Z]{3}$/.test(lpc.trim())) {
+                var lpNum = parseFloat(lpc.replace(/[\s\u00A0]/g, '').replace(',', '.'));
+                if (!isNaN(lpNum) && lpNum > 0) bestPromo = lpNum;
+              }
+            }
+          }
+        }
+
+        // Use promo price if it's lower than regular price
+        if (bestPromo !== null && (regularPrice === null || bestPromo < regularPrice)) {
+          return String(bestPromo);
+        }
+        // Fall back to regular price
+        if (regularPrice !== null) return String(regularPrice);
+
+        // Legacy fallbacks for edge cases
         // Regular price: span[data-testid="pd-price"] content attribute (most reliable)
         var span = document.querySelector('span[data-testid="pd-price"]');
         if (span) {

@@ -228,13 +228,81 @@
    * Returns { element, price, confidence } or null.
    */
   function checkSiteSpecific() {
-    // Notino.ua: regular price takes priority.
-    // The promo/voucher price (span.dlmrqim) is conditional (requires a code + minimum purchase)
-    // and should NOT be used as the tracked price.
-    // Regular price lives in: span[data-testid="pd-price"][content]
+    // Notino.ua: promo/voucher price takes priority over regular price.
+    // The promo price block contains span[data-testid="pd-price-wrapper"] outside #pd-price.
+    // CSS-in-JS class (e.g. span.dlmrqim) may change between builds, so we use
+    // a more stable approach: find all pd-price-wrapper outside #pd-price.
+
+    // First get regular price for comparison
+    var regularPrice = null;
+    var regularEl = null;
+    try {
+      var regSpan = document.querySelector('#pd-price span[data-testid="pd-price"]') ||
+                    document.querySelector('span[data-testid="pd-price"]');
+      if (regSpan) {
+        var rc = (regSpan.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+        if (rc) {
+          regularPrice = parsePrice(rc);
+          regularEl = regSpan;
+        }
+        if (regularPrice === null) {
+          var rt = (regSpan.textContent || '').trim();
+          if (rt) {
+            regularPrice = parsePrice(rt);
+            regularEl = regSpan;
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Search for promo price wrappers outside #pd-price
+    try {
+      var allWrappers = document.querySelectorAll('span[data-testid="pd-price-wrapper"]');
+      var pdPriceEl = document.querySelector('#pd-price');
+      var bestPromoPrice = null;
+      var bestPromoEl = null;
+      for (var pw = 0; pw < allWrappers.length; pw++) {
+        var wrapper = allWrappers[pw];
+        if (pdPriceEl && pdPriceEl.contains(wrapper)) continue;
+        var priceSpan = wrapper.querySelector('span[content]');
+        if (!priceSpan) continue;
+        var pc = (priceSpan.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+        if (!pc || /^[A-Z]{3}$/.test(pc)) continue;
+        var pp = parsePrice(pc);
+        if (pp !== null && pp > 0 && (bestPromoPrice === null || pp < bestPromoPrice)) {
+          bestPromoPrice = pp;
+          bestPromoEl = priceSpan;
+        }
+      }
+      // Also try legacy CSS-in-JS selector
+      if (bestPromoPrice === null) {
+        var legacyPromo = document.querySelector('span.dlmrqim span[data-testid="pd-price-wrapper"]');
+        if (legacyPromo) {
+          var lps = legacyPromo.querySelector('span[content]');
+          if (lps) {
+            var lpc = (lps.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+            if (lpc && !/^[A-Z]{3}$/.test(lpc)) {
+              var lpp = parsePrice(lpc);
+              if (lpp !== null && lpp > 0) { bestPromoPrice = lpp; bestPromoEl = lps; }
+            }
+          }
+        }
+      }
+      // Use promo if lower than regular
+      if (bestPromoPrice !== null && bestPromoEl && (regularPrice === null || bestPromoPrice < regularPrice)) {
+        return { element: bestPromoEl, price: bestPromoPrice, confidence: 0.97 };
+      }
+    } catch (_) {}
+
+    // Notino.ua: regular price
+    if (regularPrice !== null && regularEl) {
+      return { element: regularEl, price: regularPrice, confidence: 0.95 };
+    }
+
+    // Notino.ua: fallback regular price selectors
     var notinoSelectors = [
-      '#pd-price span[data-testid="pd-price"]',
-      'span[data-testid="pd-price"]'
+      'span[data-testid="pd-price"]',
+      '#pd-price span[data-testid="pd-price"]'
     ];
     for (var i = 0; i < notinoSelectors.length; i++) {
       try {
