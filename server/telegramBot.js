@@ -44,6 +44,18 @@ class TelegramBot {
     // Set bot commands
     await this.setCommands();
 
+    // Set Menu Button (the "Открыть" button shown in chat)
+    if (this.webAppUrl) {
+      await this.api('setChatMenuButton', {
+        menu_button: {
+          type: 'web_app',
+          text: 'Открыть',
+          web_app: { url: this.webAppUrl },
+        },
+      });
+      console.log('[TelegramBot] Menu button set to Mini App.');
+    }
+
     // Start polling
     this.startPolling();
 
