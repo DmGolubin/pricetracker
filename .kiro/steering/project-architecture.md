@@ -53,7 +53,7 @@ Price Tracker — система отслеживания цен на товар
 - Тесты: Jest + jsdom + fast-check (property-based)
 
 ### Структура
-- `background.js` — service worker, маршрутизация сообщений, алармы
+- `background.js` — service worker, маршрутизация сообщений, алармы. Все проверки цен делегируются серверу через `apiClient` (не открывает вкладки)
 - `popup/` — popup окно расширения (popup.html/js/css)
 - `dashboard/` — полноэкранная панель управления
   - `dashboard.js` — главный скрипт, загрузка трекеров, фильтрация, сортировка, рендеринг
@@ -73,7 +73,7 @@ Price Tracker — система отслеживания цен на товар
   - `selectorGenerator.js` — генерация уникального CSS-селектора
 - `lib/` — библиотечные модули:
   - `apiClient.js` — HTTP-клиент к серверному API
-  - `priceChecker.js` — проверка цен через content scripts
+  - `priceChecker.js` — проверка цен через content scripts (legacy, не используется background.js — все проверки идут через сервер)
   - `notifier.js` — Chrome-уведомления
   - `thresholdEngine.js` — клиентский движок порогов
   - `alarmManager.js` — управление Chrome alarms
