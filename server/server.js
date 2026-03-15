@@ -463,25 +463,42 @@ app.post('/server-check/cancel', (req, res) => {
   res.json({ cancelled, message: cancelled ? 'Cancel requested' : 'No check running' });
 });
 
+// Queue for single-check requests to avoid parallel Puppeteer hits
+// that trigger WAF/challenge pages (e.g. Notino "Трохи зачекайте…")
+let singleCheckQueue = Promise.resolve();
+const SINGLE_CHECK_DELAY_MS = 5000; // 5s delay between sequential checks
+
 // Check a single tracker via Puppeteer (used by extension after creating a tracker)
-app.post('/server-check/single/:id', async (req, res) => {
-  const serverPriceChecker = require('./serverPriceChecker');
-  try {
-    const { rows } = await pool.query('SELECT * FROM trackers WHERE id = $1', [req.params.id]);
-    if (rows.length === 0) return res.status(404).json({ error: 'Tracker not found' });
-    const tracker = rows[0];
-    const settingsResult = await pool.query("SELECT * FROM settings WHERE id = 'global'");
-    const settings = settingsResult.rows[0] || {};
-    // Use a no-op collector since we don't need digest for single checks
-    const noopCollector = { addChange() {}, addUnchanged() {} };
-    const result = await serverPriceChecker.checkSingleTracker(pool, tracker, settings, noopCollector);
-    // Re-fetch the tracker to return updated data
-    const { rows: updated } = await pool.query('SELECT * FROM trackers WHERE id = $1', [req.params.id]);
-    res.json({ status: result, tracker: updated[0] || tracker });
-  } catch (err) {
-    console.error('POST /server-check/single/' + req.params.id + ' error:', err);
-    res.status(500).json({ error: err.message });
-  }
+app.post('/server-check/single/:id', (req, res) => {
+  const trackerId = req.params.id;
+
+  // Chain this check onto the queue so they run sequentially
+  singleCheckQueue = singleCheckQueue.then(async () => {
+    const serverPriceChecker = require('./serverPriceChecker');
+    try {
+      const { rows } = await pool.query('SELECT * FROM trackers WHERE id = $1', [trackerId]);
+      if (rows.length === 0) {
+        res.status(404).json({ error: 'Tracker not found' });
+        return;
+      }
+      const tracker = rows[0];
+      const settingsResult = await pool.query("SELECT * FROM settings WHERE id = 'global'");
+      const settings = settingsResult.rows[0] || {};
+      const noopCollector = { addChange() {}, addUnchanged() {} };
+      const result = await serverPriceChecker.checkSingleTracker(pool, tracker, settings, noopCollector);
+      const { rows: updated } = await pool.query('SELECT * FROM trackers WHERE id = $1', [trackerId]);
+      res.json({ status: result, tracker: updated[0] || tracker });
+    } catch (err) {
+      console.error('POST /server-check/single/' + trackerId + ' error:', err);
+      if (!res.headersSent) res.status(500).json({ error: err.message });
+    }
+    // Delay before next queued check to avoid WAF triggers
+    await new Promise(r => setTimeout(r, SINGLE_CHECK_DELAY_MS));
+  }).catch(err => {
+    // Ensure queue never breaks on unexpected errors
+    console.error('[SingleCheckQueue] Unexpected error:', err);
+    if (!res.headersSent) res.status(500).json({ error: 'Queue error' });
+  });
 });
 
 // Test single tracker extraction (debug)
