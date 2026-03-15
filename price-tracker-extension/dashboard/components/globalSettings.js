@@ -290,8 +290,9 @@ const GlobalSettings = (function () {
       exportBtn.disabled = true;
       exportBtn.textContent = 'Экспорт…';
       sendMessage({ action: 'exportCookies', domain: domain })
-        .then(function (cookies) {
-          if (!cookies || cookies.length === 0) {
+        .then(function (response) {
+          var cookies = (response && response.data) ? response.data : response;
+          if (!Array.isArray(cookies) || cookies.length === 0) {
             exportBtn.textContent = 'Нет куки';
             setTimeout(function () {
               exportBtn.disabled = false;
