@@ -49,8 +49,16 @@ function extractVariantLabel(name) {
   if (m) return m[1] + 'ml';
 
   // 3. EVA-style bare number at end: "— 100", "— 30", "— 120"
-  m = name.match(/[\s\-–—]+(\d{2,4})\s*$/);
-  if (m) return m[1] + 'ml';
+  // Only match typical perfume volumes (5-500ml), not prices.
+  // Exclude cases where the number is part of a space-separated price (e.g. "3 995")
+  m = name.match(/[\s\-–—]+(\d{2,3})\s*$/);
+  if (m) {
+    var bareVol = parseInt(m[1], 10);
+    // Check that the character before the dash/space is not a digit (would indicate a price like "3 995")
+    var matchIdx = name.lastIndexOf(m[0]);
+    var charBefore = matchIdx > 0 ? name[matchIdx - 1] : '';
+    if (bareVol >= 5 && bareVol <= 500 && !/\d/.test(charBefore)) return m[1] + 'ml';
+  }
 
   // 4. Cyrillic volume in name: "100 мл (ТЕСТЕР)" or "120 мл (тестер)" or "50 мл"
   m = name.match(/(\d+)\s*мл\s*(?:\(([^)]+)\))?\s*/i);
