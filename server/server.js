@@ -204,10 +204,11 @@ app.get('/trackers/:id', async (req, res) => {
 app.post('/trackers', async (req, res) => {
   try {
     const d = req.body;
-    // Check for existing tracker with same URL + selector
+    // Check for existing tracker with same URL + selector + variantSelector
+    const variantSel = d.variantSelector || '';
     const existing = await pool.query(
-      'SELECT * FROM trackers WHERE "pageUrl" = $1 AND "cssSelector" = $2',
-      [d.pageUrl, d.cssSelector]
+      'SELECT * FROM trackers WHERE "pageUrl" = $1 AND "cssSelector" = $2 AND COALESCE("variantSelector", \'\') = $3',
+      [d.pageUrl, d.cssSelector, variantSel]
     );
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Tracker already exists', tracker: existing.rows[0] });
