@@ -313,6 +313,18 @@ async function saveSettings(settings) {
   return res.json();
 }
 
+/**
+ * Trigger server-side price check for a single tracker via Puppeteer.
+ * @param {string|number} trackerId
+ * @returns {Promise<Object>} - { status, tracker }
+ */
+async function serverCheckSingle(trackerId) {
+  const res = await request(`/server-check/single/${encodeURIComponent(trackerId)}`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
 // ─── Exports ────────────────────────────────────────────────────────
 
 const _apiClient = {
@@ -327,6 +339,7 @@ const _apiClient = {
   addPriceRecord,
   getSettings,
   saveSettings,
+  serverCheckSingle,
   ApiError,
   // Exported for testing
   _request: request,

@@ -205,21 +205,20 @@ async function handleElementSelected(message) {
   // Schedule alarm for periodic checks
   alarmManager.scheduleTracker(tracker.id, tracker.checkIntervalHours);
 
-  // For variant trackers, run the first price check immediately
-  // so the correct variant price is fetched right away.
-  if (payload.variantSelector) {
-    setTimeout(function () {
-      priceChecker.checkPrice(tracker.id, deps)
-        .then(function () {
-          // Notify open dashboard/popup that this tracker was updated
-          chrome.runtime.sendMessage({
-            action: _c.MessageFromSW.TRACKER_UPDATED,
-            trackerId: tracker.id,
-          }).catch(function () {});
-        })
-        .catch(function () {});
-    }, 2000);
-  }
+  // Run first price check via server-side Puppeteer (no browser tabs opened)
+  setTimeout(function () {
+    apiClient.serverCheckSingle(tracker.id)
+      .then(function () {
+        // Notify open dashboard/popup that this tracker was updated
+        chrome.runtime.sendMessage({
+          action: _c.MessageFromSW.TRACKER_UPDATED,
+          trackerId: tracker.id,
+        }).catch(function () {});
+      })
+      .catch(function (err) {
+        console.warn('Server check for new tracker #' + tracker.id + ' failed:', err);
+      });
+  }, 2000);
 
   return tracker;
 }
@@ -244,6 +243,20 @@ async function handleAutoDetected(message) {
 
   // Schedule alarm for periodic checks
   alarmManager.scheduleTracker(tracker.id, tracker.checkIntervalHours);
+
+  // Run first price check via server-side Puppeteer (no browser tabs opened)
+  setTimeout(function () {
+    apiClient.serverCheckSingle(tracker.id)
+      .then(function () {
+        chrome.runtime.sendMessage({
+          action: _c.MessageFromSW.TRACKER_UPDATED,
+          trackerId: tracker.id,
+        }).catch(function () {});
+      })
+      .catch(function (err) {
+        console.warn('Server check for new tracker #' + tracker.id + ' failed:', err);
+      });
+  }, 2000);
 
   return tracker;
 }

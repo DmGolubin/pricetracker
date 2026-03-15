@@ -380,4 +380,4 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
   }
 }
 
-module.exports = { runCheckCycle };
+module.exports = { runCheckCycle, checkSingleTracker };

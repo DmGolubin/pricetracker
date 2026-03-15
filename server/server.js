@@ -463,6 +463,27 @@ app.post('/server-check/cancel', (req, res) => {
   res.json({ cancelled, message: cancelled ? 'Cancel requested' : 'No check running' });
 });
 
+// Check a single tracker via Puppeteer (used by extension after creating a tracker)
+app.post('/server-check/single/:id', async (req, res) => {
+  const serverPriceChecker = require('./serverPriceChecker');
+  try {
+    const { rows } = await pool.query('SELECT * FROM trackers WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Tracker not found' });
+    const tracker = rows[0];
+    const settingsResult = await pool.query("SELECT * FROM settings WHERE id = 'global'");
+    const settings = settingsResult.rows[0] || {};
+    // Use a no-op collector since we don't need digest for single checks
+    const noopCollector = { addChange() {}, addUnchanged() {} };
+    const result = await serverPriceChecker.checkSingleTracker(pool, tracker, settings, noopCollector);
+    // Re-fetch the tracker to return updated data
+    const { rows: updated } = await pool.query('SELECT * FROM trackers WHERE id = $1', [req.params.id]);
+    res.json({ status: result, tracker: updated[0] || tracker });
+  } catch (err) {
+    console.error('POST /server-check/single/' + req.params.id + ' error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Test single tracker extraction (debug)
 app.post('/server-check/test/:id', async (req, res) => {
   const scraper = require('./scraper');
