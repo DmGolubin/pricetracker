@@ -363,13 +363,26 @@ async function extractPrice(tracker) {
               await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
             } catch (_) {}
           }
-          await new Promise(function(r) { setTimeout(r, 4000); });
+
+          // Out-of-stock variants: EVA removes the price element entirely,
+          // so use shorter timeouts to avoid wasting ~40s on retries.
+          var isOutOfStock = matched.outOfStock;
+          var settleDelay = isOutOfStock ? 2000 : 4000;
+          var readRetries = isOutOfStock ? 1 : 3;
+          var readTimeout = isOutOfStock ? 3000 : 10000;
+          var retryDelay = isOutOfStock ? 1000 : 3000;
+
+          if (isOutOfStock) {
+            console.log('[Scraper] #' + trackerId + ' EVA: variant is out-of-stock, using fast path');
+          }
+
+          await new Promise(function(r) { setTimeout(r, settleDelay); });
 
           // Try to read the price — may need multiple attempts if frame was detached
           var evaPrice = null;
-          for (var readAttempt = 0; readAttempt < 3; readAttempt++) {
+          for (var readAttempt = 0; readAttempt < readRetries; readAttempt++) {
             try {
-              await page.waitForSelector('[data-testid="product-price"]', { timeout: 10000 });
+              await page.waitForSelector('[data-testid="product-price"]', { timeout: readTimeout });
               evaPrice = await page.evaluate(function() {
                 var el = document.querySelector('[data-testid="product-price"]');
                 return el ? (el.textContent || '').trim() : null;
@@ -377,7 +390,9 @@ async function extractPrice(tracker) {
               if (evaPrice) break;
             } catch (readErr) {
               console.log('[Scraper] #' + trackerId + ' EVA: read attempt ' + (readAttempt + 1) + ' failed: ' + readErr.message);
-              await new Promise(function(r) { setTimeout(r, 3000); });
+              if (readAttempt < readRetries - 1) {
+                await new Promise(function(r) { setTimeout(r, retryDelay); });
+              }
             }
           }
           console.log('[Scraper] #' + trackerId + ' EVA: price after click: ' + (evaPrice || 'none'));
