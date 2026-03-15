@@ -339,6 +339,7 @@ async function extractPrice(tracker) {
     const isMakeup = (tracker.pageUrl || '').indexOf('makeup.com.ua') !== -1;
     const isEva = (tracker.pageUrl || '').indexOf('eva.ua') !== -1;
     const isNotino = (tracker.pageUrl || '').indexOf('notino.ua') !== -1;
+    const isKasta = (tracker.pageUrl || '').indexOf('kasta.ua') !== -1;
 
     // ─── Notino wait-page detection ──────────────────────────────────
     // Notino shows "Трохи зачекайте…" (Please wait) page as bot protection.
@@ -1042,6 +1043,27 @@ async function extractPrice(tracker) {
     if (result.found && result.text) {
       const price = parsePrice(result.text);
       if (price !== null && price > 0) {
+        // Kasta: if the CSS selector contains a dynamic ID (#kcPrice), the price
+        // may come from a stale/wrong element. Validate against stable selectors.
+        if (isKasta && /^#kcPrice/i.test(tracker.cssSelector)) {
+          var kastaStablePrice = await page.evaluate(function() {
+            // #productPrice is the stable regular price element
+            var el = document.querySelector('#productPrice');
+            if (el) {
+              var text = (el.textContent || '').trim();
+              if (text && /\d/.test(text)) return text;
+            }
+            return null;
+          });
+          if (kastaStablePrice) {
+            var stablePrice = parsePrice(kastaStablePrice);
+            if (stablePrice !== null && stablePrice > 0 && stablePrice !== price) {
+              console.log(`[Scraper] #${trackerId} Kasta: dynamic selector gave ${price}, stable #productPrice gives ${stablePrice} — using stable`);
+              var elapsed = Date.now() - pageStart;
+              return { success: true, price: stablePrice };
+            }
+          }
+        }
         var elapsed = Date.now() - pageStart;
         console.log(`[Scraper] #${trackerId} ✅ Price: ${price} (from selector, ${elapsed}ms) — ${shortName}`);
         return { success: true, price, volume: notinoVolume };
@@ -1049,6 +1071,51 @@ async function extractPrice(tracker) {
       console.log(`[Scraper] #${trackerId} Selector found but parse failed: "${result.text.substring(0, 80)}"`);
     } else {
       console.log(`[Scraper] #${trackerId} Selector not found: ${tracker.cssSelector}`);
+    }
+
+    // ─── Kasta.ua fallback: dynamic CSS selectors (#kcPriceXXX) don't work ───
+    // Kasta generates unique IDs per session, so selectors like #kcPrice5767287522
+    // won't exist on server-side Puppeteer. Use stable selectors instead.
+    if (isKasta && !result.found) {
+      console.log(`[Scraper] #${trackerId} Kasta: original selector failed, trying stable fallbacks...`);
+      var kastaPrice = await page.evaluate(function() {
+        // 1. #productPrice — main regular price (most reliable)
+        var productPrice = document.querySelector('#productPrice');
+        if (productPrice) {
+          var text = (productPrice.textContent || '').trim();
+          if (text && /\d/.test(text)) return { text: text, source: '#productPrice' };
+        }
+        // 2. .kcPrice span — Kasta Card price block
+        var kcSpans = document.querySelectorAll('.kcPrice span');
+        for (var i = 0; i < kcSpans.length; i++) {
+          var spanText = (kcSpans[i].textContent || '').trim();
+          if (spanText && /^\d/.test(spanText)) return { text: spanText, source: '.kcPrice span' };
+        }
+        // 3. [itemprop="price"] — structured data
+        var itemprop = document.querySelector('[itemprop="price"]');
+        if (itemprop) {
+          var content = itemprop.getAttribute('content');
+          if (content && /\d/.test(content)) return { text: content, source: 'itemprop price' };
+        }
+        // 4. .product-price — generic price class
+        var generic = document.querySelector('.product-price');
+        if (generic) {
+          var gText = (generic.textContent || '').trim();
+          if (gText && /\d/.test(gText)) return { text: gText, source: '.product-price' };
+        }
+        return null;
+      });
+      if (kastaPrice) {
+        var price = parsePrice(kastaPrice.text);
+        if (price !== null && price > 0) {
+          var elapsed = Date.now() - pageStart;
+          console.log(`[Scraper] #${trackerId} ✅ Price: ${price} (Kasta ${kastaPrice.source}, ${elapsed}ms) — ${shortName}`);
+          return { success: true, price: price };
+        }
+        console.log(`[Scraper] #${trackerId} Kasta: found "${kastaPrice.text}" via ${kastaPrice.source} but parse failed`);
+      } else {
+        console.log(`[Scraper] #${trackerId} Kasta: no stable selectors found either`);
+      }
     }
 
     // Fallback: try auto-detecting price on the page
