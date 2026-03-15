@@ -1310,3 +1310,56 @@
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   }
 }
+
+/* ===== Site Cookies Section ===== */
+.cookie-section .settings-info-note {
+  margin-bottom: var(--spacing-sm);
+}
+
+.cookie-entries-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+}
+
+.cookie-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-card, rgba(255,255,255,0.04));
+  border-radius: 8px;
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+
+.cookie-entry-info {
+  font-size: 13px;
+  color: var(--text-secondary, #94a3b8);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cookie-add-row {
+  display: flex;
+  gap: var(--spacing-xs);
+  align-items: center;
+}
+
+.cookie-add-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.cookie-export-btn {
+  background: var(--accent-indigo, #6366f1);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.cookie-export-btn:hover {
+  background: var(--accent-indigo-hover, #5558e6);
+}

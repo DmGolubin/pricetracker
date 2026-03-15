@@ -18,6 +18,7 @@ var MessageToSW = {
   GET_PRICE_HISTORY: 'getPriceHistory',
   MARK_AS_READ: 'markAsRead',
   RESET_BADGE: 'resetBadge',
+  EXPORT_COOKIES: 'exportCookies',
 };
 
 // Message types from service worker to popup/dashboard (broadcast)

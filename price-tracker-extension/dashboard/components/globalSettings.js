@@ -232,6 +232,135 @@ const GlobalSettings = (function () {
     return group;
   }
 
+  // ─── Site Cookies section ─────────────────────────────────────────
+
+  /**
+   * Build the site cookies management section.
+   * Allows exporting browser cookies for specific domains so the server
+   * Puppeteer can use them for authenticated price checks.
+   * @param {Array} siteCookies - Current siteCookies from settings
+   * @returns {HTMLElement}
+   */
+  function buildCookieSection(siteCookies) {
+    var entries = Array.isArray(siteCookies) ? siteCookies : [];
+
+    var section = document.createElement('div');
+    section.className = 'form-group cookie-section';
+    section.setAttribute('data-section', 'cookies');
+
+    var sectionLabel = document.createElement('label');
+    sectionLabel.textContent = 'Куки сайтов';
+    sectionLabel.className = 'section-label';
+    section.appendChild(sectionLabel);
+
+    var hint = document.createElement('p');
+    hint.className = 'settings-info-note';
+    hint.textContent = 'Экспортируйте куки из браузера, чтобы сервер видел авторизованные цены (например, Kasta Visa Card).';
+    section.appendChild(hint);
+
+    // Cookie entries list
+    var list = document.createElement('div');
+    list.className = 'cookie-entries-list';
+    list.setAttribute('data-cookie-list', '');
+
+    for (var i = 0; i < entries.length; i++) {
+      list.appendChild(buildCookieEntry(entries[i], i));
+    }
+    section.appendChild(list);
+
+    // Add domain row
+    var addRow = document.createElement('div');
+    addRow.className = 'cookie-add-row';
+
+    var domainInput = document.createElement('input');
+    domainInput.type = 'text';
+    domainInput.className = 'input';
+    domainInput.placeholder = 'kasta.ua';
+    domainInput.setAttribute('aria-label', 'Домен для экспорта куки');
+    domainInput.setAttribute('data-cookie-domain-input', '');
+    addRow.appendChild(domainInput);
+
+    var exportBtn = document.createElement('button');
+    exportBtn.type = 'button';
+    exportBtn.className = 'btn btn-sm cookie-export-btn';
+    exportBtn.textContent = 'Экспорт куки';
+    exportBtn.addEventListener('click', function () {
+      var domain = domainInput.value.trim();
+      if (!domain) return;
+      exportBtn.disabled = true;
+      exportBtn.textContent = 'Экспорт…';
+      sendMessage({ action: 'exportCookies', domain: domain })
+        .then(function (cookies) {
+          if (!cookies || cookies.length === 0) {
+            exportBtn.textContent = 'Нет куки';
+            setTimeout(function () {
+              exportBtn.disabled = false;
+              exportBtn.textContent = 'Экспорт куки';
+            }, 2000);
+            return;
+          }
+          // Add entry to list
+          var entry = { domain: domain, cookies: cookies, exportedAt: new Date().toISOString() };
+          // Remove existing entry for same domain
+          var existingEntries = list.querySelectorAll('[data-cookie-domain]');
+          for (var j = 0; j < existingEntries.length; j++) {
+            if (existingEntries[j].getAttribute('data-cookie-domain') === domain) {
+              existingEntries[j].remove();
+            }
+          }
+          list.appendChild(buildCookieEntry(entry, list.children.length));
+          domainInput.value = '';
+          exportBtn.disabled = false;
+          exportBtn.textContent = 'Экспорт куки';
+        })
+        .catch(function () {
+          exportBtn.disabled = false;
+          exportBtn.textContent = 'Ошибка';
+          setTimeout(function () { exportBtn.textContent = 'Экспорт куки'; }, 2000);
+        });
+    });
+    addRow.appendChild(exportBtn);
+    section.appendChild(addRow);
+
+    return section;
+  }
+
+  function buildCookieEntry(entry, index) {
+    var row = document.createElement('div');
+    row.className = 'cookie-entry';
+    row.setAttribute('data-cookie-domain', entry.domain || '');
+
+    var info = document.createElement('span');
+    info.className = 'cookie-entry-info';
+    var cookieCount = Array.isArray(entry.cookies) ? entry.cookies.length : 0;
+    var dateStr = entry.exportedAt ? new Date(entry.exportedAt).toLocaleDateString('ru-RU') : '';
+    info.textContent = (entry.domain || '?') + ' — ' + cookieCount + ' куки' + (dateStr ? ' (' + dateStr + ')' : '');
+    row.appendChild(info);
+
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn-icon btn-sm';
+    if (typeof Icons !== 'undefined') {
+      removeBtn.innerHTML = Icons.el('close', 14);
+    } else {
+      removeBtn.textContent = '×';
+    }
+    removeBtn.setAttribute('aria-label', 'Удалить куки для ' + (entry.domain || ''));
+    removeBtn.addEventListener('click', function () {
+      row.remove();
+    });
+    row.appendChild(removeBtn);
+
+    // Store full entry data as JSON
+    var dataEl = document.createElement('script');
+    dataEl.type = 'application/json';
+    dataEl.className = 'cookie-entry-data';
+    dataEl.textContent = JSON.stringify(entry);
+    row.appendChild(dataEl);
+
+    return row;
+  }
+
   // ─── Render ───────────────────────────────────────────────────────
 
   function buildModal(settings) {
@@ -322,6 +451,9 @@ const GlobalSettings = (function () {
     // ── Telegram digest toggle (Req 2.9) ──
     body.appendChild(buildDigestToggle(s.telegramDigestEnabled));
 
+    // ── Site cookies section ──
+    body.appendChild(buildCookieSection(s.siteCookies));
+
     // ── Footer ──
     var footer = document.createElement('div');
     footer.className = 'modal-footer';
@@ -388,11 +520,25 @@ const GlobalSettings = (function () {
     var digestCheckbox = modal.querySelector('[data-field="telegramDigestEnabled"]');
     var telegramDigestEnabled = digestCheckbox ? digestCheckbox.checked : true;
 
+    // Site cookies — collect from cookie entries in the DOM
+    var siteCookies = [];
+    var cookieEntries = modal.querySelectorAll('.cookie-entry[data-cookie-domain]');
+    for (var ci = 0; ci < cookieEntries.length; ci++) {
+      var dataScript = cookieEntries[ci].querySelector('.cookie-entry-data');
+      if (dataScript) {
+        try {
+          var entryData = JSON.parse(dataScript.textContent);
+          if (entryData && entryData.domain) siteCookies.push(entryData);
+        } catch (e) { /* skip invalid */ }
+      }
+    }
+
     return {
       apiBaseUrl: apiBaseUrl,
       permanentPinTab: permanentPinTab,
       thresholdConfig: thresholdConfig,
       telegramDigestEnabled: telegramDigestEnabled,
+      siteCookies: siteCookies,
     };
   }
 

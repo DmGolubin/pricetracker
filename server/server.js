@@ -185,6 +185,11 @@ async function initDB() {
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "retryCount" INTEGER DEFAULT 0;
   `);
 
+  // Migration: add siteCookies JSONB to settings for per-site cookie injection in Puppeteer
+  await pool.query(`
+    ALTER TABLE settings ADD COLUMN IF NOT EXISTS "siteCookies" JSONB DEFAULT '[]';
+  `);
+
   console.log('Database tables initialized');
 }
 
@@ -397,10 +402,10 @@ app.put('/settings/global', async (req, res) => {
       'apiBaseUrl', 'notificationsEnabled', 'telegramBotToken',
       'telegramChatId', 'persistentPinTab',
       'thresholdConfig', 'telegramDigestEnabled',
-      'telegramPersonalChatId',
+      'telegramPersonalChatId', 'siteCookies',
     ];
 
-    const jsonbFields = ['thresholdConfig'];
+    const jsonbFields = ['thresholdConfig', 'siteCookies'];
 
     for (const key of allowed) {
       if (d[key] !== undefined) {

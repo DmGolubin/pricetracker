@@ -240,7 +240,11 @@ async function runCheckCycle(pool, isCancelled) {
  * Check a single tracker: extract price, compare, update DB, feed digest.
  */
 async function checkSingleTracker(pool, tracker, settings, collector) {
-  var result = await scraper.extractPrice(tracker);
+  var extractOptions = {};
+  if (settings && settings.siteCookies) {
+    extractOptions.siteCookies = settings.siteCookies;
+  }
+  var result = await scraper.extractPrice(tracker, extractOptions);
 
   if (!result.success) {
     // Check if this was a WAF/Cloudflare block

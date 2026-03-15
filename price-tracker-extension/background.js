@@ -120,6 +120,9 @@ function getMessageHandler(message, sender) {
     case MessageToSW.RESET_BADGE:
       return handleResetBadge();
 
+    case MessageToSW.EXPORT_COOKIES:
+      return handleExportCookies(message.domain);
+
     // ── Content Script → SW ──
     case MessageFromCS.ELEMENT_SELECTED:
       return handleElementSelected(message);
@@ -334,6 +337,33 @@ async function handleMarkAsRead(trackerId) {
 async function handleResetBadge() {
   badgeManager.resetUnread();
 }
+
+/**
+ * Export all cookies for a given domain via chrome.cookies API.
+ * @param {string} domain - Domain to export cookies for (e.g. "kasta.ua")
+ * @returns {Promise<Object[]>} Array of cookie objects
+ */
+async function handleExportCookies(domain) {
+  if (!domain) return [];
+  var url = 'https://' + domain.replace(/^\./, '');
+  var cookies = await chrome.cookies.getAll({ url: url });
+  // Also try with www prefix
+  var wwwCookies = await chrome.cookies.getAll({ url: 'https://www.' + domain.replace(/^\./, '') });
+  // Merge, deduplicate by name+domain+path
+  var seen = {};
+  var merged = [];
+  var all = cookies.concat(wwwCookies);
+  for (var i = 0; i < all.length; i++) {
+    var c = all[i];
+    var key = c.name + '|' + c.domain + '|' + c.path;
+    if (!seen[key]) {
+      seen[key] = true;
+      merged.push(c);
+    }
+  }
+  return merged;
+}
+
 
 /**
  * Get the active tab. Uses sender.tab if available (from content script),

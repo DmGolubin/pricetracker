@@ -218,12 +218,13 @@ async function closeBrowser() {
  * @param {Object} tracker — tracker row from DB
  * @returns {Promise<{success: boolean, price?: number, error?: string}>}
  */
-async function extractPrice(tracker) {
+async function extractPrice(tracker, options) {
   const browser = await getBrowser();
   let page;
   const pageStart = Date.now();
   const trackerId = tracker.id;
   const shortName = (tracker.productName || '').substring(0, 50);
+  var siteCookies = (options && options.siteCookies) || null;
 
   try {
     page = await browser.newPage();
@@ -293,6 +294,42 @@ async function extractPrice(tracker) {
       console.log(`[Scraper] #${trackerId} EVA: stripped hash, loading base URL: ${navigateUrl}`);
     }
     console.log(`[Scraper] #${trackerId} Loading: ${navigateUrl}`);
+
+    // ─── Cookie injection: set site-specific cookies before navigation ───
+    if (siteCookies && Array.isArray(siteCookies)) {
+      try {
+        var pageUrlObj = new URL(navigateUrl);
+        var pageDomain = pageUrlObj.hostname.replace(/^www\./, '');
+        var matchingEntry = siteCookies.find(function(entry) {
+          if (!entry || !entry.domain) return false;
+          var entryDomain = entry.domain.replace(/^www\./, '').replace(/^\./, '');
+          return pageDomain === entryDomain || pageDomain.endsWith('.' + entryDomain);
+        });
+        if (matchingEntry && Array.isArray(matchingEntry.cookies) && matchingEntry.cookies.length > 0) {
+          var puppeteerCookies = matchingEntry.cookies.map(function(c) {
+            var pc = {
+              name: c.name,
+              value: c.value,
+              domain: c.domain || pageDomain,
+              path: c.path || '/',
+            };
+            if (c.secure) pc.secure = true;
+            if (c.httpOnly) pc.httpOnly = true;
+            if (c.sameSite) {
+              var ss = c.sameSite.charAt(0).toUpperCase() + c.sameSite.slice(1).toLowerCase();
+              if (['Strict', 'Lax', 'None'].indexOf(ss) !== -1) pc.sameSite = ss;
+            }
+            if (c.expirationDate && c.expirationDate > 0) pc.expires = c.expirationDate;
+            return pc;
+          });
+          await page.setCookie.apply(page, puppeteerCookies);
+          console.log(`[Scraper] #${trackerId} 🍪 Injected ${puppeteerCookies.length} cookies for ${pageDomain}`);
+        }
+      } catch (cookieErr) {
+        console.warn(`[Scraper] #${trackerId} ⚠ Cookie injection failed: ${cookieErr.message}`);
+      }
+    }
+
     const navStart = Date.now();
     try {
       await page.goto(navigateUrl, {
@@ -1043,24 +1080,24 @@ async function extractPrice(tracker) {
     if (result.found && result.text) {
       const price = parsePrice(result.text);
       if (price !== null && price > 0) {
-        // Kasta: if the CSS selector contains a dynamic ID (#kcPrice), the price
-        // may come from a stale/wrong element. Validate against stable selectors.
+        // Kasta: if the CSS selector contains a dynamic ID (#kcPrice), prefer
+        // the Kasta Card price (.kcPrice span.t-bold) which is the discounted price.
         if (isKasta && /^#kcPrice/i.test(tracker.cssSelector)) {
-          var kastaStablePrice = await page.evaluate(function() {
-            // #productPrice is the stable regular price element
-            var el = document.querySelector('#productPrice');
-            if (el) {
-              var text = (el.textContent || '').trim();
-              if (text && /\d/.test(text)) return text;
+          var kastaCardPrice = await page.evaluate(function() {
+            // .kcPrice span.t-bold is the Kasta Visa Card price (lower)
+            var kcBold = document.querySelector('.kcPrice span.t-bold');
+            if (kcBold) {
+              var text = (kcBold.textContent || '').trim();
+              if (text && /^\d/.test(text)) return text;
             }
             return null;
           });
-          if (kastaStablePrice) {
-            var stablePrice = parsePrice(kastaStablePrice);
-            if (stablePrice !== null && stablePrice > 0 && stablePrice !== price) {
-              console.log(`[Scraper] #${trackerId} Kasta: dynamic selector gave ${price}, stable #productPrice gives ${stablePrice} — using stable`);
+          if (kastaCardPrice) {
+            var cardPrice = parsePrice(kastaCardPrice);
+            if (cardPrice !== null && cardPrice > 0 && cardPrice !== price) {
+              console.log(`[Scraper] #${trackerId} Kasta: dynamic selector gave ${price}, card price is ${cardPrice} — using card price`);
               var elapsed = Date.now() - pageStart;
-              return { success: true, price: stablePrice };
+              return { success: true, price: cardPrice };
             }
           }
         }
@@ -1076,28 +1113,35 @@ async function extractPrice(tracker) {
     // ─── Kasta.ua fallback: dynamic CSS selectors (#kcPriceXXX) don't work ───
     // Kasta generates unique IDs per session, so selectors like #kcPrice5767287522
     // won't exist on server-side Puppeteer. Use stable selectors instead.
+    // Priority: Kasta Card price (.kcPrice) > regular price (#productPrice)
     if (isKasta && !result.found) {
       console.log(`[Scraper] #${trackerId} Kasta: original selector failed, trying stable fallbacks...`);
       var kastaPrice = await page.evaluate(function() {
-        // 1. #productPrice — main regular price (most reliable)
-        var productPrice = document.querySelector('#productPrice');
-        if (productPrice) {
-          var text = (productPrice.textContent || '').trim();
-          if (text && /\d/.test(text)) return { text: text, source: '#productPrice' };
+        // 1. .kcPrice span.t-bold — Kasta Visa Card price (preferred, lower price)
+        var kcBold = document.querySelector('.kcPrice span.t-bold');
+        if (kcBold) {
+          var boldText = (kcBold.textContent || '').trim();
+          if (boldText && /^\d/.test(boldText)) return { text: boldText, source: '.kcPrice span.t-bold' };
         }
-        // 2. .kcPrice span — Kasta Card price block
+        // 2. .kcPrice span — any Kasta Card price span
         var kcSpans = document.querySelectorAll('.kcPrice span');
         for (var i = 0; i < kcSpans.length; i++) {
           var spanText = (kcSpans[i].textContent || '').trim();
           if (spanText && /^\d/.test(spanText)) return { text: spanText, source: '.kcPrice span' };
         }
-        // 3. [itemprop="price"] — structured data
+        // 3. #productPrice — main regular price (fallback)
+        var productPrice = document.querySelector('#productPrice');
+        if (productPrice) {
+          var text = (productPrice.textContent || '').trim();
+          if (text && /\d/.test(text)) return { text: text, source: '#productPrice' };
+        }
+        // 4. [itemprop="price"] — structured data
         var itemprop = document.querySelector('[itemprop="price"]');
         if (itemprop) {
           var content = itemprop.getAttribute('content');
           if (content && /\d/.test(content)) return { text: content, source: 'itemprop price' };
         }
-        // 4. .product-price — generic price class
+        // 5. .product-price — generic price class
         var generic = document.querySelector('.product-price');
         if (generic) {
           var gText = (generic.textContent || '').trim();
