@@ -129,13 +129,22 @@ async function extractNotinoVolume(page) {
         }
       } catch (_) {}
 
-      // 3. Product specs: "/ 100 мл" pattern
+      // 3. Product specs: look for standalone volume, but SKIP "price / N мл" patterns
       try {
         var specs = document.querySelector('[data-testid="product-specifications"]');
         if (specs) {
           var specText = (specs.textContent || '').replace(/\u00A0/g, ' ');
-          var m = specText.match(/(\d+)\s*мл/i);
-          if (m) return m[0].trim();
+          var specVolumes = specText.match(/(\d+)\s*мл/gi);
+          if (specVolumes) {
+            for (var sv = 0; sv < specVolumes.length; sv++) {
+              var volCandidate = specVolumes[sv].trim();
+              var volNum = parseInt(volCandidate, 10);
+              var volIdx = specText.indexOf(volCandidate);
+              var before = specText.substring(Math.max(0, volIdx - 5), volIdx).trim();
+              if (before.endsWith('/')) continue;
+              if (volNum > 0 && volNum <= 1000) return volCandidate;
+            }
+          }
         }
       } catch (_) {}
 
@@ -963,21 +972,10 @@ async function extractPrice(tracker, options) {
       for (var notinoAttempt = 0; notinoAttempt < 2; notinoAttempt++) {
         try {
           notinoPrice = await page.evaluate(function() {
-        // Notino promo/voucher price: span.dlmrqim contains the discounted
-        // price (e.g. "2 675 грн с кодом TOP"). This is always lower than
-        // the regular price and should be preferred when present.
-        var promoWrapper = document.querySelector('span.dlmrqim span[data-testid="pd-price-wrapper"]');
-        if (promoWrapper) {
-          var promoSpan = promoWrapper.querySelector('span[content]');
-          if (promoSpan) {
-            var promoContent = promoSpan.getAttribute('content');
-            if (promoContent && /\d/.test(promoContent)) return promoContent;
-            var promoText = (promoSpan.textContent || '').trim();
-            if (promoText && /\d/.test(promoText)) return promoText;
-          }
-        }
-        // Regular price: span[data-testid="pd-price"] content attribute
-        // Try content attribute first (most reliable)
+        // Notino: use the regular price, NOT the promo/voucher price.
+        // The promo price (span.dlmrqim) is conditional — requires a code + minimum purchase,
+        // so it's not the actual price the user will pay without the promo.
+        // Regular price: span[data-testid="pd-price"] content attribute (most reliable)
         var span = document.querySelector('span[data-testid="pd-price"]');
         if (span) {
           var content = span.getAttribute('content');

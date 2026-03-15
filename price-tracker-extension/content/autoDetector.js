@@ -228,29 +228,13 @@
    * Returns { element, price, confidence } or null.
    */
   function checkSiteSpecific() {
-    // Notino.ua: promo/voucher price takes priority over regular price.
-    // Promo price lives in: span.dlmrqim > span[data-testid="pd-price-wrapper"] > span[content]
+    // Notino.ua: regular price takes priority.
+    // The promo/voucher price (span.dlmrqim) is conditional (requires a code + minimum purchase)
+    // and should NOT be used as the tracked price.
     // Regular price lives in: span[data-testid="pd-price"][content]
-    try {
-      var promoWrapper = document.querySelector('span.dlmrqim span[data-testid="pd-price-wrapper"]');
-      if (promoWrapper) {
-        var promoSpan = promoWrapper.querySelector('span[content]');
-        if (promoSpan) {
-          var promoContent = (promoSpan.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
-          if (promoContent) {
-            var promoPrice = parsePrice(promoContent);
-            if (promoPrice !== null && promoPrice > 0) {
-              return { element: promoSpan, price: promoPrice, confidence: 0.97 };
-            }
-          }
-        }
-      }
-    } catch (_) {}
-
-    // Notino.ua: regular price in span[data-testid="pd-price"] content attribute
     var notinoSelectors = [
-      'span[data-testid="pd-price"]',
-      '#pd-price span[data-testid="pd-price"]'
+      '#pd-price span[data-testid="pd-price"]',
+      'span[data-testid="pd-price"]'
     ];
     for (var i = 0; i < notinoSelectors.length; i++) {
       try {
@@ -538,13 +522,25 @@
       }
     } catch (_) {}
 
-    // 3. Product specs: "/ 100 мл" pattern
+    // 3. Product specs: look for standalone volume, but SKIP "price / N мл" patterns
+    //    (those are price-per-unit, not product volume)
     try {
       var specs = document.querySelector('[data-testid="product-specifications"]');
       if (specs) {
         var specText = (specs.textContent || '').replace(/\u00A0/g, ' ');
-        var m = specText.match(/(\d+)\s*мл/i);
-        if (m) return m[0].trim();
+        // Skip "X грн / N мл" (price per unit) — match only standalone volume
+        var specVolumes = specText.match(/(\d+)\s*мл/gi);
+        if (specVolumes) {
+          for (var sv = 0; sv < specVolumes.length; sv++) {
+            var volCandidate = specVolumes[sv].trim();
+            var volNum = parseInt(volCandidate, 10);
+            // Check if this volume is preceded by "/" (price-per-unit indicator)
+            var volIdx = specText.indexOf(volCandidate);
+            var before = specText.substring(Math.max(0, volIdx - 5), volIdx).trim();
+            if (before.endsWith('/')) continue; // Skip price-per-unit
+            if (volNum > 0 && volNum <= 1000) return volCandidate;
+          }
+        }
       }
     } catch (_) {}
 

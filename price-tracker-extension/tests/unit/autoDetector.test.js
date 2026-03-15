@@ -222,7 +222,7 @@ describe('AutoDetector', () => {
       expect(r.selector).toBeTruthy();
     });
 
-    test('prefers Notino promo/voucher price over regular price', () => {
+    test('prefers regular Notino price over promo/voucher price', () => {
       var restore = setupPriceElement(
         '<div>' +
           '<div id="pd-price"><span data-testid="pd-price" content="3&nbsp;150">3 150</span> <span data-testid="currency-variant">₴</span></div>' +
@@ -232,7 +232,7 @@ describe('AutoDetector', () => {
       runDetector(); restore();
       var r = getResult();
       expect(r.found).toBe(true);
-      expect(r.price).toBe(2675);
+      expect(r.price).toBe(3150);
     });
 
     test('falls back to regular Notino price when no promo price', () => {
