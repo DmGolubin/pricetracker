@@ -20,7 +20,7 @@ Price Tracker — система отслеживания цен на товар
 
 ### Ключевые модули
 - `server.js` — Express-сервер, REST API, инициализация БД (миграции через ALTER TABLE IF NOT EXISTS), статика для Mini App
-- `scraper.js` — Puppeteer-скрапер, извлечение цен со страниц магазинов
+- `scraper.js` — Puppeteer-скрапер, извлечение цен со страниц магазинов, cookie injection для авторизованных проверок
 - `serverPriceChecker.js` — цикл проверки всех трекеров: скрапинг → сравнение → пороги → дайджест
 - `serverThresholdEngine.js` — определение значимости изменения цены (адаптивный/абсолютный/процентный режимы)
 - `serverDigestComposer.js` — формирование Telegram-дайджеста из изменений
@@ -34,7 +34,7 @@ Price Tracker — система отслеживания цен на товар
 Таблицы:
 - `trackers` — трекеры (pageUrl, cssSelector, productName, currentPrice, minPrice, maxPrice, productGroup, status, thresholdConfig и т.д.)
 - `price_history` — история цен (trackerId, price, checkedAt)
-- `settings` — глобальные настройки (id='global', thresholdConfig, telegramBotToken, telegramChatId, telegramPersonalChatId, telegramDigestEnabled)
+- `settings` — глобальные настройки (id='global', thresholdConfig, telegramBotToken, telegramChatId, telegramPersonalChatId, telegramDigestEnabled, siteCookies)
 
 ### REST API эндпоинты
 - `GET/POST /trackers`, `GET/PUT/DELETE /trackers/:id`
