@@ -18,6 +18,72 @@ const pool = new Pool({
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+// ─── Settings Cache ─────────────────────────────────────────────────
+let _settingsCache = null;
+let _settingsCacheAt = 0;
+const SETTINGS_CACHE_TTL = 60000; // 60 seconds
+
+async function getCachedSettings() {
+  if (_settingsCache && Date.now() - _settingsCacheAt < SETTINGS_CACHE_TTL) {
+    return _settingsCache;
+  }
+  const { rows } = await pool.query("SELECT * FROM settings WHERE id = 'global'");
+  _settingsCache = rows[0] || {};
+  _settingsCacheAt = Date.now();
+  return _settingsCache;
+}
+
+function invalidateSettingsCache() {
+  _settingsCache = null;
+  _settingsCacheAt = 0;
+}
+
+// ─── Simple Rate Limiter ────────────────────────────────────────────
+const _rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW = 60000; // 1 minute
+const RATE_LIMIT_GET = 200;
+const RATE_LIMIT_MUTATE = 60;
+
+function rateLimiter(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  const isMutate = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  const key = ip + (isMutate ? ':m' : ':g');
+  const limit = isMutate ? RATE_LIMIT_MUTATE : RATE_LIMIT_GET;
+  const now = Date.now();
+
+  if (!_rateLimitMap.has(key)) {
+    _rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
+    return next();
+  }
+
+  const entry = _rateLimitMap.get(key);
+  if (now > entry.resetAt) {
+    entry.count = 1;
+    entry.resetAt = now + RATE_LIMIT_WINDOW;
+    return next();
+  }
+
+  entry.count++;
+  if (entry.count > limit) {
+    res.set('Retry-After', String(Math.ceil((entry.resetAt - now) / 1000)));
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+  next();
+}
+
+// Clean up rate limit map every 5 minutes
+setInterval(function () {
+  const now = Date.now();
+  for (const [key, entry] of _rateLimitMap) {
+    if (now > entry.resetAt) _rateLimitMap.delete(key);
+  }
+}, 300000);
+
+app.use(rateLimiter);
+
+// ─── Server start time for healthcheck ──────────────────────────────
+const SERVER_START_TIME = Date.now();
+
 // ─── Request logging middleware ─────────────────────────────────────
 app.use((req, res, next) => {
   const start = Date.now();
@@ -200,6 +266,14 @@ async function initDB() {
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "checkMethod" TEXT DEFAULT '';
   `);
 
+  // Migration: add consecutiveErrors and errorNotifiedAt for smart error alerts
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "consecutiveErrors" INTEGER DEFAULT 0;
+  `);
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "errorNotifiedAt" TIMESTAMP DEFAULT NULL;
+  `);
+
   console.log('Database tables initialized');
 }
 
@@ -229,6 +303,20 @@ app.get('/trackers/:id', async (req, res) => {
 app.post('/trackers', async (req, res) => {
   try {
     const d = req.body;
+
+    // Validate CSS selector
+    if (d.cssSelector) {
+      var sel = String(d.cssSelector).trim();
+      // Block dangerous selectors
+      if (/^(script|style|link|meta|head|html|body)$/i.test(sel)) {
+        return res.status(400).json({ error: 'Invalid CSS selector: blocked element type' });
+      }
+      // Basic syntax check — must not be empty and not contain obvious injection
+      if (!sel || sel.length > 500) {
+        return res.status(400).json({ error: 'Invalid CSS selector: too long or empty' });
+      }
+    }
+
     // Normalize URL for duplicate check: strip hash, trailing slash, force https
     function normalizeUrl(url) {
       if (!url) return url;
@@ -296,6 +384,8 @@ app.put('/trackers/:id', async (req, res) => {
       'notificationThreshold',
       'lastCheckedAt',
       'checkMethod',
+      'consecutiveErrors',
+      'errorNotifiedAt',
     ];
 
     for (const key of allowed) {
@@ -434,12 +524,29 @@ app.post('/priceHistory', async (req, res) => {
   }
 });
 
+// ─── Healthcheck ────────────────────────────────────────────────────
+
+app.get('/health', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT COUNT(*) as count FROM trackers');
+    const trackerCount = parseInt(rows[0].count) || 0;
+    res.json({
+      status: 'ok',
+      uptime: Math.floor((Date.now() - SERVER_START_TIME) / 1000),
+      trackers: trackerCount,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
 // ─── Settings ───────────────────────────────────────────────────────
 
 app.get('/settings/global', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM settings WHERE id = $1', ['global']);
-    res.json(rows[0] || {});
+    const settings = await getCachedSettings();
+    res.json(settings);
   } catch (err) {
     console.error('GET /settings/global error:', err);
     res.status(500).json({ error: err.message });
@@ -484,6 +591,7 @@ app.put('/settings/global', async (req, res) => {
       values
     );
     res.json(rows[0]);
+    invalidateSettingsCache();
   } catch (err) {
     console.error('PUT /settings/global error:', err);
     res.status(500).json({ error: err.message });

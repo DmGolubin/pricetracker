@@ -259,10 +259,35 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
 
     console.warn('[ServerCheck] #' + tracker.id + ' ❌ Extraction failed: ' + result.error);
 
+    // Increment consecutive errors
+    var newConsecErrors = (Number(tracker.consecutiveErrors) || 0) + 1;
     await pool.query(
-      'UPDATE trackers SET status = $1, "errorMessage" = $2, "retryCount" = COALESCE("retryCount", 0) + 1, "lastCheckedAt" = NOW(), "updatedAt" = NOW() WHERE id = $3',
-      ['error', result.error, tracker.id]
+      'UPDATE trackers SET status = $1, "errorMessage" = $2, "retryCount" = COALESCE("retryCount", 0) + 1, "consecutiveErrors" = $3, "lastCheckedAt" = NOW(), "updatedAt" = NOW() WHERE id = $4',
+      ['error', result.error, newConsecErrors, tracker.id]
     );
+
+    // Smart error alert: notify on 3rd consecutive error, but only once until it recovers
+    if (newConsecErrors >= 3 && !tracker.errorNotifiedAt) {
+      try {
+        var errSettings = await pool.query("SELECT * FROM settings WHERE id = 'global'");
+        var s = errSettings.rows[0] || {};
+        if (s.telegramBotToken && (s.telegramPersonalChatId || s.telegramChatId)) {
+          var chatId = s.telegramPersonalChatId || s.telegramChatId;
+          var errMsg = '⚠️ <b>Ошибка трекера</b>\n\n'
+            + '🏷 ' + (tracker.productName || '').slice(0, 50) + '\n'
+            + '❌ ' + (result.error || 'Unknown error') + '\n'
+            + '🔄 Ошибок подряд: ' + newConsecErrors;
+          await fetch('https://api.telegram.org/bot' + s.telegramBotToken + '/sendMessage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: errMsg, parse_mode: 'HTML' }),
+          });
+          await pool.query('UPDATE trackers SET "errorNotifiedAt" = NOW() WHERE id = $1', [tracker.id]);
+        }
+      } catch (_notifErr) {
+        console.warn('[ServerCheck] Failed to send error notification:', _notifErr.message);
+      }
+    }
 
     return 'error';
   }
@@ -300,6 +325,8 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
     status: 'active',
     retryCount: 0,
     errorMessage: null,
+    consecutiveErrors: 0,
+    errorNotifiedAt: null,
   };
 
   if (isFirstVariantCheck) {
