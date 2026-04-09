@@ -34,7 +34,7 @@ Price Tracker — система отслеживания цен на товар
 Таблицы:
 - `trackers` — трекеры (pageUrl, cssSelector, productName, currentPrice, minPrice, maxPrice, productGroup, status, thresholdConfig и т.д.)
 - `price_history` — история цен (trackerId, price, checkedAt)
-- `settings` — глобальные настройки (id='global', thresholdConfig, telegramBotToken, telegramChatId, telegramPersonalChatId, telegramDigestEnabled, siteCookies)
+- `settings` — глобальные настройки (id='global', thresholdConfig, telegramBotToken, telegramChatId, telegramPersonalChatId, telegramDigestEnabled, siteCookies, checkMethod)
 
 ### REST API эндпоинты
 - `GET/POST /trackers`, `GET/PUT/DELETE /trackers/:id`
@@ -53,7 +53,7 @@ Price Tracker — система отслеживания цен на товар
 - Тесты: Jest + jsdom + fast-check (property-based)
 
 ### Структура
-- `background.js` — service worker, маршрутизация сообщений, алармы. Все проверки цен делегируются серверу через `apiClient` (не открывает вкладки)
+- `background.js` — service worker, маршрутизация сообщений, алармы. Поддерживает три метода проверки цен: server (Puppeteer), extension (вкладки браузера), hybrid (сервер с fallback на браузер). Метод настраивается глобально и per-tracker.
 - `popup/` — popup окно расширения (popup.html/js/css)
 - `dashboard/` — полноэкранная панель управления
   - `dashboard.js` — главный скрипт, загрузка трекеров, фильтрация, сортировка, рендеринг
@@ -73,7 +73,7 @@ Price Tracker — система отслеживания цен на товар
   - `selectorGenerator.js` — генерация уникального CSS-селектора
 - `lib/` — библиотечные модули:
   - `apiClient.js` — HTTP-клиент к серверному API
-  - `priceChecker.js` — проверка цен через content scripts (legacy, не используется background.js — все проверки идут через сервер)
+  - `priceChecker.js` — проверка цен через content scripts (открытие вкладок, инжект priceExtractor.js). Используется при checkMethod = 'extension' или 'hybrid'
   - `notifier.js` — Chrome-уведомления
   - `thresholdEngine.js` — клиентский движок порогов
   - `alarmManager.js` — управление Chrome alarms

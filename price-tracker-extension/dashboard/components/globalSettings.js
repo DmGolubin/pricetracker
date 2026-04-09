@@ -43,6 +43,115 @@ const GlobalSettings = (function () {
     return group;
   }
 
+  // ─── Check Method section ─────────────────────────────────────────
+
+  /**
+   * Create a custom styled dropdown for settings (same pattern as toolbar.js).
+   */
+  function createGlobalSettingsDropdown(opts) {
+    var _Icons = (typeof Icons !== 'undefined') ? Icons : null;
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'custom-dropdown';
+    wrapper.setAttribute('role', 'listbox');
+    wrapper.setAttribute('aria-label', opts.ariaLabel || '');
+    wrapper.setAttribute('data-field', opts.dataField || '');
+    wrapper.tabIndex = 0;
+
+    var selectedOpt = opts.options.find(function (o) { return o.value === opts.selected; }) || opts.options[0];
+
+    var trigger = document.createElement('div');
+    trigger.className = 'custom-dropdown-trigger';
+    trigger.innerHTML = '<span class="custom-dropdown-text">' + (selectedOpt.text || '') + '</span>'
+      + '<span class="custom-dropdown-arrow">' + (_Icons ? _Icons.el('arrow-down', 12) : '▾') + '</span>';
+
+    var menu = document.createElement('div');
+    menu.className = 'custom-dropdown-menu';
+
+    opts.options.forEach(function (opt) {
+      var item = document.createElement('div');
+      item.className = 'custom-dropdown-item' + (opt.value === selectedOpt.value ? ' active' : '');
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', opt.value === selectedOpt.value ? 'true' : 'false');
+      item.setAttribute('data-value', opt.value);
+      item.textContent = opt.text;
+      if (opt.hint) {
+        var hint = document.createElement('span');
+        hint.className = 'custom-dropdown-hint';
+        hint.textContent = opt.hint;
+        hint.style.cssText = 'display:block;font-size:11px;color:var(--text-muted);margin-top:2px';
+        item.appendChild(hint);
+      }
+      item.addEventListener('click', function (e) {
+        e.stopPropagation();
+        menu.querySelectorAll('.custom-dropdown-item').forEach(function (el) {
+          el.classList.remove('active');
+          el.setAttribute('aria-selected', 'false');
+        });
+        item.classList.add('active');
+        item.setAttribute('aria-selected', 'true');
+        trigger.querySelector('.custom-dropdown-text').textContent = opt.text;
+        wrapper.classList.remove('open');
+        wrapper.setAttribute('data-value', opt.value);
+        if (typeof opts.onChange === 'function') opts.onChange(opt.value);
+      });
+      menu.appendChild(item);
+    });
+
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(menu);
+    wrapper.setAttribute('data-value', selectedOpt.value);
+
+    trigger.addEventListener('click', function (e) {
+      e.stopPropagation();
+      document.querySelectorAll('.custom-dropdown.open').forEach(function (dd) {
+        if (dd !== wrapper) dd.classList.remove('open');
+      });
+      wrapper.classList.toggle('open');
+    });
+
+    wrapper.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        wrapper.classList.toggle('open');
+      } else if (e.key === 'Escape') {
+        wrapper.classList.remove('open');
+      }
+    });
+
+    return wrapper;
+  }
+
+  function buildCheckMethodSection(checkMethod) {
+    var section = document.createElement('div');
+    section.className = 'form-group check-method-section';
+    section.setAttribute('data-section', 'checkMethod');
+
+    var sectionLabel = document.createElement('label');
+    sectionLabel.textContent = 'Метод проверки цен';
+    sectionLabel.className = 'section-label';
+    section.appendChild(sectionLabel);
+
+    var hint = document.createElement('p');
+    hint.className = 'settings-info-note';
+    hint.textContent = 'Сервер — через Puppeteer на Railway. Браузер — открытие вкладок в Chrome. Гибрид — сервер с fallback на браузер.';
+    section.appendChild(hint);
+
+    var dropdown = createGlobalSettingsDropdown({
+      options: [
+        { value: 'server', text: '🖥️ Сервер (Puppeteer)' },
+        { value: 'extension', text: '🌐 Браузер (вкладки)' },
+        { value: 'hybrid', text: '🔄 Гибрид (сервер + браузер)' },
+      ],
+      selected: checkMethod || 'server',
+      ariaLabel: 'Метод проверки цен',
+      dataField: 'checkMethod',
+    });
+
+    section.appendChild(dropdown);
+    return section;
+  }
+
   // ─── Threshold helpers ──────────────────────────────────────────
 
   function getConstants() {
@@ -449,6 +558,9 @@ const GlobalSettings = (function () {
     // ── Threshold section (Req 1.10) ──
     body.appendChild(buildThresholdSection(s.thresholdConfig));
 
+    // ── Check method section ──
+    body.appendChild(buildCheckMethodSection(s.checkMethod));
+
     // ── Telegram digest toggle (Req 2.9) ──
     body.appendChild(buildDigestToggle(s.telegramDigestEnabled));
 
@@ -540,6 +652,10 @@ const GlobalSettings = (function () {
       thresholdConfig: thresholdConfig,
       telegramDigestEnabled: telegramDigestEnabled,
       siteCookies: siteCookies,
+      checkMethod: (function () {
+        var dd = modal.querySelector('[data-field="checkMethod"]');
+        return dd ? (dd.getAttribute('data-value') || 'server') : 'server';
+      })(),
     };
   }
 

@@ -12,7 +12,9 @@ var MessageToSW = {
   DELETE_TRACKER: 'deleteTracker',
   UPDATE_TRACKER: 'updateTracker',
   CHECK_ALL_PRICES: 'checkAllPrices',
+  CHECK_ALL_PRICES_EXTENSION: 'checkAllPricesExtension',
   CHECK_PRICE: 'checkPrice',
+  CHECK_PRICE_EXTENSION: 'checkPriceExtension',
   GET_SETTINGS: 'getSettings',
   SAVE_SETTINGS: 'saveSettings',
   GET_PRICE_HISTORY: 'getPriceHistory',
@@ -84,6 +86,19 @@ var CheckMode = {
   PIN_TAB: 'pinTab',
 };
 
+// Check methods (how price checking is performed)
+var CheckMethod = {
+  SERVER: 'server',
+  EXTENSION: 'extension',
+  HYBRID: 'hybrid',
+};
+// Check methods (how price checking is performed)
+var CheckMethod = {
+  SERVER: 'server',
+  EXTENSION: 'extension',
+  HYBRID: 'hybrid',
+};
+
 // Notification filter types
 var NotificationFilterType = {
   NONE: 'none',
@@ -148,6 +163,7 @@ var _constants = {
   TrackerStatus: TrackerStatus,
   TrackingType: TrackingType,
   CheckMode: CheckMode,
+  CheckMethod: CheckMethod,
   NotificationFilterType: NotificationFilterType,
   CURRENCY_SYMBOLS: CURRENCY_SYMBOLS,
   INTERNAL_URL_SCHEMES: INTERNAL_URL_SCHEMES,

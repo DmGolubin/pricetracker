@@ -285,9 +285,18 @@ describe('handleUpdateTracker', () => {
 
 describe('handleCheckAllPrices', () => {
   test('triggers server-side check via API request', async () => {
+    apiClient.getSettings.mockResolvedValue({ checkMethod: 'server' });
     await background.handleCheckAllPrices();
 
     expect(apiClient._request).toHaveBeenCalledWith('/server-check', { method: 'POST' });
+  });
+
+  test('triggers server-side check when no checkMethod set (default)', async () => {
+    apiClient.getSettings.mockResolvedValue({});
+    var result = await background.handleCheckAllPrices();
+
+    expect(apiClient._request).toHaveBeenCalledWith('/server-check', { method: 'POST' });
+    expect(result).toEqual({ method: 'server' });
   });
 });
 
@@ -404,7 +413,8 @@ describe('getActiveTab', () => {
 
 describe('rescheduleAllAlarms', () => {
   test('schedules alarms for all active and updated trackers', async () => {
-    apiClient.getSettings.mockResolvedValue({ apiBaseUrl: 'https://api.test' });
+    // checkMethod = 'extension' so alarms are scheduled
+    apiClient.getSettings.mockResolvedValue({ checkMethod: 'extension' });
     apiClient.getTrackers.mockResolvedValue([
       makeTracker({ id: 't1', status: 'active', checkIntervalHours: 6 }),
       makeTracker({ id: 't2', status: 'updated', checkIntervalHours: 12 }),
@@ -421,7 +431,7 @@ describe('rescheduleAllAlarms', () => {
   });
 
   test('uses DEFAULT_CHECK_INTERVAL when tracker has no checkIntervalHours', async () => {
-    apiClient.getSettings.mockResolvedValue({});
+    apiClient.getSettings.mockResolvedValue({ checkMethod: 'extension' });
     apiClient.getTrackers.mockResolvedValue([
       makeTracker({ id: 't5', status: 'active', checkIntervalHours: undefined }),
     ]);
@@ -432,16 +442,25 @@ describe('rescheduleAllAlarms', () => {
   });
 
   test('does not throw when getTrackers fails', async () => {
-    apiClient.getSettings.mockResolvedValue({});
+    apiClient.getSettings.mockResolvedValue({ checkMethod: 'extension' });
     apiClient.getTrackers.mockRejectedValue(new Error('Network error'));
 
     await expect(background.rescheduleAllAlarms()).resolves.not.toThrow();
   });
 
   test('does not throw when getTrackers returns non-array', async () => {
-    apiClient.getSettings.mockResolvedValue({});
+    apiClient.getSettings.mockResolvedValue({ checkMethod: 'extension' });
     apiClient.getTrackers.mockResolvedValue(null);
 
     await expect(background.rescheduleAllAlarms()).resolves.not.toThrow();
+  });
+
+  test('clears all alarms when checkMethod is server', async () => {
+    apiClient.getSettings.mockResolvedValue({ checkMethod: 'server' });
+
+    await background.rescheduleAllAlarms();
+
+    expect(chrome.alarms.clearAll).toHaveBeenCalled();
+    expect(alarmManager.scheduleTracker).not.toHaveBeenCalled();
   });
 });

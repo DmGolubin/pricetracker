@@ -751,6 +751,25 @@ const SettingsModal = (function () {
     // Divider after check mode
     body.appendChild(createSectionDivider());
 
+    // Check method override (per-tracker: server/extension/hybrid/global)
+    var methodGroup = createFormGroup('Метод проверки');
+    var methodDropdown = createSettingsDropdown({
+      options: [
+        { value: '', text: 'Глобальный (по умолчанию)' },
+        { value: 'server', text: '🖥️ Сервер (Puppeteer)' },
+        { value: 'extension', text: '🌐 Браузер (вкладки)' },
+        { value: 'hybrid', text: '🔄 Гибрид' },
+      ],
+      selected: tracker.checkMethod || '',
+      ariaLabel: 'Метод проверки цен для этого трекера',
+      dataField: 'checkMethod',
+    });
+    methodGroup.appendChild(methodDropdown);
+    body.appendChild(methodGroup);
+
+    // Divider after check method
+    body.appendChild(createSectionDivider());
+
     // Notification filter (custom dropdown — no native <select>)
     var filterGroup = createFormGroup('Фильтр уведомлений');
 
@@ -917,6 +936,9 @@ const SettingsModal = (function () {
     var modeRadio = modal.querySelector('input[name="checkMode"]:checked');
     var checkMode = modeRadio ? modeRadio.value : 'auto';
 
+    var checkMethodDropdown = modal.querySelector('[data-field="checkMethod"]');
+    var checkMethod = checkMethodDropdown ? (checkMethodDropdown.getAttribute('data-value') || '') : '';
+
     var groupInput = modal.querySelector('input[data-field="productGroup"]');
     var productGroup = groupInput ? groupInput.value : '';
 
@@ -965,6 +987,7 @@ const SettingsModal = (function () {
       imageUrl: imageUrl,
       variantSelector: variantSelector,
       checkMode: checkMode,
+      checkMethod: checkMethod,
       productGroup: productGroup,
       notificationFilter: notificationFilter,
       notificationThreshold: notificationThreshold,

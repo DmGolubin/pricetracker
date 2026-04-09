@@ -247,6 +247,7 @@ describe('Integration: Tracker lifecycle chain', () => {
   });
 
   test('checkAllPrices triggers server-side check via API', async () => {
+    apiClient.getSettings.mockResolvedValue({ checkMethod: 'server' });
     await background.handleCheckAllPrices();
 
     expect(apiClient._request).toHaveBeenCalledWith('/server-check', { method: 'POST' });

@@ -161,6 +161,23 @@ const Toolbar = (function () {
 
     leftGroup.appendChild(refreshBtn);
 
+    // Extension-based refresh button (check via browser tabs)
+    var extRefreshBtn = document.createElement('button');
+    extRefreshBtn.className = 'btn';
+    extRefreshBtn.type = 'button';
+    extRefreshBtn.id = 'toolbar-ext-refresh-btn';
+    extRefreshBtn.setAttribute('aria-label', 'Проверить через браузер');
+    extRefreshBtn.title = 'Проверка через открытие вкладок в браузере';
+    var extIcon = _Icons ? _Icons.el('globe', 18) : '🌐';
+    extRefreshBtn.innerHTML = extIcon + ' Браузер';
+    extRefreshBtn.addEventListener('click', function () {
+      if (typeof cb.onRefreshExtension === 'function') {
+        cb.onRefreshExtension();
+      }
+    });
+
+    leftGroup.appendChild(extRefreshBtn);
+
     // ─── Center group: Search + Filter + Sort ───────────────────
     var centerGroup = document.createElement('div');
     centerGroup.className = 'toolbar-group toolbar-group-center';

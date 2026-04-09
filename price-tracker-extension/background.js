@@ -22,7 +22,8 @@ importScripts(
   'lib/thresholdEngine.js',
   'lib/digestComposer.js',
   'lib/notifier.js',
-  'lib/alarmManager.js'
+  'lib/alarmManager.js',
+  'lib/priceChecker.js'
 );
 
 (function () {
@@ -32,10 +33,12 @@ var apiClient = self.PriceTracker.apiClient;
 var alarmManager = self.PriceTracker.alarmManager;
 var notifier = self.PriceTracker.notifier;
 var badgeManager = self.PriceTracker.badgeManager;
+var priceChecker = self.PriceTracker.priceChecker;
 var _c = self.PriceTracker.constants;
 var MessageToSW = _c.MessageToSW;
 var MessageFromCS = _c.MessageFromCS;
 var TrackerStatus = _c.TrackerStatus;
+var CheckMethod = _c.CheckMethod;
 var DEFAULT_CHECK_INTERVAL = _c.DEFAULT_CHECK_INTERVAL;
 
 /**
@@ -100,10 +103,16 @@ function getMessageHandler(message, sender) {
       return handleUpdateTracker(message.trackerId, message.data);
 
     case MessageToSW.CHECK_ALL_PRICES:
-      return handleCheckAllPrices();
+      return handleCheckAllPrices(message.method || null);
+
+    case MessageToSW.CHECK_ALL_PRICES_EXTENSION:
+      return handleCheckAllPrices(CheckMethod.EXTENSION);
 
     case MessageToSW.CHECK_PRICE:
       return apiClient.serverCheckSingle(message.trackerId);
+
+    case MessageToSW.CHECK_PRICE_EXTENSION:
+      return handleExtensionCheckSingle(message.trackerId);
 
     case MessageToSW.GET_SETTINGS:
       return apiClient.getSettings();
@@ -136,7 +145,9 @@ function getMessageHandler(message, sender) {
     case MessageFromCS.AUTO_DETECT_FAILED:
       return Promise.resolve();
 
-    // Extraction results from content scripts — no longer used (server-side checks)
+    // Extraction results from content scripts — handled by priceChecker via
+    // its own onMessage listener (waitForExtractionMessage). Return null so
+    // the main router does not interfere.
     case MessageFromCS.PRICE_EXTRACTED:
     case MessageFromCS.CONTENT_EXTRACTED:
     case MessageFromCS.EXTRACTION_FAILED:
@@ -294,12 +305,68 @@ async function handleUpdateTracker(trackerId, data) {
 }
 
 /**
+ * Get the effective check method for a given context.
+ * Per-tracker checkMethod overrides global setting.
+ * @param {Object} [tracker] - optional tracker with checkMethod field
+ * @returns {Promise<string>} - 'server', 'extension', or 'hybrid'
+ */
+async function getCheckMethod(tracker) {
+  if (tracker && tracker.checkMethod) return tracker.checkMethod;
+  try {
+    var settings = await apiClient.getSettings();
+    return (settings && settings.checkMethod) || CheckMethod.SERVER;
+  } catch (_) {
+    return CheckMethod.SERVER;
+  }
+}
+
+/** Dependency bag for priceChecker */
+var extensionCheckDeps = {
+  apiClient: apiClient,
+  badgeManager: badgeManager,
+  notifier: notifier,
+};
+
+/**
  * Check all active trackers' prices.
+ * Respects the global checkMethod setting: server / extension / hybrid.
  * Requirement: 7.1
  */
-async function handleCheckAllPrices() {
-  // Trigger server-side check via API (Puppeteer on Railway)
+async function handleCheckAllPrices(method) {
+  var checkMethod = method || null;
+  if (!checkMethod) {
+    checkMethod = await getCheckMethod();
+  }
+
+  if (checkMethod === CheckMethod.EXTENSION) {
+    // Extension-based check: open tabs, inject extractors
+    await priceChecker.checkAllPrices(extensionCheckDeps);
+    return { method: 'extension' };
+  }
+
+  if (checkMethod === CheckMethod.HYBRID) {
+    // Hybrid: try server first, fallback to extension on error
+    try {
+      await apiClient._request('/server-check', { method: 'POST' });
+      return { method: 'hybrid-server' };
+    } catch (_) {
+      await priceChecker.checkAllPrices(extensionCheckDeps);
+      return { method: 'hybrid-extension' };
+    }
+  }
+
+  // Default: server-side check via API (Puppeteer on Railway)
   await apiClient._request('/server-check', { method: 'POST' });
+  return { method: 'server' };
+}
+
+/**
+ * Check a single tracker's price via extension (open tab).
+ * @param {string} trackerId
+ * @returns {Promise<void>}
+ */
+async function handleExtensionCheckSingle(trackerId) {
+  await priceChecker.checkPrice(trackerId, extensionCheckDeps);
 }
 
 /**
@@ -378,14 +445,22 @@ async function getActiveTab(sender) {
 }
 
 // ─── Alarm Handler ──────────────────────────────────────────────────
-// Auto-check disabled — server-side Puppeteer on Railway handles periodic checks.
-// Manual check from dashboard/popup still works via handleCheckAllPrices.
+// When checkMethod is 'extension' or 'hybrid', alarms trigger local checks.
+// When checkMethod is 'server', alarms are not used (server cron handles it).
 
-// chrome.alarms.onAlarm.addListener((alarm) => {
-//   alarmManager.handleAlarm(alarm, (trackerId) => {
-//     priceChecker.checkPrice(trackerId, deps);
-//   });
-// });
+chrome.alarms.onAlarm.addListener(function (alarm) {
+  var _getAlarmId = _c.getTrackerIdFromAlarm;
+  var trackerId = _getAlarmId ? _getAlarmId(alarm.name) : null;
+  if (!trackerId) return;
+
+  // Check the global method — only run extension check if not server-only
+  getCheckMethod().then(function (method) {
+    if (method === CheckMethod.SERVER) return; // server cron handles it
+    priceChecker.checkPrice(trackerId, extensionCheckDeps).catch(function (err) {
+      console.warn('Alarm check failed for tracker #' + trackerId + ':', err);
+    });
+  });
+});
 
 // ─── Notification Click Handler ─────────────────────────────────────
 
@@ -408,20 +483,41 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
 });
 
 // ─── Restore alarms on install/update/startup ──────────────────────
-// Disabled — server-side checks replace extension alarms.
 
-// async function rescheduleAllAlarms() { ... }
+/**
+ * Reschedule alarms for all active trackers.
+ * Only sets alarms when checkMethod is 'extension' or 'hybrid'.
+ */
+async function rescheduleAllAlarms() {
+  var method = await getCheckMethod();
+  if (method === CheckMethod.SERVER) {
+    chrome.alarms.clearAll();
+    return;
+  }
+  try {
+    var trackers = await apiClient.getTrackers();
+    for (var i = 0; i < trackers.length; i++) {
+      var t = trackers[i];
+      if (t.status !== TrackerStatus.PAUSED && t.status !== TrackerStatus.ERROR) {
+        var interval = t.checkIntervalHours || DEFAULT_CHECK_INTERVAL;
+        if (interval > 0) {
+          alarmManager.scheduleTracker(t.id, interval);
+        }
+      }
+    }
+  } catch (_) {
+    // Cannot fetch trackers — alarms will be set on next check
+  }
+}
 
 chrome.runtime.onInstalled.addListener(() => {
-  // Clear any existing alarms from previous versions
-  chrome.alarms.clearAll();
   initSettings();
+  rescheduleAllAlarms();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  // Clear any existing alarms from previous versions
-  chrome.alarms.clearAll();
   initSettings();
+  rescheduleAllAlarms();
 });
 
 // ─── Initialization ─────────────────────────────────────────────────
@@ -439,12 +535,14 @@ var _bgExports = {
   handleDeleteTracker: handleDeleteTracker,
   handleUpdateTracker: handleUpdateTracker,
   handleCheckAllPrices: handleCheckAllPrices,
+  handleExtensionCheckSingle: handleExtensionCheckSingle,
   handleSaveSettings: handleSaveSettings,
   handleMarkAsRead: handleMarkAsRead,
   handleResetBadge: handleResetBadge,
   getActiveTab: getActiveTab,
   initSettings: initSettings,
-  // rescheduleAllAlarms removed — server-side checks handle scheduling
+  rescheduleAllAlarms: rescheduleAllAlarms,
+  getCheckMethod: getCheckMethod,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

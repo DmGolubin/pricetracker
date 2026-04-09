@@ -7,6 +7,7 @@ const chrome = {
   alarms: {
     create: jest.fn(),
     clear: jest.fn(),
+    clearAll: jest.fn(),
     get: jest.fn(),
     getAll: jest.fn(),
     onAlarm: {

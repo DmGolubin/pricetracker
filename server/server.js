@@ -190,6 +190,16 @@ async function initDB() {
     ALTER TABLE settings ADD COLUMN IF NOT EXISTS "siteCookies" JSONB DEFAULT '[]';
   `);
 
+  // Migration: add checkMethod to settings (server/extension/hybrid)
+  await pool.query(`
+    ALTER TABLE settings ADD COLUMN IF NOT EXISTS "checkMethod" TEXT DEFAULT 'server';
+  `);
+
+  // Migration: add per-tracker checkMethod override
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "checkMethod" TEXT DEFAULT '';
+  `);
+
   console.log('Database tables initialized');
 }
 
@@ -271,6 +281,7 @@ app.put('/trackers/:id', async (req, res) => {
       'variantPriceVerified',
       'notificationThreshold',
       'lastCheckedAt',
+      'checkMethod',
     ];
 
     for (const key of allowed) {
@@ -403,6 +414,7 @@ app.put('/settings/global', async (req, res) => {
       'telegramChatId', 'persistentPinTab',
       'thresholdConfig', 'telegramDigestEnabled',
       'telegramPersonalChatId', 'siteCookies',
+      'checkMethod',
     ];
 
     const jsonbFields = ['thresholdConfig', 'siteCookies'];

@@ -667,6 +667,56 @@ const Dashboard = (function () {
     if (el) el.remove();
   }
 
+  // ─── Extension-based Refresh ──────────────────────────────────────
+
+  /**
+   * Trigger extension-based price check (opens tabs in browser).
+   * Sends message to service worker which delegates to priceChecker.
+   */
+  async function handleExtensionRefresh() {
+    var extBtn = document.getElementById('toolbar-ext-refresh-btn');
+
+    if (!confirm('Проверить цены через браузер? Будут открываться и закрываться вкладки.')) return;
+
+    if (extBtn) {
+      extBtn.disabled = true;
+      extBtn.innerHTML = '<span class="save-spinner"></span> Проверка...';
+    }
+
+    showRefreshStatus('🌐 Проверка цен через браузер...', false);
+
+    try {
+      var response = await new Promise(function (resolve, reject) {
+        chrome.runtime.sendMessage(
+          { action: 'checkAllPricesExtension' },
+          function (resp) {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+            if (resp && resp.error) {
+              reject(new Error(resp.error));
+              return;
+            }
+            resolve(resp);
+          }
+        );
+      });
+
+      showRefreshStatus('✅ Проверка через браузер завершена', false);
+      await loadTrackers();
+    } catch (err) {
+      showRefreshStatus('Ошибка: ' + (err.message || 'неизвестная ошибка'), false);
+    } finally {
+      if (extBtn) {
+        extBtn.disabled = false;
+        var globeIcon = (typeof Icons !== 'undefined') ? Icons.el('globe', 18) : '🌐';
+        extBtn.innerHTML = globeIcon + ' Браузер';
+      }
+      setTimeout(hideRefreshStatus, 8000);
+    }
+  }
+
   // ─── Data loading ──────────────────────────────────────────────────
 
   /**
@@ -1018,6 +1068,7 @@ const Dashboard = (function () {
         onFilter: onFilterChange,
         onSort: onSortChange,
         onRefreshAll: handleServerRefresh,
+        onRefreshExtension: handleExtensionRefresh,
         onSettingsClick: () => {
           if (typeof GlobalSettings !== 'undefined' && GlobalSettings.open) {
             GlobalSettings.open(modalContainer);
