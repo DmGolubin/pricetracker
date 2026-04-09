@@ -229,11 +229,25 @@ app.get('/trackers/:id', async (req, res) => {
 app.post('/trackers', async (req, res) => {
   try {
     const d = req.body;
+    // Normalize URL for duplicate check: strip hash, trailing slash, force https
+    function normalizeUrl(url) {
+      if (!url) return url;
+      try {
+        var u = new URL(url);
+        u.hash = '';
+        var normalized = u.toString().replace(/\/+$/, '');
+        return normalized;
+      } catch (_) { return url; }
+    }
+    var normalizedUrl = normalizeUrl(d.pageUrl);
+
     // Check for existing tracker with same URL + selector + variantSelector
     const variantSel = d.variantSelector || '';
     const existing = await pool.query(
-      'SELECT * FROM trackers WHERE "pageUrl" = $1 AND "cssSelector" = $2 AND COALESCE("variantSelector", \'\') = $3',
-      [d.pageUrl, d.cssSelector, variantSel]
+      `SELECT * FROM trackers WHERE (
+        "pageUrl" = $1 OR "pageUrl" = $4
+      ) AND "cssSelector" = $2 AND COALESCE("variantSelector", '') = $3`,
+      [d.pageUrl, d.cssSelector, variantSel, normalizedUrl]
     );
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Tracker already exists', tracker: existing.rows[0] });
