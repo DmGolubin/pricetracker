@@ -96,6 +96,27 @@
   padding: var(--spacing-xs);
 }
 
+.folder-sidebar-search {
+  width: calc(100% - 8px);
+  margin: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: var(--radius-full);
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.folder-sidebar-search:focus {
+  border-color: var(--accent-primary);
+}
+
+.folder-sidebar-search::placeholder {
+  color: var(--text-muted);
+}
+
 .folder-sidebar-item {
   display: flex;
   align-items: center;

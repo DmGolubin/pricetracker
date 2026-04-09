@@ -1103,12 +1103,28 @@ const Dashboard = (function () {
 
   // ─── Folder Sidebar ─────────────────────────────────────────────
 
+  var sidebarSearchQuery = ''; // search query for filtering sidebar folders
   var sidebarFilterGroup = null; // currently selected group in sidebar, null = all
 
   function renderFolderSidebar() {
     var list = document.getElementById('folder-sidebar-list');
     if (!list) return;
     list.innerHTML = '';
+
+    // Search input
+    var searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'input folder-sidebar-search';
+    searchInput.placeholder = '🔍 Поиск папки...';
+    searchInput.value = sidebarSearchQuery;
+    searchInput.addEventListener('input', function () {
+      sidebarSearchQuery = searchInput.value;
+      renderFolderSidebar();
+      // Re-focus input after re-render
+      var newInput = document.querySelector('.folder-sidebar-search');
+      if (newInput) { newInput.focus(); newInput.selectionStart = newInput.selectionEnd = newInput.value.length; }
+    });
+    list.appendChild(searchInput);
 
     // Collect groups
     var groupMap = {};
@@ -1133,19 +1149,30 @@ const Dashboard = (function () {
 
     var groupNames = Object.keys(groupMap).sort();
 
-    // "All" item
-    var allItem = document.createElement('button');
-    allItem.className = 'folder-sidebar-item' + (sidebarFilterGroup === null ? ' active' : '');
-    allItem.dataset.groupName = '__all__';
-    allItem.innerHTML = '<span class="folder-sidebar-item-name">📋 Все трекеры</span>'
-      + '<span class="folder-sidebar-item-count">' + allTrackers.length + '</span>';
-    allItem.addEventListener('click', function () {
-      sidebarFilterGroup = null;
-      renderFolderSidebar();
-      applyFilters();
-      renderGrid();
-    });
-    list.appendChild(allItem);
+    // Filter by search query
+    var query = sidebarSearchQuery.toLowerCase().trim();
+    if (query) {
+      groupNames = groupNames.filter(function (name) {
+        return name.toLowerCase().includes(query);
+      });
+    }
+
+    // "All" item (always visible)
+    if (!query) {
+      var allItem = document.createElement('button');
+      allItem.className = 'folder-sidebar-item' + (sidebarFilterGroup === null ? ' active' : '');
+      allItem.dataset.groupName = '__all__';
+      allItem.innerHTML = '<span class="folder-sidebar-item-name">📋 Все трекеры</span>'
+        + '<span class="folder-sidebar-item-count">' + allTrackers.length + '</span>';
+      allItem.addEventListener('click', function () {
+        sidebarFilterGroup = null;
+        sidebarSearchQuery = '';
+        renderFolderSidebar();
+        applyFilters();
+        renderGrid();
+      });
+      list.appendChild(allItem);
+    }
 
     // Group items
     groupNames.forEach(function (name) {
@@ -1158,6 +1185,7 @@ const Dashboard = (function () {
       item.innerHTML = '<span class="folder-sidebar-item-name">📦 ' + escapeHtml(shortName) + '</span>'
         + priceHtml
         + '<span class="folder-sidebar-item-count">' + info.count + '</span>';
+      item.title = name; // full name on hover
       item.addEventListener('click', function () {
         sidebarFilterGroup = name;
         renderFolderSidebar();
@@ -1167,8 +1195,8 @@ const Dashboard = (function () {
       list.appendChild(item);
     });
 
-    // Ungrouped item
-    if (ungroupedCount > 0) {
+    // Ungrouped item (hidden when searching)
+    if (ungroupedCount > 0 && !query) {
       var ugItem = document.createElement('button');
       ugItem.className = 'folder-sidebar-item' + (sidebarFilterGroup === '__ungrouped__' ? ' active' : '');
       ugItem.dataset.groupName = '__ungrouped__';
