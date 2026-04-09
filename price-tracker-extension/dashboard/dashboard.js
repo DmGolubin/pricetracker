@@ -18,6 +18,9 @@ const Dashboard = (function () {
   let selectedIds = new Set();
   let selectMode = false;
   let refreshAbortController = null;
+  let openFolder = null; // currently open folder name, or null for folder grid view
+  // Empty groups stored locally (not in DB — just group names with no trackers)
+  let emptyGroups = new Set();
 
   // Sort state — persisted in localStorage
   var SORT_STORAGE_KEY = 'priceTracker_sortBy';
@@ -252,6 +255,13 @@ const Dashboard = (function () {
    * Shows group header + card grid for each group.
    */
   function renderGroupedView() {
+    // If a folder is open, render its contents
+    if (openFolder !== null) {
+      renderFolderContents(openFolder);
+      return;
+    }
+
+    // Render folder grid
     var groups = {};
     var ungrouped = [];
 
@@ -264,101 +274,267 @@ const Dashboard = (function () {
       }
     });
 
-    var groupNames = Object.keys(groups).sort();
-    var cardIndex = 0;
-
-    groupNames.forEach(function (name) {
-      var trackersInGroup = groups[name];
-
-      var section = document.createElement('div');
-      section.className = 'product-group-section';
-
-      // Best price summary for the group
-      var bestPrice = null;
-      var bestDomain = '';
-      trackersInGroup.forEach(function (t) {
-        var p = Number(t.currentPrice);
-        if (p > 0 && (bestPrice === null || p < bestPrice)) {
-          bestPrice = p;
-          bestDomain = extractDomain(t.pageUrl);
-        }
-      });
-
-      var header = document.createElement('div');
-      header.className = 'product-group-header';
-      header.style.cursor = 'pointer';
-      var bestInfo = bestPrice ? ' · 💰 ' + formatPrice(bestPrice) + ' (' + escapeHtml(bestDomain) + ')' : '';
-      header.innerHTML = '<h3 class="product-group-title">' + escapeHtml(name)
-        + ' <span class="product-group-count">' + trackersInGroup.length + '</span>'
-        + '<span class="product-group-best">' + bestInfo + '</span>'
-        + '</h3>';
-      section.appendChild(header);
-
-      // Comparison table (collapsed by default, toggle on header click)
-      var comparisonContainer = document.createElement('div');
-      comparisonContainer.className = 'product-group-comparison';
-      comparisonContainer.style.display = 'none';
-
-      if (_comparisonTable) {
-        var table = _comparisonTable.create(name, trackersInGroup, {
-          onRowClick: function (tracker) {
-            onCardClick(tracker);
-          },
-        });
-        comparisonContainer.appendChild(table);
-      }
-      section.appendChild(comparisonContainer);
-
-      // Toggle comparison table on header click
-      header.addEventListener('click', function () {
-        var isVisible = comparisonContainer.style.display !== 'none';
-        comparisonContainer.style.display = isVisible ? 'none' : '';
-        header.classList.toggle('expanded', !isVisible);
-      });
-
-      var grid = document.createElement('div');
-      grid.className = 'product-group-grid';
-
-      trackersInGroup.forEach(function (tracker) {
-        var cardEl = renderTrackerCard(tracker);
-        cardEl.classList.add('tracker-card-enter');
-        grid.appendChild(cardEl);
-        var idx = cardIndex++;
-        requestAnimationFrame(function () {
-          setTimeout(function () { cardEl.classList.add('visible'); }, 50 * idx);
-        });
-      });
-
-      section.appendChild(grid);
-      trackerGrid.appendChild(section);
+    // Include empty groups
+    emptyGroups.forEach(function (name) {
+      if (!groups[name]) groups[name] = [];
     });
 
-    // Ungrouped trackers
-    if (ungrouped.length > 0) {
-      var section = document.createElement('div');
-      section.className = 'product-group-section';
+    var groupNames = Object.keys(groups).sort();
 
-      var header = document.createElement('div');
-      header.className = 'product-group-header';
-      header.innerHTML = '<h3 class="product-group-title">Без группы'
-        + ' <span class="product-group-count">' + ungrouped.length + '</span></h3>';
-      section.appendChild(header);
+    // Toolbar: Create folder button
+    var toolbarRow = document.createElement('div');
+    toolbarRow.className = 'folder-toolbar';
+    var createBtn = document.createElement('button');
+    createBtn.className = 'btn';
+    createBtn.innerHTML = ((typeof Icons !== 'undefined') ? Icons.el('plus', 16) : '+') + ' Создать папку';
+    createBtn.addEventListener('click', function () {
+      var name = prompt('Название новой папки:');
+      if (name && name.trim()) {
+        emptyGroups.add(name.trim());
+        applyFilters();
+        renderGrid();
+      }
+    });
+    toolbarRow.appendChild(createBtn);
+    trackerGrid.appendChild(toolbarRow);
 
-      var grid = document.createElement('div');
-      grid.className = 'product-group-grid';
+    // Folder cards grid
+    var folderGrid = document.createElement('div');
+    folderGrid.className = 'folder-grid';
 
-      ungrouped.forEach(function (tracker) {
-        var cardEl = renderTrackerCard(tracker);
-        cardEl.classList.add('tracker-card-enter');
-        grid.appendChild(cardEl);
-        var idx = cardIndex++;
-        requestAnimationFrame(function () {
-          setTimeout(function () { cardEl.classList.add('visible'); }, 50 * idx);
-        });
+    groupNames.forEach(function (name, idx) {
+      var trackersInGroup = groups[name] || [];
+      var folderCard = createFolderCard(name, trackersInGroup);
+      folderCard.classList.add('tracker-card-enter');
+      folderGrid.appendChild(folderCard);
+      requestAnimationFrame(function () {
+        setTimeout(function () { folderCard.classList.add('visible'); }, 40 * idx);
       });
+    });
 
-      section.appendChild(grid);
-      trackerGrid.appendChild(section);
+    if (ungrouped.length > 0) {
+      var ungroupedCard = createFolderCard(null, ungrouped);
+      ungroupedCard.classList.add('tracker-card-enter');
+      folderGrid.appendChild(ungroupedCard);
+      requestAnimationFrame(function () {
+        setTimeout(function () { ungroupedCard.classList.add('visible'); }, 40 * groupNames.length);
+      });
+    }
+
+    trackerGrid.appendChild(folderGrid);
+  }
+
+  function createFolderCard(groupName, trackers) {
+    var card = document.createElement('div');
+    card.className = 'folder-card card';
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+
+    var isUngrouped = groupName === null;
+    var displayName = isUngrouped ? '📎 Без группы' : groupName;
+
+    var bestPrice = null;
+    var bestDomain = '';
+    trackers.forEach(function (t) {
+      var p = Number(t.currentPrice);
+      if (p > 0 && (bestPrice === null || p < bestPrice)) {
+        bestPrice = p;
+        bestDomain = extractDomain(t.pageUrl);
+      }
+    });
+
+    var thumbs = trackers.slice(0, 4).filter(function (t) { return t.imageUrl; });
+
+    var html = '<div class="folder-card-thumbs">';
+    if (thumbs.length > 0) {
+      thumbs.forEach(function (t) {
+        html += '<img class="folder-card-thumb" src="' + escapeHtml(t.imageUrl) + '" alt="" loading="lazy">';
+      });
+    } else {
+      html += '<div class="folder-card-empty-icon">📦</div>';
+    }
+    html += '</div>';
+    html += '<div class="folder-card-info">';
+    html += '<div class="folder-card-name">' + escapeHtml(displayName) + '</div>';
+    html += '<div class="folder-card-meta">';
+    html += '<span class="folder-card-count">' + trackers.length + ' трекеров</span>';
+    if (bestPrice) html += '<span class="folder-card-best">💰 ' + formatPrice(bestPrice) + '</span>';
+    html += '</div></div>';
+    if (!isUngrouped) {
+      html += '<button class="folder-card-menu btn-icon" aria-label="Действия с папкой" title="Действия">⋮</button>';
+    }
+
+    card.innerHTML = html;
+
+    card.addEventListener('click', function (e) {
+      if (e.target.closest('.folder-card-menu')) return;
+      openFolder = isUngrouped ? '__ungrouped__' : groupName;
+      applyFilters();
+      renderGrid();
+    });
+
+    if (!isUngrouped) {
+      var menuBtn = card.querySelector('.folder-card-menu');
+      if (menuBtn) {
+        menuBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          showFolderContextMenu(groupName, trackers, menuBtn);
+        });
+      }
+    }
+
+    return card;
+  }
+
+  function showFolderContextMenu(groupName, trackers, anchorEl) {
+    var existing = document.querySelector('.folder-context-menu');
+    if (existing) existing.remove();
+
+    var menu = document.createElement('div');
+    menu.className = 'folder-context-menu';
+
+    var renameItem = document.createElement('button');
+    renameItem.className = 'folder-context-item';
+    renameItem.textContent = '✏️ Переименовать';
+    renameItem.addEventListener('click', function () {
+      menu.remove();
+      var newName = prompt('Новое название:', groupName);
+      if (newName && newName.trim() && newName.trim() !== groupName) {
+        renameFolderGroup(groupName, newName.trim());
+      }
+    });
+
+    var deleteKeepItem = document.createElement('button');
+    deleteKeepItem.className = 'folder-context-item';
+    deleteKeepItem.textContent = '📎 Удалить папку (оставить трекеры)';
+    deleteKeepItem.addEventListener('click', function () {
+      menu.remove();
+      deleteFolderGroup(groupName, false);
+    });
+
+    var deleteAllItem = document.createElement('button');
+    deleteAllItem.className = 'folder-context-item folder-context-danger';
+    deleteAllItem.textContent = '🗑️ Удалить папку и трекеры';
+    deleteAllItem.addEventListener('click', function () {
+      menu.remove();
+      if (confirm('Удалить папку "' + groupName + '" и все ' + trackers.length + ' трекеров?')) {
+        deleteFolderGroup(groupName, true);
+      }
+    });
+
+    menu.appendChild(renameItem);
+    menu.appendChild(deleteKeepItem);
+    if (trackers.length > 0) menu.appendChild(deleteAllItem);
+
+    document.body.appendChild(menu);
+    var rect = anchorEl.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.left = Math.min(rect.left, window.innerWidth - 220) + 'px';
+
+    setTimeout(function () {
+      document.addEventListener('click', function closeMenu() {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      });
+    }, 0);
+  }
+
+  async function renameFolderGroup(oldName, newName) {
+    var trackersInGroup = allTrackers.filter(function (t) { return t.productGroup === oldName; });
+    for (var i = 0; i < trackersInGroup.length; i++) {
+      try {
+        await sendMessage({ action: 'updateTracker', trackerId: trackersInGroup[i].id, data: { productGroup: newName } });
+        trackersInGroup[i].productGroup = newName;
+      } catch (_) {}
+    }
+    emptyGroups.delete(oldName);
+    applyFilters();
+    renderGrid();
+  }
+
+  async function deleteFolderGroup(groupName, deleteTrackers) {
+    var trackersInGroup = allTrackers.filter(function (t) { return t.productGroup === groupName; });
+    for (var i = 0; i < trackersInGroup.length; i++) {
+      try {
+        if (deleteTrackers) {
+          await sendMessage({ action: 'deleteTracker', trackerId: trackersInGroup[i].id });
+        } else {
+          await sendMessage({ action: 'updateTracker', trackerId: trackersInGroup[i].id, data: { productGroup: '' } });
+          trackersInGroup[i].productGroup = '';
+        }
+      } catch (_) {}
+    }
+    emptyGroups.delete(groupName);
+    if (deleteTrackers) {
+      allTrackers = allTrackers.filter(function (t) { return t.productGroup !== groupName; });
+    }
+    openFolder = null;
+    applyFilters();
+    renderGrid();
+  }
+
+  function renderFolderContents(folderName) {
+    var isUngrouped = folderName === '__ungrouped__';
+    var trackersInFolder = filteredTrackers.filter(function (t) {
+      return isUngrouped ? !t.productGroup : t.productGroup === folderName;
+    });
+
+    // Back button row
+    var backRow = document.createElement('div');
+    backRow.className = 'folder-back-row';
+    var backBtn = document.createElement('button');
+    backBtn.className = 'btn';
+    backBtn.innerHTML = ((typeof Icons !== 'undefined') ? Icons.el('chevron-up', 16) : '←') + ' Назад к папкам';
+    backBtn.addEventListener('click', function () {
+      openFolder = null;
+      applyFilters();
+      renderGrid();
+    });
+    backRow.appendChild(backBtn);
+
+    var folderTitle = document.createElement('h2');
+    folderTitle.className = 'folder-title';
+    folderTitle.textContent = isUngrouped ? '📎 Без группы' : folderName;
+    backRow.appendChild(folderTitle);
+
+    var countBadge = document.createElement('span');
+    countBadge.className = 'product-group-count';
+    countBadge.textContent = trackersInFolder.length;
+    backRow.appendChild(countBadge);
+
+    trackerGrid.appendChild(backRow);
+
+    // Comparison table for named groups with 2+ trackers
+    if (!isUngrouped && trackersInFolder.length >= 2 && _comparisonTable) {
+      var compContainer = document.createElement('div');
+      compContainer.className = 'product-group-comparison';
+      compContainer.style.display = '';
+      var table = _comparisonTable.create(folderName, trackersInFolder, {
+        onRowClick: function (tracker) { onCardClick(tracker); },
+      });
+      compContainer.appendChild(table);
+      trackerGrid.appendChild(compContainer);
+    }
+
+    // Tracker cards
+    var grid = document.createElement('div');
+    grid.className = 'product-group-grid';
+    trackersInFolder.forEach(function (tracker, idx) {
+      var cardEl = renderTrackerCard(tracker);
+      cardEl.classList.add('tracker-card-enter');
+      grid.appendChild(cardEl);
+      requestAnimationFrame(function () {
+        setTimeout(function () { cardEl.classList.add('visible'); }, 50 * idx);
+      });
+    });
+    trackerGrid.appendChild(grid);
+
+    if (trackersInFolder.length === 0) {
+      var emptyMsg = document.createElement('p');
+      emptyMsg.className = 'empty-state-hint';
+      emptyMsg.style.cssText = 'text-align:center;padding:var(--spacing-xl);color:var(--text-muted)';
+      emptyMsg.textContent = 'Папка пуста';
+      trackerGrid.appendChild(emptyMsg);
     }
   }
 
@@ -561,6 +737,7 @@ const Dashboard = (function () {
    */
   function onFilterChange(filter) {
     priceFilter = filter;
+    openFolder = null; // reset folder navigation when switching filters
     applyFilters();
     animateFilterChange(function () {
       renderGrid();
