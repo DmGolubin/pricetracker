@@ -50,6 +50,9 @@ async function initSettings() {
     if (settings && settings.apiBaseUrl) {
       apiClient.setBaseUrl(settings.apiBaseUrl);
     }
+    if (settings && settings.apiToken) {
+      apiClient.setApiToken(settings.apiToken);
+    }
   } catch (_) {
     // Settings not available yet — will be configured by user
   }
@@ -429,6 +432,10 @@ async function handleSaveSettings(settings) {
   // Update base URL FIRST so the save request goes to the new server
   if (settings.apiBaseUrl) {
     apiClient.setBaseUrl(settings.apiBaseUrl);
+  }
+  // Update API token if provided
+  if (settings.apiToken !== undefined) {
+    apiClient.setApiToken(settings.apiToken);
   }
   const saved = await apiClient.saveSettings(settings);
   return saved;

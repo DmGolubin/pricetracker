@@ -528,6 +528,23 @@ const GlobalSettings = (function () {
     apiGroup.appendChild(apiInput);
     body.appendChild(apiGroup);
 
+    // API Token
+    var tokenGroup = createFormGroup('API Token');
+    var tokenInput = document.createElement('input');
+    tokenInput.type = 'password';
+    tokenInput.className = 'input';
+    tokenInput.value = s.apiToken || '';
+    tokenInput.placeholder = 'Оставьте пустым для открытого доступа';
+    tokenInput.setAttribute('data-field', 'apiToken');
+    tokenInput.setAttribute('aria-label', 'API Token');
+    tokenInput.setAttribute('autocomplete', 'off');
+    tokenGroup.appendChild(tokenInput);
+    var tokenHint = document.createElement('p');
+    tokenHint.className = 'settings-info-note';
+    tokenHint.textContent = 'Опциональный токен для авторизации API-запросов. Если пустой — доступ открыт.';
+    tokenGroup.appendChild(tokenHint);
+    body.appendChild(tokenGroup);
+
     // Telegram info note (fields removed — auto-configured by bot)
     var tgNote = document.createElement('div');
     tgNote.className = 'form-group';
@@ -606,6 +623,9 @@ const GlobalSettings = (function () {
     var apiInput = modal.querySelector('[data-field="apiBaseUrl"]');
     var apiBaseUrl = apiInput ? apiInput.value : '';
 
+    var tokenInput = modal.querySelector('[data-field="apiToken"]');
+    var apiToken = tokenInput ? tokenInput.value : '';
+
     // Telegram fields removed — auto-configured by bot
 
     var pinCheckbox = modal.querySelector('[data-field="persistentPinTab"]');
@@ -648,6 +668,7 @@ const GlobalSettings = (function () {
 
     return {
       apiBaseUrl: apiBaseUrl,
+      apiToken: apiToken,
       persistentPinTab: persistentPinTab,
       thresholdConfig: thresholdConfig,
       telegramDigestEnabled: telegramDigestEnabled,
@@ -670,6 +691,11 @@ const GlobalSettings = (function () {
       saveBtn.innerHTML = '<span class="save-spinner"></span>';
     }
 
+    // Persist API token to localStorage for dashboard direct fetch calls
+    if (settings.apiToken !== undefined) {
+      try { localStorage.setItem('priceTracker_apiToken', settings.apiToken || ''); } catch(_) {}
+    }
+
     // Try service worker first, fall back to direct fetch
     sendMessage({
       action: 'saveSettings',
@@ -689,9 +715,13 @@ const GlobalSettings = (function () {
       })
       .catch(function () {
         // Fallback: save directly via fetch
+        var _fallbackHeaders = { 'Content-Type': 'application/json' };
+        var _token = '';
+        try { _token = localStorage.getItem('priceTracker_apiToken') || ''; } catch(_) {}
+        if (_token) _fallbackHeaders['Authorization'] = 'Bearer ' + _token;
         return fetch(API_BASE + '/settings/global', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: _fallbackHeaders,
           body: JSON.stringify(Object.assign({}, settings, { id: 'global' })),
         }).then(function (res) {
           if (res.ok) {
@@ -756,7 +786,11 @@ const GlobalSettings = (function () {
       .catch(function () {
         // Fallback: fetch directly
         if (typeof fetch === 'undefined') return {};
-        return fetch(API_BASE + '/settings/global')
+        var _headers = {};
+        var _tk = '';
+        try { _tk = localStorage.getItem('priceTracker_apiToken') || ''; } catch(_) {}
+        if (_tk) _headers['Authorization'] = 'Bearer ' + _tk;
+        return fetch(API_BASE + '/settings/global', { headers: _headers })
           .then(function (res) { return res.ok ? res.json() : {}; })
           .catch(function () { return {}; });
       })

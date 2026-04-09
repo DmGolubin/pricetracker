@@ -376,7 +376,7 @@ const Dashboard = (function () {
         starEl.addEventListener('click', function (e) {
           e.stopPropagation();
           var newStarred = !tracker.starred;
-          fetch(API_BASE + '/trackers/' + encodeURIComponent(tracker.id), {
+          apiFetch(API_BASE + '/trackers/' + encodeURIComponent(tracker.id), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ starred: newStarred })
@@ -734,7 +734,7 @@ const Dashboard = (function () {
           sendMessage({ action: 'checkPrice', trackerId: tracker.id })
             .then(function () {
               // Reload this tracker's data after check
-              return fetch(API_BASE + '/trackers/' + encodeURIComponent(tracker.id));
+              return apiFetch(API_BASE + '/trackers/' + encodeURIComponent(tracker.id));
             })
             .then(function (res) { return res.ok ? res.json() : null; })
             .then(function (updated) {
@@ -956,7 +956,7 @@ const Dashboard = (function () {
    */
   async function getGlobalCheckMethod() {
     try {
-      var res = await fetch(API_BASE + '/settings/global');
+      var res = await apiFetch(API_BASE + '/settings/global');
       var settings = await res.json();
       return (settings && settings.checkMethod) || 'server';
     } catch (_) {
@@ -1044,7 +1044,7 @@ const Dashboard = (function () {
 
     try {
       refreshAbortController = new AbortController();
-      var res = await fetch(API_BASE + '/server-check', {
+      var res = await apiFetch(API_BASE + '/server-check', {
         method: 'POST',
         signal: refreshAbortController.signal,
       });
@@ -1102,7 +1102,7 @@ const Dashboard = (function () {
 
     // Check if already running — show cancel option
     try {
-      var statusRes = await fetch(API_BASE + '/server-check/status');
+      var statusRes = await apiFetch(API_BASE + '/server-check/status');
       var status = await statusRes.json();
       if (status.running) {
         showRefreshStatus('Проверка уже выполняется...', true);
@@ -1124,7 +1124,7 @@ const Dashboard = (function () {
     // Start the check
     refreshAbortController = new AbortController();
     try {
-      var res = await fetch(API_BASE + '/server-check', {
+      var res = await apiFetch(API_BASE + '/server-check', {
         method: 'POST',
         signal: refreshAbortController.signal,
       });
@@ -1189,7 +1189,7 @@ const Dashboard = (function () {
       cancelBtn.textContent = 'Отменить';
       cancelBtn.addEventListener('click', function () {
         // Cancel server-side check
-        fetch(API_BASE + '/server-check/cancel', { method: 'POST' }).catch(function () {});
+        apiFetch(API_BASE + '/server-check/cancel', { method: 'POST' }).catch(function () {});
         // Cancel client-side fetch
         if (refreshAbortController) {
           refreshAbortController.abort();
@@ -1269,6 +1269,24 @@ const Dashboard = (function () {
    */
   const API_BASE = 'https://pricetracker-production-ac69.up.railway.app';
 
+  // ─── API Token for direct fetch calls ─────────────────────────────
+  var _apiToken = '';
+  try { _apiToken = localStorage.getItem('priceTracker_apiToken') || ''; } catch(_) {}
+
+  /**
+   * Fetch wrapper that adds Authorization header when API token is set.
+   * @param {string} url
+   * @param {RequestInit} [options]
+   * @returns {Promise<Response>}
+   */
+  function apiFetch(url, options) {
+    var opts = options || {};
+    opts.headers = Object.assign({
+      'Content-Type': 'application/json',
+    }, _apiToken ? { 'Authorization': 'Bearer ' + _apiToken } : {}, opts.headers || {});
+    return fetch(url, opts);
+  }
+
   /**
    * Update favicon with unread/updated tracker count badge.
    */
@@ -1328,7 +1346,7 @@ const Dashboard = (function () {
     showLoading();
 
     try {
-      const res = await fetch(API_BASE + '/trackers');
+      const res = await apiFetch(API_BASE + '/trackers');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       allTrackers = await res.json();
       if (!Array.isArray(allTrackers)) allTrackers = [];
@@ -2264,7 +2282,7 @@ const Dashboard = (function () {
 
     try {
       // First: silently assign to existing groups
-      var quickRes = await fetch(API_BASE + '/trackers/auto-group', {
+      var quickRes = await apiFetch(API_BASE + '/trackers/auto-group', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -2275,7 +2293,7 @@ const Dashboard = (function () {
       }
 
       // Then: get suggestions for remaining ungrouped
-      var suggestRes = await fetch(API_BASE + '/trackers/auto-group/suggest');
+      var suggestRes = await apiFetch(API_BASE + '/trackers/auto-group/suggest');
       var suggestions = await suggestRes.json();
 
       if (suggestions.newGroupSuggestions && suggestions.newGroupSuggestions.length > 0) {
@@ -2416,7 +2434,7 @@ const Dashboard = (function () {
 
       if (assignments.length > 0) {
         try {
-          await fetch(API_BASE + '/trackers/auto-group/apply', {
+          await apiFetch(API_BASE + '/trackers/auto-group/apply', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ assignments: assignments }),
@@ -2482,7 +2500,7 @@ const Dashboard = (function () {
             var t = trackers[i];
             if (!t.pageUrl || !t.cssSelector) continue;
             try {
-              await fetch(API_BASE + '/trackers', {
+              await apiFetch(API_BASE + '/trackers', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -2525,7 +2543,7 @@ const Dashboard = (function () {
       var el = containers[i];
       var tid = el.getAttribute('data-tracker-id');
       try {
-        var res = await fetch(API_BASE + '/priceHistory?trackerId=' + encodeURIComponent(tid));
+        var res = await apiFetch(API_BASE + '/priceHistory?trackerId=' + encodeURIComponent(tid));
         if (!res.ok) continue;
         var records = await res.json();
         if (!Array.isArray(records) || records.length < 2) continue;
@@ -2769,7 +2787,7 @@ const Dashboard = (function () {
       var tid = message.trackerId;
       if (!tid) return;
       // Reload the updated tracker from API and refresh its card
-      fetch(API_BASE + '/trackers/' + encodeURIComponent(tid))
+      apiFetch(API_BASE + '/trackers/' + encodeURIComponent(tid))
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (updated) {
           if (updated) onTrackerUpdated(updated);

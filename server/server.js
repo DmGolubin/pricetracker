@@ -81,6 +81,32 @@ setInterval(function () {
 
 app.use(rateLimiter);
 
+// ─── Optional API Token Auth ────────────────────────────────────────
+async function authMiddleware(req, res, next) {
+  // Skip auth for health check, webapp static files, and telegram webhook
+  if (req.path === '/health' || req.path.startsWith('/webapp')) return next();
+
+  try {
+    const settings = await getCachedSettings();
+    const token = settings.apiToken;
+
+    // If no token configured, skip auth (backward compatible)
+    if (!token) return next();
+
+    // Check Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || authHeader !== 'Bearer ' + token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
+  } catch (_) {
+    // If settings can't be loaded, allow request (fail open for availability)
+    next();
+  }
+}
+
+app.use(authMiddleware);
+
 // ─── Server start time for healthcheck ──────────────────────────────
 const SERVER_START_TIME = Date.now();
 
@@ -277,6 +303,11 @@ async function initDB() {
   // Migration: add starred boolean for favorites
   await pool.query(`
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "starred" BOOLEAN DEFAULT false;
+  `);
+
+  // Migration: add apiToken to settings for optional API authorization
+  await pool.query(`
+    ALTER TABLE settings ADD COLUMN IF NOT EXISTS "apiToken" TEXT DEFAULT '';
   `);
 
   console.log('Database tables initialized');
@@ -621,6 +652,7 @@ app.put('/settings/global', async (req, res) => {
       'thresholdConfig', 'telegramDigestEnabled',
       'telegramPersonalChatId', 'siteCookies',
       'checkMethod',
+      'apiToken',
     ];
 
     const jsonbFields = ['thresholdConfig', 'siteCookies'];

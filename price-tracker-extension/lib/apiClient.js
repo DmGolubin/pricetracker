@@ -13,6 +13,25 @@ var API_RETRY_DELAY_MS = _constants.API_RETRY_DELAY_MS;
 /** Module-level base URL, configurable via setBaseUrl */
 let baseUrl = 'https://pricetracker-production-ac69.up.railway.app';
 
+/** Module-level API token for optional authorization */
+let apiToken = '';
+
+/**
+ * Set the API token for all API requests.
+ * @param {string} token
+ */
+function setApiToken(token) {
+  apiToken = token || '';
+}
+
+/**
+ * Get the current API token.
+ * @returns {string}
+ */
+function getApiToken() {
+  return apiToken;
+}
+
 /**
  * Set the base URL for all API requests.
  * @param {string} url
@@ -62,6 +81,7 @@ async function request(path, options = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(apiToken ? { 'Authorization': 'Bearer ' + apiToken } : {}),
       ...(options.headers || {}),
     },
   };
@@ -330,6 +350,8 @@ async function serverCheckSingle(trackerId) {
 const _apiClient = {
   setBaseUrl,
   getBaseUrl,
+  setApiToken,
+  getApiToken,
   getTrackers,
   getTracker,
   createTracker,
