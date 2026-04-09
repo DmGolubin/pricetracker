@@ -925,7 +925,7 @@ const Dashboard = (function () {
     }
     existing.innerHTML = '';
 
-    // ─── Top row: count + domain chips ──────────────────────────
+    // ─── Top row: count + select all ────────────────────────────
     var topRow = document.createElement('div');
     topRow.className = 'bulk-bar-top';
 
@@ -970,7 +970,6 @@ const Dashboard = (function () {
         var ids = domains[domain];
         var chip = document.createElement('button');
         chip.className = 'bulk-bar-chip';
-        // Check if all trackers of this domain are selected
         var domainAllSelected = ids.every(function (id) { return selectedIds.has(id); });
         if (domainAllSelected) chip.classList.add('active');
         chip.textContent = domain + ' (' + ids.length + ')';
@@ -990,25 +989,104 @@ const Dashboard = (function () {
       existing.appendChild(chipRow);
     }
 
+    // ─── Group chips row ────────────────────────────────────────
+    var groupMap = {};
+    var ungroupedIds = [];
+    allTrackers.forEach(function (t) {
+      if (t.productGroup) {
+        if (!groupMap[t.productGroup]) groupMap[t.productGroup] = [];
+        groupMap[t.productGroup].push(t.id);
+      } else {
+        ungroupedIds.push(t.id);
+      }
+    });
+
+    var groupNames = Object.keys(groupMap).sort();
+    if (groupNames.length > 0) {
+      var groupChipRow = document.createElement('div');
+      groupChipRow.className = 'bulk-bar-chips';
+
+      groupNames.forEach(function (gName) {
+        var ids = groupMap[gName];
+        var chip = document.createElement('button');
+        chip.className = 'bulk-bar-chip bulk-bar-chip-group';
+        var gAllSelected = ids.every(function (id) { return selectedIds.has(id); });
+        if (gAllSelected) chip.classList.add('active');
+        var shortName = gName.length > 25 ? gName.slice(0, 25) + '…' : gName;
+        chip.textContent = '📦 ' + shortName + ' (' + ids.length + ')';
+        chip.addEventListener('click', function () {
+          if (gAllSelected) {
+            ids.forEach(function (id) { selectedIds.delete(id); });
+          } else {
+            ids.forEach(function (id) { selectedIds.add(id); });
+          }
+          applyFilters();
+          renderGrid();
+          updateBulkBar();
+        });
+        groupChipRow.appendChild(chip);
+      });
+
+      if (ungroupedIds.length > 0) {
+        var ungroupedChip = document.createElement('button');
+        ungroupedChip.className = 'bulk-bar-chip';
+        var ugAllSelected = ungroupedIds.every(function (id) { return selectedIds.has(id); });
+        if (ugAllSelected) ungroupedChip.classList.add('active');
+        ungroupedChip.textContent = '📎 Без группы (' + ungroupedIds.length + ')';
+        ungroupedChip.addEventListener('click', function () {
+          if (ugAllSelected) {
+            ungroupedIds.forEach(function (id) { selectedIds.delete(id); });
+          } else {
+            ungroupedIds.forEach(function (id) { selectedIds.add(id); });
+          }
+          applyFilters();
+          renderGrid();
+          updateBulkBar();
+        });
+        groupChipRow.appendChild(ungroupedChip);
+      }
+
+      existing.appendChild(groupChipRow);
+    }
+
     // ─── Action buttons row ─────────────────────────────────────
     var actionsRow = document.createElement('div');
     actionsRow.className = 'bulk-bar-actions';
 
+    // Assign group button
+    var groupBtn = document.createElement('button');
+    groupBtn.className = 'btn btn-primary';
+    groupBtn.textContent = '📦 Назначить группу';
+    groupBtn.disabled = selectedIds.size === 0;
+    groupBtn.addEventListener('click', function () { showBulkGroupPicker(); });
+    actionsRow.appendChild(groupBtn);
+
+    // Refresh selected button
+    var refreshSelBtn = document.createElement('button');
+    refreshSelBtn.className = 'btn';
+    refreshSelBtn.textContent = '🔄 Обновить';
+    refreshSelBtn.disabled = selectedIds.size === 0;
+    refreshSelBtn.addEventListener('click', function () { bulkAction('refresh'); });
+    actionsRow.appendChild(refreshSelBtn);
+
     var pauseBtn = document.createElement('button');
     pauseBtn.className = 'btn';
     pauseBtn.textContent = 'Приостановить';
+    pauseBtn.disabled = selectedIds.size === 0;
     pauseBtn.addEventListener('click', function () { bulkAction('pause'); });
     actionsRow.appendChild(pauseBtn);
 
     var resumeBtn = document.createElement('button');
     resumeBtn.className = 'btn';
     resumeBtn.textContent = 'Возобновить';
+    resumeBtn.disabled = selectedIds.size === 0;
     resumeBtn.addEventListener('click', function () { bulkAction('resume'); });
     actionsRow.appendChild(resumeBtn);
 
     var deleteBtn = document.createElement('button');
     deleteBtn.className = 'btn btn-danger';
     deleteBtn.textContent = 'Удалить';
+    deleteBtn.disabled = selectedIds.size === 0;
     deleteBtn.addEventListener('click', function () { bulkAction('delete'); });
     actionsRow.appendChild(deleteBtn);
 
@@ -1025,6 +1103,160 @@ const Dashboard = (function () {
     actionsRow.appendChild(cancelBtn);
 
     existing.appendChild(actionsRow);
+
+    // ─── Progress bar (hidden by default) ───────────────────────
+    var progressContainer = document.createElement('div');
+    progressContainer.id = 'bulk-progress';
+    progressContainer.className = 'bulk-progress';
+    progressContainer.style.display = 'none';
+    progressContainer.innerHTML = '<div class="bulk-progress-bar"><div class="bulk-progress-fill"></div></div>'
+      + '<span class="bulk-progress-text"></span>';
+    existing.appendChild(progressContainer);
+  }
+
+  /**
+   * Show a group picker dropdown for bulk assigning a group.
+   */
+  function showBulkGroupPicker() {
+    var ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    // Collect existing groups
+    var existingGroups = {};
+    allTrackers.forEach(function (t) {
+      if (t.productGroup) existingGroups[t.productGroup] = true;
+    });
+    var groupList = Object.keys(existingGroups).sort();
+
+    // Build modal
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay active';
+    overlay.setAttribute('data-testid', 'bulk-group-overlay');
+
+    var modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-label', 'Назначить группу');
+
+    var header = document.createElement('div');
+    header.className = 'modal-header';
+    var title = document.createElement('h2');
+    title.textContent = 'Назначить группу (' + ids.length + ' трекеров)';
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'btn-icon';
+    closeBtn.type = 'button';
+    closeBtn.innerHTML = (typeof Icons !== 'undefined') ? Icons.el('close', 20) : '×';
+    closeBtn.addEventListener('click', function () { overlay.remove(); });
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    var body = document.createElement('div');
+    body.className = 'modal-body';
+
+    // New group input
+    var newGroupLabel = document.createElement('label');
+    newGroupLabel.textContent = 'Новая группа';
+    var newGroupInput = document.createElement('input');
+    newGroupInput.type = 'text';
+    newGroupInput.className = 'input';
+    newGroupInput.placeholder = 'Введите название новой группы';
+    body.appendChild(newGroupLabel);
+    body.appendChild(newGroupInput);
+
+    // Existing groups list
+    if (groupList.length > 0) {
+      var existLabel = document.createElement('label');
+      existLabel.textContent = 'Или выберите существующую';
+      existLabel.style.marginTop = 'var(--spacing-md)';
+      body.appendChild(existLabel);
+
+      var listEl = document.createElement('div');
+      listEl.className = 'bulk-group-list';
+      groupList.forEach(function (gName) {
+        var item = document.createElement('button');
+        item.className = 'btn bulk-group-item';
+        item.textContent = gName;
+        item.addEventListener('click', function () {
+          applyBulkGroup(ids, gName);
+          overlay.remove();
+        });
+        listEl.appendChild(item);
+      });
+      body.appendChild(listEl);
+    }
+
+    // Remove from group option
+    var removeLabel = document.createElement('label');
+    removeLabel.textContent = 'Или';
+    removeLabel.style.marginTop = 'var(--spacing-md)';
+    body.appendChild(removeLabel);
+    var removeBtn = document.createElement('button');
+    removeBtn.className = 'btn';
+    removeBtn.textContent = '📎 Убрать из группы';
+    removeBtn.addEventListener('click', function () {
+      applyBulkGroup(ids, '');
+      overlay.remove();
+    });
+    body.appendChild(removeBtn);
+
+    var footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-primary';
+    saveBtn.textContent = 'Создать и назначить';
+    saveBtn.addEventListener('click', function () {
+      var name = newGroupInput.value.trim();
+      if (!name) return;
+      applyBulkGroup(ids, name);
+      overlay.remove();
+    });
+    footer.appendChild(saveBtn);
+
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) overlay.remove();
+    });
+
+    modalContainer.appendChild(overlay);
+    newGroupInput.focus();
+  }
+
+  /**
+   * Apply a group name to multiple trackers.
+   */
+  async function applyBulkGroup(ids, groupName) {
+    showBulkProgress(0, ids.length, 'Назначение группы...');
+    for (var i = 0; i < ids.length; i++) {
+      try {
+        await sendMessage({ action: 'updateTracker', trackerId: ids[i], data: { productGroup: groupName } });
+        var t = allTrackers.find(function (t) { return t.id === ids[i]; });
+        if (t) t.productGroup = groupName;
+      } catch (_) {}
+      showBulkProgress(i + 1, ids.length, 'Назначение группы...');
+    }
+    hideBulkProgress();
+    showRefreshStatus('📦 Группа назначена: ' + (groupName || 'убрана') + ' (' + ids.length + ' трекеров)', false);
+    setTimeout(hideRefreshStatus, 5000);
+    await loadTrackers();
+  }
+
+  function showBulkProgress(current, total, text) {
+    var el = document.getElementById('bulk-progress');
+    if (!el) return;
+    el.style.display = '';
+    var fill = el.querySelector('.bulk-progress-fill');
+    var label = el.querySelector('.bulk-progress-text');
+    var pct = total > 0 ? (current / total * 100) : 0;
+    if (fill) fill.style.width = pct + '%';
+    if (label) label.textContent = text + ' ' + current + '/' + total;
+  }
+
+  function hideBulkProgress() {
+    var el = document.getElementById('bulk-progress');
+    if (el) el.style.display = 'none';
   }
 
   async function bulkAction(action) {
@@ -1035,6 +1267,11 @@ const Dashboard = (function () {
       if (!confirm('Удалить ' + ids.length + ' трекеров?')) return;
     }
 
+    if (action === 'refresh') {
+      showBulkProgress(0, ids.length, 'Обновление цен...');
+    }
+
+    var errors = 0;
     for (var i = 0; i < ids.length; i++) {
       try {
         if (action === 'delete') {
@@ -1048,8 +1285,25 @@ const Dashboard = (function () {
           await sendMessage({ action: 'updateTracker', trackerId: ids[i], data: { status: 'active' } });
           var t2 = allTrackers.find(function (t) { return t.id === ids[i]; });
           if (t2) t2.status = 'active';
+        } else if (action === 'refresh') {
+          await sendMessage({ action: 'checkPrice', trackerId: ids[i] });
         }
-      } catch (_) {}
+      } catch (_) {
+        errors++;
+      }
+      if (action === 'refresh') {
+        showBulkProgress(i + 1, ids.length, 'Обновление цен...');
+      }
+    }
+
+    hideBulkProgress();
+
+    if (action === 'refresh') {
+      var msg = '✅ Обновлено: ' + (ids.length - errors) + '/' + ids.length;
+      if (errors > 0) msg += ' (ошибок: ' + errors + ')';
+      showRefreshStatus(msg, false);
+      setTimeout(hideRefreshStatus, 5000);
+      await loadTrackers();
     }
 
     selectedIds.clear();

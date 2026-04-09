@@ -859,6 +859,61 @@
   padding: var(--spacing-xs) var(--spacing-sm);
 }
 
+.bulk-bar-chip-group {
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.bulk-bar-chip-group.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.bulk-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: var(--spacing-xs);
+}
+
+.bulk-group-item {
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.bulk-group-item:hover {
+  background: var(--bg-input);
+}
+
+.bulk-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+}
+
+.bulk-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-input);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.bulk-progress-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: var(--radius-full);
+  transition: width 0.2s ease;
+}
+
+.bulk-progress-text {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ===== Comparison Table ===== */
 .comparison-table {
   background: var(--bg-card);
