@@ -40,7 +40,16 @@ async function apiPost(path, data) {
   return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: data ? JSON.stringify(data) : undefined });
 }
 
+function skeletonHtml(n) {
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    html += '<div class="skeleton-card"><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-price"></div></div>';
+  }
+  return html;
+}
+
 async function loadData() {
+  content.innerHTML = skeletonHtml(6);
   allTrackers = await api('/trackers') || [];
   updateHeader();
 }
@@ -159,6 +168,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     tg.BackButton.hide();
     selectMode = false;
     selectedIds.clear();
+    searchQuery = '';
     renderTab();
     haptic('light');
   });
@@ -176,10 +186,16 @@ function renderTab() {
 // ─── Best Prices Tab ──────────────────────────────────────────────
 
 function renderBest() {
-  const groups = getGroups();
+  let groups = getGroups();
   if (!groups.length) { content.innerHTML = emptyHtml('🏆','Нет данных о ценах'); return; }
 
-  let html = sortBarHtml();
+  if (searchQuery) {
+    groups = groups.filter(g => g.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (!groups.length) { content.innerHTML = searchBarHtml() + emptyHtml('🏆','Ничего не найдено'); bindSearchInput(renderBest); return; }
+  }
+
+  let html = searchBarHtml();
+  html += sortBarHtml();
   let sorted;
   switch(sortBy) {
     case 'priceDesc':
@@ -242,16 +258,22 @@ function renderBest() {
   content.innerHTML = html;
   bindCards();
   bindSortBar();
+  bindSearchInput(renderBest);
 }
 
 // ─── Groups Tab ───────────────────────────────────────────────────
 
 function renderGroups() {
-  const groups = getGroups();
+  let groups = getGroups();
   const ungrouped = allTrackers.filter(t=>!t.productGroup && t.status!=='paused');
   if (!groups.length && !ungrouped.length) { content.innerHTML = emptyHtml('📦','Групп пока нет'); return; }
 
-  let html = '';
+  let html = searchBarHtml();
+
+  if (searchQuery) {
+    groups = groups.filter(g => g.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }
+
   for (const g of groups.sort((a,b)=>a.name.localeCompare(b.name))) {
     html += `<div class="card group-card" data-action="group" data-group="${esc(g.name)}">
       <div class="group-header"><div class="group-name">${esc(g.name.slice(0,45))}</div><span class="group-count">${g.trackers.length}</span></div>
@@ -267,6 +289,7 @@ function renderGroups() {
 
   content.innerHTML = html;
   bindCards();
+  bindSearchInput(renderGroups);
   document.getElementById('btnAutoGroup')?.addEventListener('click', async () => {
     haptic('medium');
     try {
@@ -282,7 +305,7 @@ function renderGroups() {
 
 function renderAll() {
   const active = allTrackers.filter(t=>t.status!=='paused');
-  let html = `<div class="search-bar"><input type="text" placeholder="🔍 Поиск..." value="${esc(searchQuery)}" id="searchInput"></div>`;
+  let html = searchBarHtml();
   html += sortBarHtml();
 
   // Filter chips by shop
@@ -322,20 +345,14 @@ function renderAll() {
   content.innerHTML = html;
   bindCards();
   bindSortBar();
-  bindSearch();
+  bindSearchInput(renderAll);
   bindFilterChips();
   bindSelectMode();
 }
 
 function bindSearch() {
-  const input = document.getElementById('searchInput');
-  if (!input) return;
-  input.addEventListener('input', e => {
-    searchQuery = e.target.value;
-    renderAll();
-    const el = document.getElementById('searchInput');
-    if (el) { el.focus(); el.selectionStart = el.selectionEnd = searchQuery.length; }
-  });
+  // Kept for backward compatibility, now uses shared bindSearchInput
+  bindSearchInput(renderAll);
 }
 
 function bindFilterChips() {
@@ -618,6 +635,7 @@ async function showTrackerDetail(id) {
     ${statsHtml}
 
     <a class="detail-link" href="${t.pageUrl}" target="_blank">🔗 Открыть в магазине</a>
+    <button class="detail-share" id="btnShare">📤 Поделиться</button>
 
     <!-- Actions -->
     <div class="action-grid">
@@ -699,6 +717,23 @@ function bindTrackerActions(t) {
       popBack();
       tg.showAlert('Трекер удалён');
     });
+  });
+
+  // Share
+  document.getElementById('btnShare')?.addEventListener('click', async () => {
+    haptic('light');
+    const price = Number(t.currentPrice);
+    const shareText = `${cleanName(t.productName)} — ${fmtP(price)} грн\n${t.pageUrl}`;
+    if (navigator.share) {
+      try { await navigator.share({ text: shareText }); } catch(_) {}
+    } else {
+      try {
+        await navigator.clipboard.writeText(shareText);
+        tg.showAlert('Скопировано в буфер обмена');
+      } catch(_) {
+        tg.showAlert('Не удалось скопировать');
+      }
+    }
   });
 }
 
@@ -1034,6 +1069,21 @@ function trackerCardHtml(t) {
     ${priceHtml}
     <div class="card-meta"><span>🏪 ${esc(shop)}</span>${!isContent && min>0?`<span>📉 ${fmtP(min)}</span>`:''}${!isContent && max>0?`<span>📈 ${fmtP(max)}</span>`:''}</div>
     ${range}</div>`;
+}
+
+function searchBarHtml() {
+  return `<div class="search-bar"><input type="text" placeholder="🔍 Поиск..." value="${esc(searchQuery)}" id="searchInput"></div>`;
+}
+
+function bindSearchInput(renderFn) {
+  const input = document.getElementById('searchInput');
+  if (!input) return;
+  input.addEventListener('input', e => {
+    searchQuery = e.target.value;
+    renderFn();
+    const el = document.getElementById('searchInput');
+    if (el) { el.focus(); el.selectionStart = el.selectionEnd = searchQuery.length; }
+  });
 }
 
 function sortBarHtml() {
