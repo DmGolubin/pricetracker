@@ -177,6 +177,15 @@ const Dashboard = (function () {
    */
   function applyFilters() {
     filteredTrackers = allTrackers.filter((tracker) => {
+      // Sidebar folder filter (applies on top of other filters)
+      if (sidebarFilterGroup !== null) {
+        if (sidebarFilterGroup === '__ungrouped__') {
+          if (tracker.productGroup) return false;
+        } else {
+          if (tracker.productGroup !== sidebarFilterGroup) return false;
+        }
+      }
+
       // Search filter (case-insensitive match on productName)
       if (searchQuery) {
         const name = (tracker.productName || '').toLowerCase();
@@ -1068,11 +1077,128 @@ const Dashboard = (function () {
       Toolbar.setGroups(Object.keys(groups).sort());
     }
 
+    // Update folder sidebar
+    renderFolderSidebar();
+
     // Load sparklines after a short delay to ensure DOM is ready
     setTimeout(function () { loadSparklines(); }, 300);
 
     // Reset badge when dashboard opens (Requirement 17.2)
     sendMessage({ action: 'resetBadge' }).catch(() => {});
+  }
+
+  // ─── Folder Sidebar ─────────────────────────────────────────────
+
+  var sidebarFilterGroup = null; // currently selected group in sidebar, null = all
+
+  function renderFolderSidebar() {
+    var list = document.getElementById('folder-sidebar-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    // Collect groups
+    var groupMap = {};
+    var ungroupedCount = 0;
+    allTrackers.forEach(function (t) {
+      if (t.productGroup) {
+        if (!groupMap[t.productGroup]) groupMap[t.productGroup] = { count: 0, bestPrice: null };
+        groupMap[t.productGroup].count++;
+        var p = Number(t.currentPrice);
+        if (p > 0 && (groupMap[t.productGroup].bestPrice === null || p < groupMap[t.productGroup].bestPrice)) {
+          groupMap[t.productGroup].bestPrice = p;
+        }
+      } else {
+        ungroupedCount++;
+      }
+    });
+
+    // Include empty groups
+    emptyGroups.forEach(function (name) {
+      if (!groupMap[name]) groupMap[name] = { count: 0, bestPrice: null };
+    });
+
+    var groupNames = Object.keys(groupMap).sort();
+
+    // "All" item
+    var allItem = document.createElement('button');
+    allItem.className = 'folder-sidebar-item' + (sidebarFilterGroup === null ? ' active' : '');
+    allItem.innerHTML = '<span class="folder-sidebar-item-name">📋 Все трекеры</span>'
+      + '<span class="folder-sidebar-item-count">' + allTrackers.length + '</span>';
+    allItem.addEventListener('click', function () {
+      sidebarFilterGroup = null;
+      renderFolderSidebar();
+      applyFilters();
+      renderGrid();
+    });
+    list.appendChild(allItem);
+
+    // Group items
+    groupNames.forEach(function (name) {
+      var info = groupMap[name];
+      var item = document.createElement('button');
+      item.className = 'folder-sidebar-item' + (sidebarFilterGroup === name ? ' active' : '');
+      var shortName = name.length > 28 ? name.slice(0, 28) + '…' : name;
+      var priceHtml = info.bestPrice ? '<span class="folder-sidebar-item-price">💰 ' + formatPrice(info.bestPrice) + '</span>' : '';
+      item.innerHTML = '<span class="folder-sidebar-item-name">📦 ' + escapeHtml(shortName) + '</span>'
+        + priceHtml
+        + '<span class="folder-sidebar-item-count">' + info.count + '</span>';
+      item.addEventListener('click', function () {
+        sidebarFilterGroup = name;
+        renderFolderSidebar();
+        applyFilters();
+        renderGrid();
+      });
+      list.appendChild(item);
+    });
+
+    // Ungrouped item
+    if (ungroupedCount > 0) {
+      var ugItem = document.createElement('button');
+      ugItem.className = 'folder-sidebar-item' + (sidebarFilterGroup === '__ungrouped__' ? ' active' : '');
+      ugItem.innerHTML = '<span class="folder-sidebar-item-name">📎 Без группы</span>'
+        + '<span class="folder-sidebar-item-count">' + ungroupedCount + '</span>';
+      ugItem.addEventListener('click', function () {
+        sidebarFilterGroup = '__ungrouped__';
+        renderFolderSidebar();
+        applyFilters();
+        renderGrid();
+      });
+      list.appendChild(ugItem);
+    }
+
+    // Create folder button
+    var createBtn = document.createElement('button');
+    createBtn.className = 'folder-sidebar-create';
+    createBtn.innerHTML = '+ Создать папку';
+    createBtn.addEventListener('click', function () {
+      var name = prompt('Название новой папки:');
+      if (name && name.trim()) {
+        emptyGroups.add(name.trim());
+        renderFolderSidebar();
+      }
+    });
+    list.appendChild(createBtn);
+  }
+
+  function initFolderSidebar() {
+    var toggleBtn = document.getElementById('folder-sidebar-toggle');
+    var sidebar = document.getElementById('folder-sidebar');
+    if (!toggleBtn || !sidebar) return;
+
+    // Restore collapsed state from localStorage
+    var SIDEBAR_KEY = 'priceTracker_sidebarCollapsed';
+    try {
+      if (localStorage.getItem(SIDEBAR_KEY) === 'true') {
+        sidebar.classList.add('collapsed');
+      }
+    } catch (_) {}
+
+    toggleBtn.addEventListener('click', function () {
+      sidebar.classList.toggle('collapsed');
+      try {
+        localStorage.setItem(SIDEBAR_KEY, sidebar.classList.contains('collapsed'));
+      } catch (_) {}
+    });
   }
 
   // ─── Multiselect / Bulk Operations ─────────────────────────────
@@ -1853,6 +1979,9 @@ const Dashboard = (function () {
 
     // Initialise ripple effect for all .btn elements
     initRipple();
+
+    // Initialise folder sidebar
+    initFolderSidebar();
 
     // Load trackers
     loadTrackers();

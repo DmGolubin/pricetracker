@@ -13,26 +13,39 @@
 
   <!-- Main content: tracker cards grid -->
   <main class="dashboard-main">
-    <div id="tracker-grid" class="tracker-grid" role="list" aria-label="Список трекеров"></div>
+    <div class="dashboard-layout">
+      <div class="dashboard-content">
+        <div id="tracker-grid" class="tracker-grid" role="list" aria-label="Список трекеров"></div>
 
-    <!-- Empty state (shown when no trackers) -->
-    <div id="empty-state" class="empty-state" hidden>
-      <span class="empty-state-icon" id="empty-state-icon">📊</span>
-      <p class="empty-state-text">Нет трекеров</p>
-      <p class="empty-state-hint">Откройте страницу товара и нажмите «Отслеживать цену» в popup расширения</p>
-    </div>
+        <!-- Empty state (shown when no trackers) -->
+        <div id="empty-state" class="empty-state" hidden>
+          <span class="empty-state-icon" id="empty-state-icon">📊</span>
+          <p class="empty-state-text">Нет трекеров</p>
+          <p class="empty-state-hint">Откройте страницу товара и нажмите «Отслеживать цену» в popup расширения</p>
+        </div>
 
-    <!-- Error state -->
-    <div id="error-state" class="error-state" hidden>
-      <span class="error-state-icon" id="error-state-icon">⚠️</span>
-      <p id="error-message" class="error-state-text"></p>
-      <button id="btn-retry" class="btn btn-primary">Повторить</button>
-    </div>
+        <!-- Error state -->
+        <div id="error-state" class="error-state" hidden>
+          <span class="error-state-icon" id="error-state-icon">⚠️</span>
+          <p id="error-message" class="error-state-text"></p>
+          <button id="btn-retry" class="btn btn-primary">Повторить</button>
+        </div>
 
-    <!-- Loading indicator -->
-    <div id="loading-state" class="loading-state">
-      <span class="loading-spinner"></span>
-      <p class="loading-text">Загрузка трекеров…</p>
+        <!-- Loading indicator -->
+        <div id="loading-state" class="loading-state">
+          <span class="loading-spinner"></span>
+          <p class="loading-text">Загрузка трекеров…</p>
+        </div>
+      </div>
+
+      <!-- Folder sidebar (right side) -->
+      <aside id="folder-sidebar" class="folder-sidebar" aria-label="Папки">
+        <div class="folder-sidebar-header">
+          <span class="folder-sidebar-title">📦 Папки</span>
+          <button id="folder-sidebar-toggle" class="btn-icon folder-sidebar-toggle" aria-label="Скрыть панель папок" title="Скрыть/показать">◀</button>
+        </div>
+        <div id="folder-sidebar-list" class="folder-sidebar-list"></div>
+      </aside>
     </div>
   </main>
 
