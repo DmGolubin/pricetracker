@@ -123,7 +123,7 @@ async function performExtraction(tracker, pinned) {
   const tab = await chrome.tabs.create({
     url: tracker.pageUrl,
     active: false,
-    ...(pinned ? { pinned: true } : {}),
+    pinned: true,
   });
 
   const tabId = tab.id;
