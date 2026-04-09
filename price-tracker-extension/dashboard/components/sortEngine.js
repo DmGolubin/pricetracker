@@ -90,24 +90,30 @@ function sortTrackers(trackers, sortBy) {
 
     case 'minPrice':
       sorted.sort(function (a, b) {
-        var aMin = (a.minPrice != null) ? a.minPrice : null;
-        var bMin = (b.minPrice != null) ? b.minPrice : null;
+        var aMin = (a.minPrice != null) ? Number(a.minPrice) : null;
+        var bMin = (b.minPrice != null) ? Number(b.minPrice) : null;
+        if (aMin === 0 || isNaN(aMin)) aMin = null;
+        if (bMin === 0 || isNaN(bMin)) bMin = null;
         return compareWithNulls(aMin, bMin, true);
       });
       break;
 
     case 'priceAsc':
       sorted.sort(function (a, b) {
-        var aPrice = (a.currentPrice != null) ? a.currentPrice : null;
-        var bPrice = (b.currentPrice != null) ? b.currentPrice : null;
+        var aPrice = (a.currentPrice != null) ? Number(a.currentPrice) : null;
+        var bPrice = (b.currentPrice != null) ? Number(b.currentPrice) : null;
+        if (aPrice === 0 || isNaN(aPrice)) aPrice = null;
+        if (bPrice === 0 || isNaN(bPrice)) bPrice = null;
         return compareWithNulls(aPrice, bPrice, true);
       });
       break;
 
     case 'priceDesc':
       sorted.sort(function (a, b) {
-        var aPrice = (a.currentPrice != null) ? a.currentPrice : null;
-        var bPrice = (b.currentPrice != null) ? b.currentPrice : null;
+        var aPrice = (a.currentPrice != null) ? Number(a.currentPrice) : null;
+        var bPrice = (b.currentPrice != null) ? Number(b.currentPrice) : null;
+        if (aPrice === 0 || isNaN(aPrice)) aPrice = null;
+        if (bPrice === 0 || isNaN(bPrice)) bPrice = null;
         return compareWithNulls(aPrice, bPrice, false);
       });
       break;
