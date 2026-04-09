@@ -1365,8 +1365,12 @@ const Dashboard = (function () {
     var msg = groupName ? '📦 Перемещено в "' + groupName + '"' : '📎 Убрано из группы';
     showRefreshStatus(msg + ' (' + trackerIds.length + ')', false);
     setTimeout(hideRefreshStatus, 3000);
+    // Reset selection after successful drag
+    selectedIds.clear();
+    selectMode = false;
     applyFilters();
     renderGrid();
+    updateBulkBar();
     renderFolderSidebar();
   }
 
@@ -1397,186 +1401,81 @@ const Dashboard = (function () {
     }
     existing.innerHTML = '';
 
-    // ─── Top row: count + select all ────────────────────────────
-    var topRow = document.createElement('div');
-    topRow.className = 'bulk-bar-top';
+    var hasSelection = selectedIds.size > 0;
+    var allSelected = selectedIds.size === filteredTrackers.length && filteredTrackers.length > 0;
+
+    // Single compact row
+    var row = document.createElement('div');
+    row.className = 'bulk-bar-row';
 
     var countSpan = document.createElement('span');
     countSpan.className = 'bulk-bar-count';
     countSpan.textContent = 'Выбрано: ' + selectedIds.size;
-    topRow.appendChild(countSpan);
+    row.appendChild(countSpan);
 
-    // Select all / deselect all toggle
-    var allSelected = selectedIds.size === filteredTrackers.length && filteredTrackers.length > 0;
-    var toggleAllBtn = document.createElement('button');
-    toggleAllBtn.className = 'btn bulk-bar-toggle-all';
-    toggleAllBtn.textContent = allSelected ? 'Снять все' : 'Выбрать все';
-    toggleAllBtn.addEventListener('click', function () {
-      if (allSelected) {
-        selectedIds.clear();
-      } else {
-        filteredTrackers.forEach(function (t) { selectedIds.add(t.id); });
-      }
-      applyFilters();
-      renderGrid();
-      updateBulkBar();
-    });
-    topRow.appendChild(toggleAllBtn);
+    if (hasSelection) {
+      row.appendChild(createBulkSep());
 
-    existing.appendChild(topRow);
+      var groupBtn = document.createElement('button');
+      groupBtn.className = 'btn btn-primary btn-sm';
+      groupBtn.textContent = '📦 В папку';
+      groupBtn.addEventListener('click', function () { showBulkGroupPicker(); });
+      row.appendChild(groupBtn);
 
-    // ─── Domain chips row ───────────────────────────────────────
-    var domains = {};
-    allTrackers.forEach(function (t) {
-      var d = extractDomain(t.pageUrl);
-      if (!domains[d]) domains[d] = [];
-      domains[d].push(t.id);
-    });
+      var refreshBtn = document.createElement('button');
+      refreshBtn.className = 'btn btn-sm';
+      refreshBtn.textContent = '🔄';
+      refreshBtn.title = 'Обновить выбранные';
+      refreshBtn.addEventListener('click', function () { bulkAction('refresh'); });
+      row.appendChild(refreshBtn);
 
-    var domainNames = Object.keys(domains).sort();
-    if (domainNames.length > 1) {
-      var chipRow = document.createElement('div');
-      chipRow.className = 'bulk-bar-chips';
+      var pauseBtn = document.createElement('button');
+      pauseBtn.className = 'btn btn-sm';
+      pauseBtn.textContent = '⏸';
+      pauseBtn.title = 'Приостановить';
+      pauseBtn.addEventListener('click', function () { bulkAction('pause'); });
+      row.appendChild(pauseBtn);
 
-      domainNames.forEach(function (domain) {
-        var ids = domains[domain];
-        var chip = document.createElement('button');
-        chip.className = 'bulk-bar-chip';
-        var domainAllSelected = ids.every(function (id) { return selectedIds.has(id); });
-        if (domainAllSelected) chip.classList.add('active');
-        chip.textContent = domain + ' (' + ids.length + ')';
-        chip.addEventListener('click', function () {
-          if (domainAllSelected) {
-            ids.forEach(function (id) { selectedIds.delete(id); });
-          } else {
-            ids.forEach(function (id) { selectedIds.add(id); });
-          }
-          applyFilters();
-          renderGrid();
-          updateBulkBar();
-        });
-        chipRow.appendChild(chip);
-      });
+      var resumeBtn = document.createElement('button');
+      resumeBtn.className = 'btn btn-sm';
+      resumeBtn.textContent = '▶';
+      resumeBtn.title = 'Возобновить';
+      resumeBtn.addEventListener('click', function () { bulkAction('resume'); });
+      row.appendChild(resumeBtn);
 
-      existing.appendChild(chipRow);
+      var deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn btn-danger btn-sm';
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.title = 'Удалить';
+      deleteBtn.addEventListener('click', function () { bulkAction('delete'); });
+      row.appendChild(deleteBtn);
     }
 
-    // ─── Group chips row ────────────────────────────────────────
-    var groupMap = {};
-    var ungroupedIds = [];
-    allTrackers.forEach(function (t) {
-      if (t.productGroup) {
-        if (!groupMap[t.productGroup]) groupMap[t.productGroup] = [];
-        groupMap[t.productGroup].push(t.id);
-      } else {
-        ungroupedIds.push(t.id);
-      }
+    row.appendChild(createBulkSep());
+
+    var toggleBtn = document.createElement('button');
+    toggleBtn.className = 'btn btn-sm';
+    toggleBtn.textContent = allSelected ? 'Снять все' : 'Выбрать все';
+    toggleBtn.addEventListener('click', function () {
+      if (allSelected) { selectedIds.clear(); }
+      else { filteredTrackers.forEach(function (t) { selectedIds.add(t.id); }); }
+      applyFilters(); renderGrid(); updateBulkBar();
     });
-
-    var groupNames = Object.keys(groupMap).sort();
-    if (groupNames.length > 0) {
-      var groupChipRow = document.createElement('div');
-      groupChipRow.className = 'bulk-bar-chips';
-
-      groupNames.forEach(function (gName) {
-        var ids = groupMap[gName];
-        var chip = document.createElement('button');
-        chip.className = 'bulk-bar-chip bulk-bar-chip-group';
-        var gAllSelected = ids.every(function (id) { return selectedIds.has(id); });
-        if (gAllSelected) chip.classList.add('active');
-        var shortName = gName.length > 25 ? gName.slice(0, 25) + '…' : gName;
-        chip.textContent = '📦 ' + shortName + ' (' + ids.length + ')';
-        chip.addEventListener('click', function () {
-          if (gAllSelected) {
-            ids.forEach(function (id) { selectedIds.delete(id); });
-          } else {
-            ids.forEach(function (id) { selectedIds.add(id); });
-          }
-          applyFilters();
-          renderGrid();
-          updateBulkBar();
-        });
-        groupChipRow.appendChild(chip);
-      });
-
-      if (ungroupedIds.length > 0) {
-        var ungroupedChip = document.createElement('button');
-        ungroupedChip.className = 'bulk-bar-chip';
-        var ugAllSelected = ungroupedIds.every(function (id) { return selectedIds.has(id); });
-        if (ugAllSelected) ungroupedChip.classList.add('active');
-        ungroupedChip.textContent = '📎 Без группы (' + ungroupedIds.length + ')';
-        ungroupedChip.addEventListener('click', function () {
-          if (ugAllSelected) {
-            ungroupedIds.forEach(function (id) { selectedIds.delete(id); });
-          } else {
-            ungroupedIds.forEach(function (id) { selectedIds.add(id); });
-          }
-          applyFilters();
-          renderGrid();
-          updateBulkBar();
-        });
-        groupChipRow.appendChild(ungroupedChip);
-      }
-
-      existing.appendChild(groupChipRow);
-    }
-
-    // ─── Action buttons row ─────────────────────────────────────
-    var actionsRow = document.createElement('div');
-    actionsRow.className = 'bulk-bar-actions';
-
-    // Assign group button
-    var groupBtn = document.createElement('button');
-    groupBtn.className = 'btn btn-primary';
-    groupBtn.textContent = '📦 Назначить группу';
-    groupBtn.disabled = selectedIds.size === 0;
-    groupBtn.addEventListener('click', function () { showBulkGroupPicker(); });
-    actionsRow.appendChild(groupBtn);
-
-    // Refresh selected button
-    var refreshSelBtn = document.createElement('button');
-    refreshSelBtn.className = 'btn';
-    refreshSelBtn.textContent = '🔄 Обновить';
-    refreshSelBtn.disabled = selectedIds.size === 0;
-    refreshSelBtn.addEventListener('click', function () { bulkAction('refresh'); });
-    actionsRow.appendChild(refreshSelBtn);
-
-    var pauseBtn = document.createElement('button');
-    pauseBtn.className = 'btn';
-    pauseBtn.textContent = 'Приостановить';
-    pauseBtn.disabled = selectedIds.size === 0;
-    pauseBtn.addEventListener('click', function () { bulkAction('pause'); });
-    actionsRow.appendChild(pauseBtn);
-
-    var resumeBtn = document.createElement('button');
-    resumeBtn.className = 'btn';
-    resumeBtn.textContent = 'Возобновить';
-    resumeBtn.disabled = selectedIds.size === 0;
-    resumeBtn.addEventListener('click', function () { bulkAction('resume'); });
-    actionsRow.appendChild(resumeBtn);
-
-    var deleteBtn = document.createElement('button');
-    deleteBtn.className = 'btn btn-danger';
-    deleteBtn.textContent = 'Удалить';
-    deleteBtn.disabled = selectedIds.size === 0;
-    deleteBtn.addEventListener('click', function () { bulkAction('delete'); });
-    actionsRow.appendChild(deleteBtn);
+    row.appendChild(toggleBtn);
 
     var cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn';
-    cancelBtn.textContent = 'Отмена';
+    cancelBtn.className = 'btn btn-sm';
+    cancelBtn.textContent = '✕';
+    cancelBtn.title = 'Выйти из режима выбора';
     cancelBtn.addEventListener('click', function () {
-      selectMode = false;
-      selectedIds.clear();
-      applyFilters();
-      renderGrid();
-      updateBulkBar();
+      selectMode = false; selectedIds.clear();
+      applyFilters(); renderGrid(); updateBulkBar();
     });
-    actionsRow.appendChild(cancelBtn);
+    row.appendChild(cancelBtn);
 
-    existing.appendChild(actionsRow);
+    existing.appendChild(row);
 
-    // ─── Progress bar (hidden by default) ───────────────────────
+    // Progress bar
     var progressContainer = document.createElement('div');
     progressContainer.id = 'bulk-progress';
     progressContainer.className = 'bulk-progress';
@@ -1584,6 +1483,12 @@ const Dashboard = (function () {
     progressContainer.innerHTML = '<div class="bulk-progress-bar"><div class="bulk-progress-fill"></div></div>'
       + '<span class="bulk-progress-text"></span>';
     existing.appendChild(progressContainer);
+  }
+
+  function createBulkSep() {
+    var sep = document.createElement('div');
+    sep.className = 'bulk-bar-sep';
+    return sep;
   }
 
   /**
@@ -1712,6 +1617,9 @@ const Dashboard = (function () {
     hideBulkProgress();
     showRefreshStatus('📦 Группа назначена: ' + (groupName || 'убрана') + ' (' + ids.length + ' трекеров)', false);
     setTimeout(hideRefreshStatus, 5000);
+    selectedIds.clear();
+    selectMode = false;
+    updateBulkBar();
     await loadTrackers();
   }
 
