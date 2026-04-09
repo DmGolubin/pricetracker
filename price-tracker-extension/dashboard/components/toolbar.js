@@ -178,6 +178,23 @@ const Toolbar = (function () {
 
     leftGroup.appendChild(extRefreshBtn);
 
+    // Auto-group button
+    var autoGroupBtn = document.createElement('button');
+    autoGroupBtn.className = 'btn btn-sm';
+    autoGroupBtn.type = 'button';
+    autoGroupBtn.id = 'toolbar-autogroup-btn';
+    autoGroupBtn.setAttribute('aria-label', 'Авто-группировка трекеров');
+    autoGroupBtn.title = 'Автоматически сгруппировать похожие товары';
+    var pkgIcon = _Icons ? _Icons.el('package', 16) : '📦';
+    autoGroupBtn.innerHTML = pkgIcon + ' Группы';
+    autoGroupBtn.addEventListener('click', function () {
+      if (typeof cb.onAutoGroup === 'function') {
+        cb.onAutoGroup();
+      }
+    });
+
+    leftGroup.appendChild(autoGroupBtn);
+
     // ─── Center group: Search + Filter + Sort ───────────────────
     var centerGroup = document.createElement('div');
     centerGroup.className = 'toolbar-group toolbar-group-center';

@@ -273,11 +273,48 @@ const Dashboard = (function () {
       var section = document.createElement('div');
       section.className = 'product-group-section';
 
+      // Best price summary for the group
+      var bestPrice = null;
+      var bestDomain = '';
+      trackersInGroup.forEach(function (t) {
+        var p = Number(t.currentPrice);
+        if (p > 0 && (bestPrice === null || p < bestPrice)) {
+          bestPrice = p;
+          bestDomain = extractDomain(t.pageUrl);
+        }
+      });
+
       var header = document.createElement('div');
       header.className = 'product-group-header';
+      header.style.cursor = 'pointer';
+      var bestInfo = bestPrice ? ' · 💰 ' + formatPrice(bestPrice) + ' (' + escapeHtml(bestDomain) + ')' : '';
       header.innerHTML = '<h3 class="product-group-title">' + escapeHtml(name)
-        + ' <span class="product-group-count">' + trackersInGroup.length + '</span></h3>';
+        + ' <span class="product-group-count">' + trackersInGroup.length + '</span>'
+        + '<span class="product-group-best">' + bestInfo + '</span>'
+        + '</h3>';
       section.appendChild(header);
+
+      // Comparison table (collapsed by default, toggle on header click)
+      var comparisonContainer = document.createElement('div');
+      comparisonContainer.className = 'product-group-comparison';
+      comparisonContainer.style.display = 'none';
+
+      if (_comparisonTable) {
+        var table = _comparisonTable.create(name, trackersInGroup, {
+          onRowClick: function (tracker) {
+            onCardClick(tracker);
+          },
+        });
+        comparisonContainer.appendChild(table);
+      }
+      section.appendChild(comparisonContainer);
+
+      // Toggle comparison table on header click
+      header.addEventListener('click', function () {
+        var isVisible = comparisonContainer.style.display !== 'none';
+        comparisonContainer.style.display = isVisible ? 'none' : '';
+        header.classList.toggle('expanded', !isVisible);
+      });
 
       var grid = document.createElement('div');
       grid.className = 'product-group-grid';
@@ -1022,6 +1059,38 @@ const Dashboard = (function () {
     updateBulkBar();
   }
 
+  // ─── Auto-Group ──────────────────────────────────────────────────
+
+  async function handleAutoGroup() {
+    var btn = document.getElementById('toolbar-autogroup-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="save-spinner"></span> Группировка...';
+    }
+
+    try {
+      var res = await fetch(API_BASE + '/trackers/auto-group', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      var result = await res.json();
+      var msg = 'Сгруппировано: ' + (result.grouped || 0) + ' трекеров';
+      if (result.newGroups) msg += ', ' + result.newGroups + ' новых групп';
+      showRefreshStatus('📦 ' + msg, false);
+      await loadTrackers();
+      setTimeout(hideRefreshStatus, 5000);
+    } catch (err) {
+      showRefreshStatus('Ошибка группировки: ' + (err.message || ''), false);
+      setTimeout(hideRefreshStatus, 5000);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        var pkgIcon = (typeof Icons !== 'undefined') ? Icons.el('package', 16) : '📦';
+        btn.innerHTML = pkgIcon + ' Группы';
+      }
+    }
+  }
+
   // ─── Import / Export ─────────────────────────────────────────────
 
   function handleExport() {
@@ -1171,6 +1240,7 @@ const Dashboard = (function () {
         onSort: onSortChange,
         onRefreshAll: handleRefreshAll,
         onRefreshExtension: handleExtensionRefresh,
+        onAutoGroup: handleAutoGroup,
         onSettingsClick: () => {
           if (typeof GlobalSettings !== 'undefined' && GlobalSettings.open) {
             GlobalSettings.open(modalContainer);

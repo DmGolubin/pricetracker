@@ -1278,6 +1278,22 @@
   margin-bottom: var(--spacing-md);
   padding-bottom: var(--spacing-sm);
   border-bottom: 1px solid var(--border-primary);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--transition-fast);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-left: calc(-1 * var(--spacing-md));
+  margin-right: calc(-1 * var(--spacing-md));
+}
+
+.product-group-header:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.product-group-header.expanded {
+  background-color: rgba(99, 102, 241, 0.08);
+  border-bottom-color: var(--accent-primary);
 }
 
 .product-group-title {
@@ -1297,6 +1313,26 @@
   background: var(--accent-primary-glow);
   padding: 2px 8px;
   border-radius: var(--radius-full);
+}
+
+.product-group-best {
+  font-size: var(--font-sm);
+  font-weight: 400;
+  color: var(--accent-green, #4CAF50);
+  margin-left: auto;
+}
+
+.product-group-comparison {
+  margin-bottom: var(--spacing-md);
+  animation: fadeIn 0.2s ease;
+}
+
+.product-group-comparison .comparison-table {
+  margin-bottom: var(--spacing-sm);
+}
+
+.product-group-comparison .best-price-summary {
+  font-size: var(--font-sm);
 }
 
 .product-group-grid {
