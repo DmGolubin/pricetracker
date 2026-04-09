@@ -1122,6 +1122,7 @@ const Dashboard = (function () {
     // "All" item
     var allItem = document.createElement('button');
     allItem.className = 'folder-sidebar-item' + (sidebarFilterGroup === null ? ' active' : '');
+    allItem.dataset.groupName = '__all__';
     allItem.innerHTML = '<span class="folder-sidebar-item-name">📋 Все трекеры</span>'
       + '<span class="folder-sidebar-item-count">' + allTrackers.length + '</span>';
     allItem.addEventListener('click', function () {
@@ -1137,6 +1138,7 @@ const Dashboard = (function () {
       var info = groupMap[name];
       var item = document.createElement('button');
       item.className = 'folder-sidebar-item' + (sidebarFilterGroup === name ? ' active' : '');
+      item.dataset.groupName = name;
       var shortName = name.length > 28 ? name.slice(0, 28) + '…' : name;
       var priceHtml = info.bestPrice ? '<span class="folder-sidebar-item-price">💰 ' + formatPrice(info.bestPrice) + '</span>' : '';
       item.innerHTML = '<span class="folder-sidebar-item-name">📦 ' + escapeHtml(shortName) + '</span>'
@@ -1155,6 +1157,7 @@ const Dashboard = (function () {
     if (ungroupedCount > 0) {
       var ugItem = document.createElement('button');
       ugItem.className = 'folder-sidebar-item' + (sidebarFilterGroup === '__ungrouped__' ? ' active' : '');
+      ugItem.dataset.groupName = '__ungrouped__';
       ugItem.innerHTML = '<span class="folder-sidebar-item-name">📎 Без группы</span>'
         + '<span class="folder-sidebar-item-count">' + ungroupedCount + '</span>';
       ugItem.addEventListener('click', function () {
@@ -1199,6 +1202,154 @@ const Dashboard = (function () {
         localStorage.setItem(SIDEBAR_KEY, sidebar.classList.contains('collapsed'));
       } catch (_) {}
     });
+  }
+
+  // ─── Drag & Drop to Sidebar Folders ────────────────────────────
+
+  var dragState = null; // { trackerIds: [], ghost: HTMLElement }
+
+  function initDragAndDrop() {
+    document.addEventListener('mousedown', onDragMouseDown);
+    document.addEventListener('mousemove', onDragMouseMove);
+    document.addEventListener('mouseup', onDragMouseUp);
+  }
+
+  function onDragMouseDown(e) {
+    var card = e.target.closest('.tracker-card');
+    if (!card) return;
+    if (e.target.closest('.tracker-card-refresh') || e.target.closest('.tracker-card-checkbox') || e.target.closest('.btn-icon')) return;
+    if (e.button !== 0) return;
+
+    var trackerId = card.dataset.trackerId;
+    if (!trackerId) return;
+
+    // Determine which trackers to drag
+    var ids = [];
+    if (selectMode && selectedIds.size > 0 && selectedIds.has(Number(trackerId))) {
+      ids = Array.from(selectedIds);
+    } else {
+      ids = [Number(trackerId)];
+    }
+
+    // Store start position — only start drag after 8px movement
+    dragState = {
+      trackerIds: ids,
+      startX: e.clientX,
+      startY: e.clientY,
+      ghost: null,
+      dragging: false,
+      sourceCard: card,
+    };
+  }
+
+  function onDragMouseMove(e) {
+    if (!dragState) return;
+
+    if (!dragState.dragging) {
+      var dx = e.clientX - dragState.startX;
+      var dy = e.clientY - dragState.startY;
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      // Start dragging
+      dragState.dragging = true;
+      dragState.sourceCard.classList.add('dragging');
+      createDragGhost(e);
+      // Expand sidebar if collapsed
+      var sidebar = document.getElementById('folder-sidebar');
+      if (sidebar && sidebar.classList.contains('collapsed')) {
+        sidebar.classList.remove('collapsed');
+        renderFolderSidebar();
+      }
+    }
+
+    // Move ghost
+    if (dragState.ghost) {
+      dragState.ghost.style.left = (e.clientX + 12) + 'px';
+      dragState.ghost.style.top = (e.clientY - 20) + 'px';
+    }
+
+    // Highlight sidebar item under cursor
+    var sidebarItems = document.querySelectorAll('.folder-sidebar-item');
+    sidebarItems.forEach(function (item) {
+      var rect = item.getBoundingClientRect();
+      if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        item.classList.add('drag-over');
+      } else {
+        item.classList.remove('drag-over');
+      }
+    });
+  }
+
+  function onDragMouseUp(e) {
+    if (!dragState) return;
+
+    if (dragState.dragging) {
+      // Find drop target
+      var dropTarget = document.querySelector('.folder-sidebar-item.drag-over');
+      if (dropTarget) {
+        var groupName = dropTarget.dataset.groupName || '';
+        if (groupName === '__all__') groupName = null;
+        if (groupName !== null) {
+          var targetGroup = groupName === '__ungrouped__' ? '' : groupName;
+          applyDragDrop(dragState.trackerIds, targetGroup);
+        }
+      }
+
+      // Cleanup
+      dragState.sourceCard.classList.remove('dragging');
+      if (dragState.ghost) dragState.ghost.remove();
+      document.querySelectorAll('.folder-sidebar-item.drag-over').forEach(function (el) {
+        el.classList.remove('drag-over');
+      });
+    }
+
+    dragState = null;
+  }
+
+  function createDragGhost(e) {
+    var ghost = document.createElement('div');
+    ghost.className = 'drag-ghost';
+
+    // Show first tracker's image or name
+    var tracker = allTrackers.find(function (t) { return t.id === dragState.trackerIds[0]; });
+    if (tracker && tracker.imageUrl) {
+      var img = document.createElement('img');
+      img.src = tracker.imageUrl;
+      img.style.cssText = 'width:100%;height:80px;object-fit:cover;display:block';
+      ghost.appendChild(img);
+    }
+    var label = document.createElement('div');
+    label.style.cssText = 'padding:6px 10px;font-size:11px;color:var(--text-primary);background:var(--bg-card)';
+    label.textContent = (tracker ? tracker.productName : '').slice(0, 30);
+    ghost.appendChild(label);
+
+    // Count badge if multiple
+    if (dragState.trackerIds.length > 1) {
+      var badge = document.createElement('div');
+      badge.className = 'drag-count-badge';
+      badge.textContent = dragState.trackerIds.length;
+      ghost.appendChild(badge);
+    }
+
+    ghost.style.left = (e.clientX + 12) + 'px';
+    ghost.style.top = (e.clientY - 20) + 'px';
+    document.body.appendChild(ghost);
+    dragState.ghost = ghost;
+  }
+
+  async function applyDragDrop(trackerIds, groupName) {
+    for (var i = 0; i < trackerIds.length; i++) {
+      try {
+        await sendMessage({ action: 'updateTracker', trackerId: trackerIds[i], data: { productGroup: groupName } });
+        var t = allTrackers.find(function (t) { return t.id === trackerIds[i]; });
+        if (t) t.productGroup = groupName;
+      } catch (_) {}
+    }
+    var msg = groupName ? '📦 Перемещено в "' + groupName + '"' : '📎 Убрано из группы';
+    showRefreshStatus(msg + ' (' + trackerIds.length + ')', false);
+    setTimeout(hideRefreshStatus, 3000);
+    applyFilters();
+    renderGrid();
+    renderFolderSidebar();
   }
 
   // ─── Multiselect / Bulk Operations ─────────────────────────────
@@ -1982,6 +2133,9 @@ const Dashboard = (function () {
 
     // Initialise folder sidebar
     initFolderSidebar();
+
+    // Initialise drag & drop
+    initDragAndDrop();
 
     // Load trackers
     loadTrackers();

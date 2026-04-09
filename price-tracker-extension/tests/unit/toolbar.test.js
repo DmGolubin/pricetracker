@@ -117,11 +117,12 @@ describe('Toolbar', () => {
       Toolbar.init(container, {});
       const rightGroup = container.querySelector('.toolbar-group-right');
       const btns = rightGroup.querySelectorAll('.btn-icon');
-      expect(btns.length).toBe(4);
+      expect(btns.length).toBe(5);
       expect(btns[0].getAttribute('aria-label')).toBe('Экспорт трекеров');
       expect(btns[1].getAttribute('aria-label')).toBe('Импорт трекеров');
       expect(btns[2].getAttribute('aria-label')).toBe('Выбрать трекеры');
-      expect(btns[3].getAttribute('aria-label')).toBe('Открыть настройки');
+      // btns[3] is grid size toggle
+      expect(btns[4].getAttribute('aria-label')).toBe('Открыть настройки');
     });
 
     test('has dividers between groups', () => {

@@ -316,6 +316,45 @@ const Toolbar = (function () {
     rightGroup.appendChild(exportBtn);
     rightGroup.appendChild(importBtn);
     rightGroup.appendChild(selectBtn);
+
+    // Grid size toggle (compact / normal / large)
+    var GRID_SIZE_KEY = 'priceTracker_gridSize';
+    var gridSizes = ['normal', 'compact', 'large'];
+    var gridLabels = { normal: 'Обычный', compact: 'Компактный', large: 'Крупный' };
+    var gridIcons = { normal: '▦', compact: '▤', large: '▣' };
+    var currentGridSize = 'normal';
+    try { currentGridSize = localStorage.getItem(GRID_SIZE_KEY) || 'normal'; } catch (e) {}
+
+    var gridSizeBtn = document.createElement('button');
+    gridSizeBtn.className = 'btn-icon';
+    gridSizeBtn.type = 'button';
+    gridSizeBtn.id = 'toolbar-grid-size-btn';
+    gridSizeBtn.setAttribute('aria-label', 'Размер карточек: ' + gridLabels[currentGridSize]);
+    gridSizeBtn.title = 'Размер: ' + gridLabels[currentGridSize];
+    gridSizeBtn.textContent = gridIcons[currentGridSize];
+    gridSizeBtn.addEventListener('click', function () {
+      var idx = gridSizes.indexOf(currentGridSize);
+      currentGridSize = gridSizes[(idx + 1) % gridSizes.length];
+      try { localStorage.setItem(GRID_SIZE_KEY, currentGridSize); } catch (e) {}
+      gridSizeBtn.textContent = gridIcons[currentGridSize];
+      gridSizeBtn.title = 'Размер: ' + gridLabels[currentGridSize];
+      // Apply grid class
+      var grid = document.getElementById('tracker-grid');
+      if (grid) {
+        grid.classList.remove('grid-compact', 'grid-large');
+        if (currentGridSize !== 'normal') grid.classList.add('grid-' + currentGridSize);
+      }
+    });
+
+    // Apply saved grid size on init
+    setTimeout(function () {
+      var grid = document.getElementById('tracker-grid');
+      if (grid && currentGridSize !== 'normal') {
+        grid.classList.add('grid-' + currentGridSize);
+      }
+    }, 0);
+
+    rightGroup.appendChild(gridSizeBtn);
     rightGroup.appendChild(settingsBtn);
 
     // ─── Assemble toolbar with dividers ─────────────────────────

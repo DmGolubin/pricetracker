@@ -99,17 +99,18 @@
 .folder-sidebar-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xs) var(--spacing-sm);
+  gap: var(--spacing-xs);
+  padding: 8px var(--spacing-sm);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), transform 0.1s ease;
   border: none;
   background: none;
   width: 100%;
   text-align: left;
   color: var(--text-secondary);
   font-size: var(--font-xs);
+  min-height: 36px;
 }
 
 .folder-sidebar-item:hover {
@@ -121,6 +122,13 @@
   background: var(--accent-primary-glow);
   color: var(--accent-primary);
   font-weight: 600;
+}
+
+.folder-sidebar-item.drag-over {
+  background: rgba(99, 102, 241, 0.2);
+  outline: 2px dashed var(--accent-primary);
+  outline-offset: -2px;
+  transform: scale(1.02);
 }
 
 .folder-sidebar-item-name {
@@ -181,6 +189,82 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--spacing-lg);
+}
+
+/* Card size variants */
+.tracker-grid.grid-compact {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.tracker-grid.grid-compact .tracker-card-image img {
+  height: 120px;
+}
+
+.tracker-grid.grid-compact .tracker-card-body {
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.tracker-grid.grid-compact .tracker-card-name {
+  font-size: 12px;
+  -webkit-line-clamp: 1;
+}
+
+.tracker-grid.grid-large {
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+
+/* Also apply to product-group-grid */
+.product-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.tracker-grid.grid-compact ~ .product-group-grid,
+.grid-compact .product-group-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--spacing-md);
+}
+
+/* Drag & drop styles */
+.tracker-card.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+.folder-sidebar-item.drag-over {
+  background: var(--accent-primary-glow);
+  outline: 2px dashed var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 10000;
+  opacity: 0.85;
+  transform: rotate(2deg) scale(0.8);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius-lg);
+  max-width: 200px;
+  overflow: hidden;
+}
+
+.drag-count-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--accent-primary);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ===== Empty State ===== */
@@ -292,6 +376,9 @@
 @media (min-width: 1200px) {
   .tracker-grid {
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+  .tracker-grid.grid-compact {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
 }
 
