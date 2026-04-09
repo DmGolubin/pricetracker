@@ -241,14 +241,17 @@
 
 .drag-ghost {
   position: fixed;
+  top: 0;
+  left: 0;
   pointer-events: none;
   z-index: 10000;
   opacity: 0.85;
-  transform: rotate(2deg) scale(0.8);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   border-radius: var(--radius-lg);
-  max-width: 200px;
+  max-width: 180px;
   overflow: hidden;
+  will-change: transform;
+  transition: none;
 }
 
 .drag-count-badge {

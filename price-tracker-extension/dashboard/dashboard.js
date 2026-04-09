@@ -1210,8 +1210,6 @@ const Dashboard = (function () {
 
   function initDragAndDrop() {
     document.addEventListener('mousedown', onDragMouseDown);
-    document.addEventListener('mousemove', onDragMouseMove);
-    document.addEventListener('mouseup', onDragMouseUp);
   }
 
   function onDragMouseDown(e) {
@@ -1223,7 +1221,6 @@ const Dashboard = (function () {
     var trackerId = card.dataset.trackerId;
     if (!trackerId) return;
 
-    // Determine which trackers to drag
     var ids = [];
     if (selectMode && selectedIds.size > 0 && selectedIds.has(Number(trackerId))) {
       ids = Array.from(selectedIds);
@@ -1231,7 +1228,6 @@ const Dashboard = (function () {
       ids = [Number(trackerId)];
     }
 
-    // Store start position — only start drag after 8px movement
     dragState = {
       trackerIds: ids,
       startX: e.clientX,
@@ -1239,7 +1235,14 @@ const Dashboard = (function () {
       ghost: null,
       dragging: false,
       sourceCard: card,
+      rafId: null,
+      lastX: e.clientX,
+      lastY: e.clientY,
     };
+
+    // Bind move/up only while mouse is down (avoids constant listeners)
+    document.addEventListener('mousemove', onDragMouseMove);
+    document.addEventListener('mouseup', onDragMouseUp);
   }
 
   function onDragMouseMove(e) {
@@ -1248,11 +1251,16 @@ const Dashboard = (function () {
     if (!dragState.dragging) {
       var dx = e.clientX - dragState.startX;
       var dy = e.clientY - dragState.startY;
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      // Start dragging
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+
+      // Prevent text selection
+      e.preventDefault();
       dragState.dragging = true;
+      document.body.style.userSelect = 'none';
+      document.body.style.webkitUserSelect = 'none';
       dragState.sourceCard.classList.add('dragging');
       createDragGhost(e);
+
       // Expand sidebar if collapsed
       var sidebar = document.getElementById('folder-sidebar');
       if (sidebar && sidebar.classList.contains('collapsed')) {
@@ -1261,42 +1269,53 @@ const Dashboard = (function () {
       }
     }
 
-    // Move ghost
-    if (dragState.ghost) {
-      dragState.ghost.style.left = (e.clientX + 12) + 'px';
-      dragState.ghost.style.top = (e.clientY - 20) + 'px';
+    if (!dragState.dragging) return;
+    e.preventDefault();
+
+    // Store position, use rAF for smooth ghost movement
+    dragState.lastX = e.clientX;
+    dragState.lastY = e.clientY;
+
+    if (!dragState.rafId) {
+      dragState.rafId = requestAnimationFrame(function () {
+        dragState.rafId = null;
+        if (!dragState || !dragState.ghost) return;
+        dragState.ghost.style.transform = 'translate(' + (dragState.lastX + 12) + 'px,' + (dragState.lastY - 20) + 'px) rotate(2deg) scale(0.8)';
+      });
     }
 
     // Highlight sidebar item under cursor
     var sidebarItems = document.querySelectorAll('.folder-sidebar-item');
-    sidebarItems.forEach(function (item) {
-      var rect = item.getBoundingClientRect();
-      if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-        item.classList.add('drag-over');
-      } else {
-        item.classList.remove('drag-over');
-      }
-    });
+    for (var i = 0; i < sidebarItems.length; i++) {
+      var rect = sidebarItems[i].getBoundingClientRect();
+      var isOver = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+      sidebarItems[i].classList.toggle('drag-over', isOver);
+    }
   }
 
   function onDragMouseUp(e) {
+    document.removeEventListener('mousemove', onDragMouseMove);
+    document.removeEventListener('mouseup', onDragMouseUp);
+
     if (!dragState) return;
 
+    // Restore text selection
+    document.body.style.userSelect = '';
+    document.body.style.webkitUserSelect = '';
+
     if (dragState.dragging) {
-      // Find drop target
       var dropTarget = document.querySelector('.folder-sidebar-item.drag-over');
       if (dropTarget) {
         var groupName = dropTarget.dataset.groupName || '';
-        if (groupName === '__all__') groupName = null;
-        if (groupName !== null) {
+        if (groupName !== '__all__') {
           var targetGroup = groupName === '__ungrouped__' ? '' : groupName;
           applyDragDrop(dragState.trackerIds, targetGroup);
         }
       }
 
-      // Cleanup
       dragState.sourceCard.classList.remove('dragging');
       if (dragState.ghost) dragState.ghost.remove();
+      if (dragState.rafId) cancelAnimationFrame(dragState.rafId);
       document.querySelectorAll('.folder-sidebar-item.drag-over').forEach(function (el) {
         el.classList.remove('drag-over');
       });
@@ -1330,8 +1349,7 @@ const Dashboard = (function () {
       ghost.appendChild(badge);
     }
 
-    ghost.style.left = (e.clientX + 12) + 'px';
-    ghost.style.top = (e.clientY - 20) + 'px';
+    ghost.style.transform = 'translate(' + (e.clientX + 12) + 'px,' + (e.clientY - 20) + 'px) rotate(2deg) scale(0.8)';
     document.body.appendChild(ghost);
     dragState.ghost = ghost;
   }
