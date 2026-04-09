@@ -811,6 +811,10 @@ const Dashboard = (function () {
    * Main refresh handler — respects the global checkMethod setting.
    */
   async function handleRefreshAll() {
+    // If a folder is selected in sidebar, refresh only those trackers
+    if (sidebarFilterGroup !== null) {
+      return handleRefreshFiltered();
+    }
     var method = await getGlobalCheckMethod();
     if (method === 'extension') {
       return handleExtensionRefresh();
@@ -819,6 +823,51 @@ const Dashboard = (function () {
       return handleHybridRefresh();
     }
     return handleServerRefresh();
+  }
+
+  /**
+   * Refresh only the currently filtered/visible trackers (e.g. a specific folder).
+   */
+  async function handleRefreshFiltered() {
+    var ids = filteredTrackers.map(function (t) { return t.id; });
+    if (ids.length === 0) {
+      showToast('Нет трекеров для обновления', 'info');
+      return;
+    }
+
+    var folderName = sidebarFilterGroup === '__ungrouped__' ? 'Без группы' : sidebarFilterGroup;
+    if (!confirm('Обновить ' + ids.length + ' трекеров в "' + folderName + '"?')) return;
+
+    var refreshBtn = document.getElementById('toolbar-refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.innerHTML = '<span class="save-spinner"></span> ' + ids.length + '...';
+    }
+
+    showRefreshStatus('🔄 Обновление "' + folderName + '": 0/' + ids.length, false);
+
+    var errors = 0;
+    for (var i = 0; i < ids.length; i++) {
+      try {
+        await sendMessage({ action: 'checkPrice', trackerId: ids[i] });
+      } catch (_) {
+        errors++;
+      }
+      showRefreshStatus('🔄 Обновление "' + folderName + '": ' + (i + 1) + '/' + ids.length, false);
+    }
+
+    var msg = '✅ ' + folderName + ': обновлено ' + (ids.length - errors) + '/' + ids.length;
+    if (errors > 0) msg += ' (ошибок: ' + errors + ')';
+    showRefreshStatus(msg, false);
+    setTimeout(hideRefreshStatus, 5000);
+
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      var refreshIcon = (typeof Icons !== 'undefined') ? Icons.el('refresh', 18) : '';
+      refreshBtn.innerHTML = refreshIcon + ' Обновить все';
+    }
+
+    await loadTrackers();
   }
 
   /**
