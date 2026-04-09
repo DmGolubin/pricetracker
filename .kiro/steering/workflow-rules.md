@@ -43,6 +43,7 @@
 - Карточки — `.card` с glassmorphism и hover-эффектами.
 - Skeleton-лоадеры при загрузке данных.
 - Ripple-эффект на `.btn` элементах (реализован в `dashboard.js` → `initRipple()`).
+- Toast-уведомления — `showToast(message, type)` в `dashboard.js`. Типы: `success`, `error`, `info`. Классы: `.toast`, `.toast-success`, `.toast-error`, `.toast-info`. Использовать вместо `alert()` для информационных сообщений. `confirm()` оставлять только для деструктивных действий (удаление).
 
 ## Тестирование
 
