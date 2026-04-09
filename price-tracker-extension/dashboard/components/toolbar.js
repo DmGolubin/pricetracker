@@ -327,11 +327,11 @@ const Toolbar = (function () {
     rightGroup.appendChild(importBtn);
     rightGroup.appendChild(selectBtn);
 
-    // Grid size toggle (compact / normal / large)
+    // Grid size toggle (compact / normal / large / table)
     var GRID_SIZE_KEY = 'priceTracker_gridSize';
-    var gridSizes = ['normal', 'compact', 'large'];
-    var gridLabels = { normal: 'Обычный', compact: 'Компактный', large: 'Крупный' };
-    var gridIcons = { normal: '▦', compact: '▤', large: '▣' };
+    var gridSizes = ['normal', 'compact', 'large', 'table'];
+    var gridLabels = { normal: 'Обычный', compact: 'Компактный', large: 'Крупный', table: 'Таблица' };
+    var gridIcons = { normal: '▦', compact: '▤', large: '▣', table: '☰' };
     var currentGridSize = 'normal';
     try { currentGridSize = localStorage.getItem(GRID_SIZE_KEY) || 'normal'; } catch (e) {}
 
@@ -351,7 +351,7 @@ const Toolbar = (function () {
       // Apply grid class
       var grid = document.getElementById('tracker-grid');
       if (grid) {
-        grid.classList.remove('grid-compact', 'grid-large');
+        grid.classList.remove('grid-compact', 'grid-large', 'grid-table');
         if (currentGridSize !== 'normal') grid.classList.add('grid-' + currentGridSize);
       }
     });

@@ -38,6 +38,7 @@ Price Tracker — система отслеживания цен на товар
 
 ### REST API эндпоинты
 - `GET/POST /trackers`, `GET/PUT/DELETE /trackers/:id`
+- `PUT /trackers/batch` — пакетное обновление нескольких трекеров (до 100 за раз)
 - `POST /trackers/auto-group` — автогруппировка в существующие группы (без создания новых)
 - `GET /trackers/auto-group/suggest` — предложения группировки (preview)
 - `POST /trackers/auto-group/apply` — применить выбранные предложения

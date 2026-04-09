@@ -264,6 +264,14 @@ const Dashboard = (function () {
       return;
     }
 
+    // Check if table view is active
+    var gridEl = document.getElementById('tracker-grid');
+    var isTableView = gridEl && gridEl.classList.contains('grid-table');
+    if (isTableView) {
+      renderTableView();
+      return;
+    }
+
     var trackersToShow = filteredTrackers.slice(0, displayCount);
     trackersToShow.forEach((tracker, index) => {
       const cardEl = renderTrackerCard(tracker);
@@ -279,6 +287,112 @@ const Dashboard = (function () {
 
     // Search highlighting
     highlightSearchMatches();
+
+    // "Load more" button for pagination
+    renderLoadMoreButton();
+  }
+
+  /**
+   * Render trackers as a compact table view.
+   */
+  function renderTableView() {
+    var trackersToShow = filteredTrackers.slice(0, displayCount);
+    var table = document.createElement('table');
+    table.className = 'tracker-table';
+
+    // Header
+    var thead = document.createElement('thead');
+    thead.innerHTML = '<tr>' +
+      '<th>⭐</th>' +
+      '<th>Название</th>' +
+      '<th>Магазин</th>' +
+      '<th>Цена</th>' +
+      '<th>Мин</th>' +
+      '<th>Макс</th>' +
+      '<th>Статус</th>' +
+      '<th>Проверено</th>' +
+      '</tr>';
+    table.appendChild(thead);
+
+    // Body
+    var tbody = document.createElement('tbody');
+    trackersToShow.forEach(function (tracker) {
+      var tr = document.createElement('tr');
+      if (tracker.status === 'updated' || tracker.unread) {
+        tr.style.background = 'rgba(99, 102, 241, 0.05)';
+      }
+
+      var starClass = tracker.starred ? 'table-star starred' : 'table-star';
+      var domain = extractDomain(tracker.pageUrl);
+      var price = formatPrice(tracker.currentPrice);
+      var minP = formatPrice(tracker.minPrice);
+      var maxP = formatPrice(tracker.maxPrice);
+
+      var statusMap = {
+        active: '🟢',
+        updated: '🔵',
+        paused: '⏸️',
+        error: '🔴'
+      };
+      var statusIcon = statusMap[tracker.status] || '⚪';
+
+      var checkedAt = '';
+      if (tracker.lastCheckedAt) {
+        var d = new Date(tracker.lastCheckedAt);
+        var now = new Date();
+        var diffMs = now - d;
+        var diffH = Math.floor(diffMs / 3600000);
+        if (diffH < 1) {
+          checkedAt = Math.floor(diffMs / 60000) + ' мин';
+        } else if (diffH < 24) {
+          checkedAt = diffH + ' ч';
+        } else {
+          checkedAt = Math.floor(diffH / 24) + ' д';
+        }
+      }
+
+      var name = escapeHtml(tracker.productName || 'Без названия');
+
+      tr.innerHTML = '<td><span class="' + starClass + '">★</span></td>' +
+        '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + name + '</td>' +
+        '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(domain) + '</td>' +
+        '<td class="table-price">' + price + '</td>' +
+        '<td>' + minP + '</td>' +
+        '<td>' + maxP + '</td>' +
+        '<td style="text-align:center">' + statusIcon + '</td>' +
+        '<td>' + checkedAt + '</td>';
+
+      tr.addEventListener('click', function (e) {
+        if (e.target.closest('.table-star')) {
+          e.stopPropagation();
+          return;
+        }
+        onCardClick(tracker);
+      });
+
+      // Star toggle
+      var starEl = tr.querySelector('.table-star');
+      if (starEl) {
+        starEl.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var newStarred = !tracker.starred;
+          fetch(API_BASE + '/trackers/' + encodeURIComponent(tracker.id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ starred: newStarred })
+          }).then(function (res) { return res.json(); })
+            .then(function (updated) {
+              if (updated && updated.id) {
+                onTrackerUpdated(updated);
+              }
+            }).catch(function () {});
+        });
+      }
+
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    trackerGrid.appendChild(table);
 
     // "Load more" button for pagination
     renderLoadMoreButton();
@@ -1156,6 +1270,58 @@ const Dashboard = (function () {
   const API_BASE = 'https://pricetracker-production-ac69.up.railway.app';
 
   /**
+   * Update favicon with unread/updated tracker count badge.
+   */
+  function updateFaviconBadge() {
+    var unreadCount = allTrackers.filter(function (t) {
+      return t.unread === true || t.status === 'updated';
+    }).length;
+
+    var link = document.querySelector('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+
+    if (unreadCount === 0) {
+      link.href = '../icons/icon16.png';
+      document.title = 'Price Tracker — Dashboard';
+      return;
+    }
+
+    // Draw badge on canvas
+    var canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    var ctx = canvas.getContext('2d');
+
+    // Draw base icon (simple chart icon)
+    ctx.fillStyle = '#6366f1';
+    ctx.beginPath();
+    ctx.arc(16, 16, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('PT', 16, 16);
+
+    // Draw red badge
+    var badgeText = unreadCount > 99 ? '99+' : String(unreadCount);
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(26, 8, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText(badgeText, 26, 8);
+
+    link.href = canvas.toDataURL('image/png');
+    document.title = '(' + unreadCount + ') Price Tracker — Dashboard';
+  }
+
+  /**
    * Load all trackers directly from API.
    */
   async function loadTrackers() {
@@ -1185,6 +1351,9 @@ const Dashboard = (function () {
 
     // Update folder sidebar
     renderFolderSidebar();
+
+    // Update favicon badge with unread count
+    updateFaviconBadge();
 
     // Update last checked indicator
     updateLastCheckedIndicator();
@@ -2465,6 +2634,7 @@ const Dashboard = (function () {
     }
     applyFilters();
     renderGrid();
+    updateFaviconBadge();
     showToast('Отмечено как прочитанные: ' + unreadTrackers.length, 'success');
   }
 
@@ -2650,6 +2820,7 @@ const Dashboard = (function () {
     bulkAction,
     showToast,
     handleMarkAllRead,
+    updateFaviconBadge,
   };
 })();
 

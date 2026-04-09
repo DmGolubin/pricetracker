@@ -368,6 +368,54 @@ app.post('/trackers', async (req, res) => {
   }
 });
 
+// Batch update multiple trackers
+app.put('/trackers/batch', async (req, res) => {
+  try {
+    const updates = req.body.updates || [];
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({ error: 'No updates provided' });
+    }
+    if (updates.length > 100) {
+      return res.status(400).json({ error: 'Max 100 updates per batch' });
+    }
+    const results = [];
+    for (const u of updates) {
+      if (!u.id || !u.data) continue;
+      try {
+        const fields = [];
+        const values = [];
+        let idx = 1;
+        const allowed = [
+          'productName', 'imageUrl', 'checkIntervalHours', 'status',
+          'checkMode', 'productGroup', 'notificationsEnabled', 'starred',
+          'checkMethod',
+        ];
+        for (const key of allowed) {
+          if (u.data[key] !== undefined) {
+            fields.push(`"${key}" = $${idx}`);
+            values.push(u.data[key]);
+            idx++;
+          }
+        }
+        if (fields.length > 0) {
+          values.push(u.id);
+          const { rows } = await pool.query(
+            `UPDATE trackers SET ${fields.join(', ')}, "updatedAt" = NOW() WHERE id = $${idx} RETURNING *`,
+            values
+          );
+          results.push({ id: u.id, success: true, tracker: rows[0] });
+        }
+      } catch (err) {
+        results.push({ id: u.id, success: false, error: err.message });
+      }
+    }
+    res.json({ results });
+  } catch (err) {
+    console.error('PUT /trackers/batch error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.put('/trackers/:id', async (req, res) => {
   try {
     const d = req.body;

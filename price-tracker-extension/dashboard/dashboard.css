@@ -235,6 +235,53 @@
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
 }
 
+/* Table view mode */
+.tracker-grid.grid-table {
+  display: block;
+}
+.tracker-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+.tracker-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-primary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tracker-table th:hover { color: var(--text-primary); }
+.tracker-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+}
+.tracker-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tracker-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.tracker-table .table-price {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.tracker-table .table-star {
+  cursor: pointer;
+  font-size: 16px;
+  opacity: 0.3;
+}
+.tracker-table .table-star.starred { opacity: 1; }
+
 /* Also apply to product-group-grid */
 .product-group-grid {
   display: grid;
