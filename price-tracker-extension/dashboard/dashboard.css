@@ -601,6 +601,16 @@
   font-weight: 500;
 }
 
+.tracker-card-vol-tag {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
 .tracker-card-name {
   font-size: var(--font-md);
   font-weight: 600;

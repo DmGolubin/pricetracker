@@ -156,6 +156,24 @@ const TrackerCard = (function () {
     }
   }
 
+  /**
+   * Extract volume (ml) from product name.
+   * @param {string} name
+   * @returns {{volume: number|null, label: string}}
+   */
+  function extractVolume(name) {
+    if (!name) return { volume: null, label: '' };
+    var m = name.match(/(\d+)\s*(?:ml|мл)\b/i);
+    if (m) return { volume: parseInt(m[1]), label: m[1] + ' мл' };
+    m = name.match(/\/(\d+)\s*ml/i);
+    if (m) return { volume: parseInt(m[1]), label: m[1] + ' мл' };
+    m = name.match(/[-–—]\s*(\d{2,3})\s*$/);
+    if (m) { var v = parseInt(m[1]); if (v >= 5 && v <= 200) return { volume: v, label: v + ' мл' }; }
+    m = name.match(/,\s*(\d+)\s*мл/i);
+    if (m) return { volume: parseInt(m[1]), label: m[1] + ' мл' };
+    return { volume: null, label: '' };
+  }
+
   // ─── Card creation ────────────────────────────────────────────────
 
   /**
@@ -228,6 +246,12 @@ const TrackerCard = (function () {
     html += '<span class="status-indicator ' + getStatusClass(tracker.status) + '"'
           + ' role="img" aria-label="Status: ' + getStatusLabel(tracker.status) + '"></span>';
     html += '<span class="tracker-card-domain text-truncate">' + escapeHtml(domain) + '</span>';
+
+    // Volume tag (extracted from product name)
+    var volInfo = extractVolume(tracker.productName);
+    if (volInfo.label) {
+      html += '<span class="tracker-card-vol-tag">📏 ' + escapeHtml(volInfo.label) + '</span>';
+    }
     if (tracker.isAutoDetected) {
       html += '<span class="badge-auto" title="Auto-detected" aria-label="Auto-detected tracker">'
             + (_Icons ? _Icons.el('auto-detect', 14) : 'A') + '</span>';

@@ -34,7 +34,7 @@ Price Tracker — система отслеживания цен на товар
 Таблицы:
 - `trackers` — трекеры (pageUrl, cssSelector, productName, currentPrice, minPrice, maxPrice, productGroup, status, starred, thresholdConfig и т.д.)
 - `price_history` — история цен (trackerId, price, checkedAt)
-- `settings` — глобальные настройки (id='global', thresholdConfig, telegramBotToken, telegramChatId, telegramPersonalChatId, telegramDigestEnabled, siteCookies, checkMethod)
+- `settings` — глобальные настройки (id='global', thresholdConfig, telegramBotToken, telegramChatId, telegramPersonalChatId, telegramDigestEnabled, siteCookies, checkMethod, apiToken)
 
 ### REST API эндпоинты
 - `GET/POST /trackers`, `GET/PUT/DELETE /trackers/:id`
