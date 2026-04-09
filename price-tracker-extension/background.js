@@ -109,7 +109,7 @@ function getMessageHandler(message, sender) {
       return handleCheckAllPrices(CheckMethod.EXTENSION);
 
     case MessageToSW.CHECK_PRICE:
-      return apiClient.serverCheckSingle(message.trackerId);
+      return handleCheckSingle(message.trackerId);
 
     case MessageToSW.CHECK_PRICE_EXTENSION:
       return handleExtensionCheckSingle(message.trackerId);
@@ -370,6 +370,35 @@ async function handleExtensionCheckSingle(trackerId) {
 }
 
 /**
+ * Check a single tracker — respects per-tracker and global checkMethod.
+ * @param {string} trackerId
+ * @returns {Promise<Object>}
+ */
+async function handleCheckSingle(trackerId) {
+  var tracker = null;
+  try { tracker = await apiClient.getTracker(trackerId); } catch (_) {}
+  var method = await getCheckMethod(tracker);
+
+  if (method === CheckMethod.EXTENSION) {
+    await priceChecker.checkPrice(trackerId, extensionCheckDeps);
+    return { method: 'extension' };
+  }
+
+  if (method === CheckMethod.HYBRID) {
+    try {
+      var result = await apiClient.serverCheckSingle(trackerId);
+      return Object.assign({ method: 'hybrid-server' }, result);
+    } catch (_) {
+      await priceChecker.checkPrice(trackerId, extensionCheckDeps);
+      return { method: 'hybrid-extension' };
+    }
+  }
+
+  // Default: server
+  return apiClient.serverCheckSingle(trackerId);
+}
+
+/**
  * Save global settings and update API base URL.
  */
 async function handleSaveSettings(settings) {
@@ -535,6 +564,7 @@ var _bgExports = {
   handleDeleteTracker: handleDeleteTracker,
   handleUpdateTracker: handleUpdateTracker,
   handleCheckAllPrices: handleCheckAllPrices,
+  handleCheckSingle: handleCheckSingle,
   handleExtensionCheckSingle: handleExtensionCheckSingle,
   handleSaveSettings: handleSaveSettings,
   handleMarkAsRead: handleMarkAsRead,
