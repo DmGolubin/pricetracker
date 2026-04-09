@@ -219,9 +219,9 @@ async function handleElementSelected(message) {
   // Schedule alarm for periodic checks
   alarmManager.scheduleTracker(tracker.id, tracker.checkIntervalHours);
 
-  // Run first price check via server-side Puppeteer (no browser tabs opened)
+  // Run first price check respecting the global checkMethod setting
   setTimeout(function () {
-    apiClient.serverCheckSingle(tracker.id)
+    handleCheckSingle(tracker.id)
       .then(function () {
         // Notify open dashboard/popup that this tracker was updated
         chrome.runtime.sendMessage({
@@ -230,7 +230,7 @@ async function handleElementSelected(message) {
         }).catch(function () {});
       })
       .catch(function (err) {
-        console.warn('Server check for new tracker #' + tracker.id + ' failed:', err);
+        console.warn('First check for new tracker #' + tracker.id + ' failed:', err);
       });
   }, 2000);
 
@@ -258,9 +258,9 @@ async function handleAutoDetected(message) {
   // Schedule alarm for periodic checks
   alarmManager.scheduleTracker(tracker.id, tracker.checkIntervalHours);
 
-  // Run first price check via server-side Puppeteer (no browser tabs opened)
+  // Run first price check respecting the global checkMethod setting
   setTimeout(function () {
-    apiClient.serverCheckSingle(tracker.id)
+    handleCheckSingle(tracker.id)
       .then(function () {
         chrome.runtime.sendMessage({
           action: _c.MessageFromSW.TRACKER_UPDATED,
@@ -268,7 +268,7 @@ async function handleAutoDetected(message) {
         }).catch(function () {});
       })
       .catch(function (err) {
-        console.warn('Server check for new tracker #' + tracker.id + ' failed:', err);
+        console.warn('First check for new tracker #' + tracker.id + ' failed:', err);
       });
   }, 2000);
 
@@ -378,6 +378,7 @@ async function handleCheckSingle(trackerId) {
   var tracker = null;
   try { tracker = await apiClient.getTracker(trackerId); } catch (_) {}
   var method = await getCheckMethod(tracker);
+  console.log('[CheckSingle] #' + trackerId + ' method=' + method);
 
   if (method === CheckMethod.EXTENSION) {
     await priceChecker.checkPrice(trackerId, extensionCheckDeps);
