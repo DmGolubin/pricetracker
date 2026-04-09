@@ -135,6 +135,15 @@ header {
 }
 .card-price .currency { font-size: 14px; color: var(--hint); font-weight: 400; }
 
+.card-content-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .card-meta {
   display: flex;
   gap: 12px;

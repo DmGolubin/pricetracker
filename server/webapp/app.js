@@ -477,26 +477,32 @@ function showGroupDetail(groupName) {
     }
 
     for (const t of vg.trackers) {
+      const isContentTracker = t.trackingType === 'content';
       const price = Number(t.currentPrice);
-      const isBest = price>0 && price===vg.bestPrice;
+      const isBest = !isContentTracker && price>0 && price===vg.bestPrice;
       const name = cleanName(t.productName).slice(0,45);
       const shop = getShop(t.pageUrl);
       let badge = `<span class="card-badge badge-shop">${esc(shop)}</span>`;
       if (isBest) badge = `<span class="card-badge badge-best">🏆 Лучшая</span>`;
+      if (isContentTracker) badge = `<span class="card-badge" style="background:rgba(99,102,241,0.15);color:#818cf8">📝</span>`;
 
       const volInfo = t._volumeLabel ? `<span class="card-vol-tag">${esc(t._volumeLabel)}</span>` : '';
 
       const min=Number(t.minPrice), max=Number(t.maxPrice);
       let range = '';
-      if (min>0 && max>0 && max>min && price>0) {
+      if (!isContentTracker && min>0 && max>0 && max>min && price>0) {
         const pos = Math.min(100,Math.max(0,((price-min)/(max-min))*100));
         range = `<div class="card-range"><div class="card-range-fill" style="width:${pos}%"></div><div class="card-range-marker" style="left:${pos}%"></div></div>`;
       }
 
+      var cardPriceHtml = isContentTracker
+        ? `<div class="card-price card-content-value">${esc((t.currentContent||'').slice(0,60)) || '—'}</div>`
+        : `<div class="card-price">${fmtP(price)} <span class="currency">грн</span>${volInfo}</div>`;
+
       html += `<div class="card" data-action="tracker" data-id="${t.id}">
         <div class="card-header"><div class="card-name">${esc(name)}</div>${badge}</div>
-        <div class="card-price">${fmtP(price)} <span class="currency">грн</span>${volInfo}</div>
-        <div class="card-meta"><span>🏪 ${esc(shop)}</span>${min>0?`<span>мін: ${fmtP(min)}</span>`:''}${max>0?`<span>макс: ${fmtP(max)}</span>`:''}</div>
+        ${cardPriceHtml}
+        <div class="card-meta"><span>🏪 ${esc(shop)}</span>${!isContentTracker && min>0?`<span>мін: ${fmtP(min)}</span>`:''}${!isContentTracker && max>0?`<span>макс: ${fmtP(max)}</span>`:''}</div>
         ${range}</div>`;
     }
 
@@ -562,15 +568,45 @@ async function showTrackerDetail(id) {
 
   const name = cleanName(t.productName);
   const shop = getShop(t.pageUrl);
+  const isContent = t.trackingType === 'content';
   const price = Number(t.currentPrice), initial = Number(t.initialPrice);
   const min = Number(t.minPrice), max = Number(t.maxPrice), prev = Number(t.previousPrice);
   const volInfo = extractVolume(t.productName);
 
   let changeHtml = '';
-  if (prev>0 && prev!==price) {
+  if (!isContent && prev>0 && prev!==price) {
     const diff = price-prev, pct = pctCh(prev,price);
     const cls = diff>0?'positive':'negative', sign = diff>0?'+':'';
     changeHtml = `<div class="detail-change ${cls}">${sign}${fmtP(Math.abs(diff))} грн (${sign}${pct.toFixed(1)}%)</div>`;
+  }
+
+  // Price or content block
+  var priceBlockHtml;
+  if (isContent) {
+    var contentText = t.currentContent || '—';
+    priceBlockHtml = `
+    <div class="detail-price-block">
+      <div class="detail-current-price" style="font-size:16px">${esc(contentText)}</div>
+      <div style="font-size:12px;color:var(--hint);margin-top:6px">📝 Контент-трекер · 🏪 ${esc(shop)}</div>
+    </div>`;
+  } else {
+    priceBlockHtml = `
+    <div class="detail-price-block">
+      <div class="detail-current-price">${fmtP(price)} <span class="currency">грн</span></div>
+      ${changeHtml}
+      <div style="font-size:12px;color:var(--hint);margin-top:6px">🏪 ${esc(shop)}${volInfo.volumeLabel ? ' · 📏 '+esc(volInfo.volumeLabel) : ''}</div>
+    </div>`;
+  }
+
+  // Stats block (only for price trackers)
+  var statsHtml = '';
+  if (!isContent) {
+    statsHtml = `
+    <div class="detail-stats">
+      <div class="stat-box"><div class="stat-label">Начальная</div><div class="stat-value">${fmtP(initial)}</div></div>
+      <div class="stat-box"><div class="stat-label">Минимум</div><div class="stat-value" style="color:var(--accent)">${fmtP(min)}</div></div>
+      <div class="stat-box"><div class="stat-label">Максимум</div><div class="stat-value" style="color:var(--danger)">${fmtP(max)}</div></div>
+    </div>`;
   }
 
   let html = `
@@ -578,17 +614,8 @@ async function showTrackerDetail(id) {
       <div class="detail-title" id="trackerTitle">${esc(name)}</div>
       <button class="icon-btn" id="btnEditName" title="Переименовать">✏️</button>
     </div>
-    <div class="detail-price-block">
-      <div class="detail-current-price">${fmtP(price)} <span class="currency">грн</span></div>
-      ${changeHtml}
-      <div style="font-size:12px;color:var(--hint);margin-top:6px">🏪 ${esc(shop)}${volInfo.volumeLabel ? ' · 📏 '+esc(volInfo.volumeLabel) : ''}</div>
-    </div>
-
-    <div class="detail-stats">
-      <div class="stat-box"><div class="stat-label">Начальная</div><div class="stat-value">${fmtP(initial)}</div></div>
-      <div class="stat-box"><div class="stat-label">Минимум</div><div class="stat-value" style="color:var(--accent)">${fmtP(min)}</div></div>
-      <div class="stat-box"><div class="stat-label">Максимум</div><div class="stat-value" style="color:var(--danger)">${fmtP(max)}</div></div>
-    </div>
+    ${priceBlockHtml}
+    ${statsHtml}
 
     <a class="detail-link" href="${t.pageUrl}" target="_blank">🔗 Открыть в магазине</a>
 
@@ -971,6 +998,7 @@ async function renderSettings() {
 function trackerCardHtml(t) {
   const name = cleanName(t.productName).slice(0,45);
   const shop = getShop(t.pageUrl);
+  const isContent = t.trackingType === 'content';
   const price = Number(t.currentPrice), prev = Number(t.previousPrice);
   const pct = prev>0 && price!==prev ? pctCh(prev,price) : null;
   const min = Number(t.minPrice), max = Number(t.maxPrice);
@@ -980,11 +1008,21 @@ function trackerCardHtml(t) {
   let badge = '';
   if (t.status==='error') badge = `<span class="card-badge badge-rise">❌</span>`;
   else if (t.status==='paused') badge = `<span class="card-badge" style="background:rgba(255,255,255,0.1);color:var(--hint)">⏸</span>`;
+  else if (isContent) badge = `<span class="card-badge" style="background:rgba(99,102,241,0.15);color:#818cf8">📝</span>`;
   else if (pct!==null && pct<0) badge = `<span class="card-badge badge-drop">${pct.toFixed(1)}%</span>`;
   else if (pct!==null && pct>0) badge = `<span class="card-badge badge-rise">+${pct.toFixed(1)}%</span>`;
 
+  // Price or content display
+  var priceHtml;
+  if (isContent) {
+    var contentText = (t.currentContent || '').slice(0, 60);
+    priceHtml = `<div class="card-price card-content-value">${esc(contentText) || '—'}</div>`;
+  } else {
+    priceHtml = `<div class="card-price">${fmtP(price)} <span class="currency">грн</span>${volTag}</div>`;
+  }
+
   let range = '';
-  if (min>0 && max>0 && max>min && price>0) {
+  if (!isContent && min>0 && max>0 && max>min && price>0) {
     const pos = Math.min(100,Math.max(0,((price-min)/(max-min))*100));
     range = `<div class="card-range"><div class="card-range-fill" style="width:${pos}%"></div><div class="card-range-marker" style="left:${pos}%"></div></div>`;
   }
@@ -993,8 +1031,8 @@ function trackerCardHtml(t) {
 
   return `<div class="card" data-action="tracker" data-id="${t.id}">
     <div class="card-header">${checkbox}<div class="card-name">${esc(name)}</div>${badge}</div>
-    <div class="card-price">${fmtP(price)} <span class="currency">грн</span>${volTag}</div>
-    <div class="card-meta"><span>🏪 ${esc(shop)}</span>${min>0?`<span>📉 ${fmtP(min)}</span>`:''}${max>0?`<span>📈 ${fmtP(max)}</span>`:''}</div>
+    ${priceHtml}
+    <div class="card-meta"><span>🏪 ${esc(shop)}</span>${!isContent && min>0?`<span>📉 ${fmtP(min)}</span>`:''}${!isContent && max>0?`<span>📈 ${fmtP(max)}</span>`:''}</div>
     ${range}</div>`;
 }
 
