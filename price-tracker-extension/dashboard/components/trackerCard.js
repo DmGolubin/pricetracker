@@ -206,7 +206,8 @@ const TrackerCard = (function () {
     if (tracker.imageUrl) {
       html += '<img src="' + escapeHtml(tracker.imageUrl) + '"'
             + ' alt="' + escapeHtml(tracker.productName) + '"'
-            + ' class="tracker-card-img">';
+            + ' class="tracker-card-img"'
+            + ' loading="lazy">';
       html += '<div class="tracker-card-img-placeholder" style="display:none" aria-hidden="true">' + (_Icons ? _Icons.get('package') : '📦') + '</div>';
     } else {
       html += '<div class="tracker-card-img-placeholder" aria-hidden="true">' + (_Icons ? _Icons.get('package') : '📦') + '</div>';

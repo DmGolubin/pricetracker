@@ -117,12 +117,13 @@ describe('Toolbar', () => {
       Toolbar.init(container, {});
       const rightGroup = container.querySelector('.toolbar-group-right');
       const btns = rightGroup.querySelectorAll('.btn-icon');
-      expect(btns.length).toBe(5);
-      expect(btns[0].getAttribute('aria-label')).toBe('Экспорт трекеров');
-      expect(btns[1].getAttribute('aria-label')).toBe('Импорт трекеров');
-      expect(btns[2].getAttribute('aria-label')).toBe('Выбрать трекеры');
-      // btns[3] is grid size toggle
-      expect(btns[4].getAttribute('aria-label')).toBe('Открыть настройки');
+      expect(btns.length).toBe(6);
+      expect(btns[0].getAttribute('aria-label')).toBe('Отметить все как прочитанные');
+      expect(btns[1].getAttribute('aria-label')).toBe('Экспорт трекеров');
+      expect(btns[2].getAttribute('aria-label')).toBe('Импорт трекеров');
+      expect(btns[3].getAttribute('aria-label')).toBe('Выбрать трекеры');
+      // btns[4] is grid size toggle
+      expect(btns[5].getAttribute('aria-label')).toBe('Открыть настройки');
     });
 
     test('has dividers between groups', () => {
@@ -176,7 +177,7 @@ describe('Toolbar', () => {
   // ─── Custom filter dropdown ─────────────────────────────────────
 
   describe('custom filter dropdown', () => {
-    test('has four options: all, down, up, groups', () => {
+    test('has four options: all, down, up, unread', () => {
       Toolbar.init(container, {});
       const dropdown = container.querySelector('.toolbar-filter-dropdown');
       const items = dropdown.querySelectorAll('.custom-dropdown-item');
@@ -185,7 +186,7 @@ describe('Toolbar', () => {
       expect(items[0].getAttribute('data-value')).toBe('all');
       expect(items[1].getAttribute('data-value')).toBe('down');
       expect(items[2].getAttribute('data-value')).toBe('up');
-      expect(items[3].getAttribute('data-value')).toBe('groups');
+      expect(items[3].getAttribute('data-value')).toBe('unread');
     });
 
     test('triggers onFilter callback when item is clicked', () => {
@@ -248,7 +249,7 @@ describe('Toolbar', () => {
       Toolbar.init(container, { onExport });
 
       const btns = container.querySelectorAll('.toolbar-group-right .btn-icon');
-      btns[0].click();
+      btns[1].click();
 
       expect(onExport).toHaveBeenCalledTimes(1);
     });
@@ -258,7 +259,7 @@ describe('Toolbar', () => {
       Toolbar.init(container, { onImport });
 
       const btns = container.querySelectorAll('.toolbar-group-right .btn-icon');
-      btns[1].click();
+      btns[2].click();
 
       expect(onImport).toHaveBeenCalledTimes(1);
     });

@@ -228,7 +228,7 @@ const Toolbar = (function () {
         { value: 'all', text: 'Все' },
         { value: 'down', text: '📉 Цена снизилась' },
         { value: 'up', text: '📈 Цена выросла' },
-        { value: 'groups', text: '📦 Группы товаров' },
+        { value: 'unread', text: '🔔 С уведомлениями' },
       ],
       selected: 'all',
       ariaLabel: 'Фильтр по изменению цены',
@@ -236,12 +236,6 @@ const Toolbar = (function () {
       onChange: function (value) {
         if (typeof cb.onFilter === 'function') {
           cb.onFilter(value);
-        }
-        // Show/hide group chips
-        if (value === 'groups') {
-          showGroupChips();
-        } else {
-          hideGroupChips();
         }
       },
     });
@@ -313,6 +307,19 @@ const Toolbar = (function () {
       }
     });
 
+    // Mark all read button
+    var markReadBtn = document.createElement('button');
+    markReadBtn.className = 'btn-icon';
+    markReadBtn.type = 'button';
+    markReadBtn.id = 'toolbar-mark-read-btn';
+    markReadBtn.setAttribute('aria-label', 'Отметить все как прочитанные');
+    markReadBtn.innerHTML = _Icons ? _Icons.el('notifications', 18) : '🔔';
+    markReadBtn.title = 'Отметить все как прочитанные';
+    markReadBtn.addEventListener('click', function () {
+      if (typeof cb.onMarkAllRead === 'function') cb.onMarkAllRead();
+    });
+
+    rightGroup.appendChild(markReadBtn);
     rightGroup.appendChild(exportBtn);
     rightGroup.appendChild(importBtn);
     rightGroup.appendChild(selectBtn);

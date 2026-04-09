@@ -199,6 +199,11 @@ const Dashboard = (function () {
         return tracker.productGroup === selectedGroup;
       }
 
+      // Unread / notifications filter
+      if (priceFilter === 'unread') {
+        return tracker.unread === true || tracker.status === 'updated';
+      }
+
       // Price direction filter
       if (priceFilter === 'down') {
         return tracker.currentPrice < tracker.initialPrice;
@@ -246,7 +251,8 @@ const Dashboard = (function () {
       return;
     }
 
-    filteredTrackers.forEach((tracker, index) => {
+    var trackersToShow = filteredTrackers.slice(0, displayCount);
+    trackersToShow.forEach((tracker, index) => {
       const cardEl = renderTrackerCard(tracker);
       cardEl.classList.add('tracker-card-enter', 'sort-transition');
       trackerGrid.appendChild(cardEl);
@@ -257,6 +263,12 @@ const Dashboard = (function () {
         }, 50 * index);
       });
     });
+
+    // Search highlighting
+    highlightSearchMatches();
+
+    // "Load more" button for pagination
+    renderLoadMoreButton();
   }
 
   /**
@@ -734,6 +746,7 @@ const Dashboard = (function () {
    */
   function onSearchChange(query) {
     searchQuery = query;
+    displayCount = 50;
     applyFilters();
     animateFilterChange(function () {
       renderGrid();
@@ -746,7 +759,8 @@ const Dashboard = (function () {
    */
   function onFilterChange(filter) {
     priceFilter = filter;
-    openFolder = null; // reset folder navigation when switching filters
+    openFolder = null;
+    displayCount = 50;
     applyFilters();
     animateFilterChange(function () {
       renderGrid();
@@ -1941,10 +1955,10 @@ const Dashboard = (function () {
               count++;
             } catch (_) {}
           }
-          alert('Импортировано трекеров: ' + count);
+          showToast('Импортировано: ' + count + ' трекеров', 'success');
           loadTrackers();
         } catch (e) {
-          alert('Ошибка импорта: ' + e.message);
+          showToast('Ошибка импорта: ' + e.message, 'error');
         }
       };
       reader.readAsText(file);
@@ -2016,6 +2030,109 @@ const Dashboard = (function () {
     });
   }
 
+  // ─── Toast Notifications ──────────────────────────────────────────
+
+  /**
+   * Show a toast notification at the bottom-center of the screen.
+   * @param {string} message - The message to display
+   * @param {string} [type='info'] - 'success', 'error', or 'info'
+   */
+  function showToast(message, type) {
+    type = type || 'info';
+    var toast = document.createElement('div');
+    toast.className = 'toast toast-' + type;
+    var textSpan = document.createElement('span');
+    textSpan.textContent = message;
+    toast.appendChild(textSpan);
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'toast-close';
+    closeBtn.innerHTML = '×';
+    closeBtn.addEventListener('click', function () {
+      toast.classList.add('toast-exit');
+      setTimeout(function () { if (toast.parentNode) toast.remove(); }, 300);
+    });
+    toast.appendChild(closeBtn);
+    document.body.appendChild(toast);
+    // Trigger enter animation
+    requestAnimationFrame(function () { toast.classList.add('toast-enter'); });
+    // Auto-dismiss after 3 seconds
+    setTimeout(function () {
+      if (toast.parentNode) {
+        toast.classList.add('toast-exit');
+        setTimeout(function () { if (toast.parentNode) toast.remove(); }, 300);
+      }
+    }, 3000);
+  }
+
+  // ─── Mark All Read ──────────────────────────────────────────────
+
+  /**
+   * Mark all trackers with status 'updated' or unread=true as read.
+   */
+  async function handleMarkAllRead() {
+    var unreadTrackers = allTrackers.filter(function (t) {
+      return t.status === 'updated' || t.unread === true;
+    });
+    if (unreadTrackers.length === 0) {
+      showToast('Нет непрочитанных уведомлений', 'info');
+      return;
+    }
+    for (var i = 0; i < unreadTrackers.length; i++) {
+      try {
+        await sendMessage({ action: 'markAsRead', trackerId: unreadTrackers[i].id });
+        unreadTrackers[i].unread = false;
+        if (unreadTrackers[i].status === 'updated') {
+          unreadTrackers[i].status = 'active';
+        }
+      } catch (_) {}
+    }
+    applyFilters();
+    renderGrid();
+    showToast('Отмечено как прочитанные: ' + unreadTrackers.length, 'success');
+  }
+
+  // ─── Pagination ─────────────────────────────────────────────────
+
+  var displayCount = 50;
+
+  /**
+   * Highlight search query matches in tracker card names.
+   */
+  function highlightSearchMatches() {
+    if (!searchQuery) return;
+    var names = trackerGrid.querySelectorAll('.tracker-card-name');
+    var query = searchQuery.toLowerCase();
+    names.forEach(function (el) {
+      var text = el.textContent;
+      var lowerText = text.toLowerCase();
+      var idx = lowerText.indexOf(query);
+      if (idx === -1) return;
+      var before = escapeHtml(text.slice(0, idx));
+      var match = text.slice(idx, idx + query.length);
+      var after = escapeHtml(text.slice(idx + query.length));
+      el.innerHTML = before + '<mark>' + escapeHtml(match) + '</mark>' + after;
+    });
+  }
+
+  /**
+   * Render "Load more" button if there are more trackers to show.
+   */
+  function renderLoadMoreButton() {
+    var existing = trackerGrid.querySelector('.load-more-btn');
+    if (existing) existing.remove();
+    if (displayCount >= filteredTrackers.length) return;
+    var btn = document.createElement('button');
+    btn.className = 'btn load-more-btn';
+    btn.style.cssText = 'grid-column:1/-1;margin:var(--spacing-lg) auto;display:block';
+    btn.textContent = 'Показать ещё (' + (filteredTrackers.length - displayCount) + ' осталось)';
+    btn.addEventListener('click', function () {
+      displayCount += 50;
+      applyFilters();
+      renderGrid();
+    });
+    trackerGrid.appendChild(btn);
+  }
+
   // ─── Initialisation ────────────────────────────────────────────────
 
   function init() {
@@ -2042,6 +2159,7 @@ const Dashboard = (function () {
         onRefreshAll: handleRefreshAll,
         onRefreshExtension: handleExtensionRefresh,
         onAutoGroup: handleAutoGroup,
+        onMarkAllRead: handleMarkAllRead,
         onSettingsClick: () => {
           if (typeof GlobalSettings !== 'undefined' && GlobalSettings.open) {
             GlobalSettings.open(modalContainer);
@@ -2121,6 +2239,8 @@ const Dashboard = (function () {
     _setSortBy: (s) => { sortBy = s; },
     toggleSelectMode,
     bulkAction,
+    showToast,
+    handleMarkAllRead,
   };
 })();
 
