@@ -25,7 +25,7 @@ const Dashboard = (function () {
   // Sort state — persisted in localStorage
   var SORT_STORAGE_KEY = 'priceTracker_sortBy';
   let sortBy = (function () {
-    try { return localStorage.getItem(SORT_STORAGE_KEY) || 'name'; } catch (e) { return 'name'; }
+    try { return localStorage.getItem(SORT_STORAGE_KEY) || 'priceAsc'; } catch (e) { return 'priceAsc'; }
   })();
 
   // ─── Module references (browser globals or Node requires) ──────────

@@ -139,12 +139,9 @@ function sortTrackers(trackers, sortBy) {
  */
 function getSortOptions() {
   return [
-    { value: 'discount', label: 'По скидке' },
-    { value: 'priceChange', label: 'По изменению цены' },
-    { value: 'lastUpdated', label: 'По дате обновления' },
-    { value: 'minPrice', label: 'По мин. цене' },
-    { value: 'priceAsc', label: 'Цена: по возрастанию' },
-    { value: 'priceDesc', label: 'Цена: по убыванию' },
+    { value: 'priceAsc', label: 'Дешевле' },
+    { value: 'priceDesc', label: 'Дороже' },
+    { value: 'lastUpdated', label: 'Недавние' },
     { value: 'name', label: 'По названию' },
   ];
 }

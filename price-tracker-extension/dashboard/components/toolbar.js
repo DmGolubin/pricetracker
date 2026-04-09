@@ -248,8 +248,8 @@ const Toolbar = (function () {
 
     // Custom sort dropdown
     var sortOptions = _sortEngine ? _sortEngine.getSortOptions() : [];
-    var savedSort = 'name';
-    try { savedSort = localStorage.getItem(SORT_STORAGE_KEY) || 'name'; } catch (e) {}
+    var savedSort = 'priceAsc';
+    try { savedSort = localStorage.getItem(SORT_STORAGE_KEY) || 'priceAsc'; } catch (e) {}
 
     var sortDropdown = createCustomDropdown({
       options: sortOptions.map(function (o) { return { value: o.value, text: o.label }; }),

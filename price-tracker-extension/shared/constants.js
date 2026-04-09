@@ -92,12 +92,6 @@ var CheckMethod = {
   EXTENSION: 'extension',
   HYBRID: 'hybrid',
 };
-// Check methods (how price checking is performed)
-var CheckMethod = {
-  SERVER: 'server',
-  EXTENSION: 'extension',
-  HYBRID: 'hybrid',
-};
 
 // Notification filter types
 var NotificationFilterType = {
@@ -139,12 +133,9 @@ var DEFAULT_ADAPTIVE_TIERS = [
 
 // Sort options for dashboard
 var SortOption = {
-  DISCOUNT: 'discount',
-  PRICE_CHANGE: 'priceChange',
-  LAST_UPDATED: 'lastUpdated',
-  MIN_PRICE: 'minPrice',
   PRICE_ASC: 'priceAsc',
   PRICE_DESC: 'priceDesc',
+  LAST_UPDATED: 'lastUpdated',
   NAME: 'name',
 };
 
