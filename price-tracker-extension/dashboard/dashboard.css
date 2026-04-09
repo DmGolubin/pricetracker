@@ -1949,3 +1949,103 @@
   0% { transform: scale(0.9); opacity: 0.5; box-shadow: 0 0 20px rgba(99, 102, 241, 0.5); }
   100% { transform: scale(1); opacity: 1; box-shadow: none; }
 }
+
+/* ===== Star / Favorites Button ===== */
+.tracker-card-star {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  opacity: 0.4;
+  transition: opacity 0.2s, transform 0.2s;
+  padding: 0;
+  line-height: 1;
+}
+.tracker-card-star:hover { opacity: 0.8; transform: scale(1.2); }
+.tracker-card-star.starred { opacity: 1; }
+
+/* ===== Price Flash Animation ===== */
+.tracker-card.price-flash-down {
+  animation: priceFlashDown 1s ease;
+}
+.tracker-card.price-flash-up {
+  animation: priceFlashUp 1s ease;
+}
+@keyframes priceFlashDown {
+  0% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.5); }
+  100% { box-shadow: none; }
+}
+@keyframes priceFlashUp {
+  0% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
+  100% { box-shadow: none; }
+}
+
+/* ===== Bulk Interval Modal ===== */
+.bulk-interval-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.bulk-interval-option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 10px var(--spacing-md);
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.bulk-interval-option:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.bulk-interval-option input[type="radio"] {
+  accent-color: var(--accent-primary);
+}
+
+/* ===== Card Context Menu ===== */
+.card-context-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  min-width: 200px;
+  padding: var(--spacing-xs) 0;
+  backdrop-filter: blur(20px);
+}
+
+.card-context-item {
+  display: block;
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.card-context-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.card-context-danger {
+  color: var(--accent-red, #F44336);
+}

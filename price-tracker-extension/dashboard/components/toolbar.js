@@ -231,6 +231,7 @@ const Toolbar = (function () {
         { value: 'unread', text: '🔔 С уведомлениями' },
         { value: 'paused', text: '⏸ На паузе' },
         { value: 'error', text: '❌ С ошибками' },
+        { value: 'starred', text: '⭐ Избранное' },
       ],
       selected: 'all',
       ariaLabel: 'Фильтр по изменению цены',

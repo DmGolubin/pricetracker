@@ -212,6 +212,11 @@ const Dashboard = (function () {
         return tracker.status === 'error';
       }
 
+      // Starred / favorites filter
+      if (priceFilter === 'starred') {
+        return tracker.starred === true;
+      }
+
       // Price direction filter
       if (priceFilter === 'down') {
         return tracker.currentPrice < tracker.initialPrice;
@@ -627,6 +632,22 @@ const Dashboard = (function () {
             });
         });
       }
+      // Wire star button for favorites toggle
+      var starBtn = card.querySelector('.tracker-card-star');
+      if (starBtn) {
+        starBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var newStarred = !tracker.starred;
+          sendMessage({ action: 'updateTracker', trackerId: tracker.id, data: { starred: newStarred } })
+            .then(function () {
+              tracker.starred = newStarred;
+              starBtn.classList.toggle('starred', newStarred);
+              starBtn.textContent = newStarred ? '⭐' : '☆';
+              starBtn.title = newStarred ? 'Убрать из избранного' : 'В избранное';
+            })
+            .catch(function () {});
+        });
+      }
       // Wire checkbox change for multiselect
       var cb = card.querySelector('.tracker-card-select');
       if (cb) {
@@ -733,7 +754,21 @@ const Dashboard = (function () {
   function onTrackerUpdated(updatedTracker) {
     const idx = allTrackers.findIndex((t) => t.id === updatedTracker.id);
     if (idx !== -1) {
+      var oldPrice = allTrackers[idx].currentPrice;
       allTrackers[idx] = updatedTracker;
+
+      // Price flash animation
+      var newPrice = updatedTracker.currentPrice;
+      if (typeof oldPrice === 'number' && typeof newPrice === 'number' && oldPrice !== newPrice) {
+        var cardEl = trackerGrid.querySelector('[data-tracker-id="' + updatedTracker.id + '"]');
+        if (cardEl) {
+          var flashClass = newPrice < oldPrice ? 'price-flash-down' : 'price-flash-up';
+          cardEl.classList.add(flashClass);
+          cardEl.addEventListener('animationend', function () {
+            cardEl.classList.remove(flashClass);
+          }, { once: true });
+        }
+      }
     }
     applyFilters();
     renderGrid();
@@ -1520,6 +1555,113 @@ const Dashboard = (function () {
     renderFolderSidebar();
   }
 
+  // ─── Card Context Menu ───────────────────────────────────────────
+
+  function initCardContextMenu() {
+    document.addEventListener('contextmenu', function (e) {
+      var card = e.target.closest('.tracker-card');
+      if (!card) return;
+      e.preventDefault();
+
+      var trackerId = Number(card.dataset.trackerId);
+      var tracker = allTrackers.find(function (t) { return t.id === trackerId; });
+      if (!tracker) return;
+
+      // Remove any existing context menu
+      var existing = document.querySelector('.card-context-menu');
+      if (existing) existing.remove();
+
+      var menu = document.createElement('div');
+      menu.className = 'card-context-menu';
+
+      // Open on site
+      var openItem = document.createElement('button');
+      openItem.className = 'card-context-item';
+      openItem.textContent = '🔗 Открыть на сайте';
+      openItem.addEventListener('click', function () {
+        menu.remove();
+        window.open(tracker.pageUrl, '_blank');
+      });
+      menu.appendChild(openItem);
+
+      // Pause / Resume
+      var pauseItem = document.createElement('button');
+      pauseItem.className = 'card-context-item';
+      pauseItem.textContent = tracker.status === 'paused' ? '▶ Возобновить' : '⏸ Пауза';
+      pauseItem.addEventListener('click', function () {
+        menu.remove();
+        var newStatus = tracker.status === 'paused' ? 'active' : 'paused';
+        sendMessage({ action: 'updateTracker', trackerId: tracker.id, data: { status: newStatus } })
+          .then(function () {
+            tracker.status = newStatus;
+            applyFilters();
+            renderGrid();
+          })
+          .catch(function () {});
+      });
+      menu.appendChild(pauseItem);
+
+      // Move to folder
+      var moveItem = document.createElement('button');
+      moveItem.className = 'card-context-item';
+      moveItem.textContent = '📦 Переместить в папку';
+      moveItem.addEventListener('click', function () {
+        menu.remove();
+        // Use bulk group picker for single tracker
+        selectedIds.clear();
+        selectedIds.add(tracker.id);
+        showBulkGroupPicker();
+      });
+      menu.appendChild(moveItem);
+
+      // Star / Unstar
+      var starItem = document.createElement('button');
+      starItem.className = 'card-context-item';
+      starItem.textContent = tracker.starred ? '⭐ Убрать из избранного' : '⭐ В избранное';
+      starItem.addEventListener('click', function () {
+        menu.remove();
+        var newStarred = !tracker.starred;
+        sendMessage({ action: 'updateTracker', trackerId: tracker.id, data: { starred: newStarred } })
+          .then(function () {
+            tracker.starred = newStarred;
+            var starBtn = card.querySelector('.tracker-card-star');
+            if (starBtn) {
+              starBtn.classList.toggle('starred', newStarred);
+              starBtn.textContent = newStarred ? '⭐' : '☆';
+            }
+          })
+          .catch(function () {});
+      });
+      menu.appendChild(starItem);
+
+      // Delete
+      var deleteItem = document.createElement('button');
+      deleteItem.className = 'card-context-item card-context-danger';
+      deleteItem.textContent = '🗑️ Удалить';
+      deleteItem.addEventListener('click', function () {
+        menu.remove();
+        if (!confirm('Удалить трекер "' + (tracker.productName || '') + '"?')) return;
+        sendMessage({ action: 'deleteTracker', trackerId: tracker.id })
+          .then(function () {
+            onTrackerDeleted(tracker.id);
+          })
+          .catch(function () {});
+      });
+      menu.appendChild(deleteItem);
+
+      document.body.appendChild(menu);
+      menu.style.top = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 10) + 'px';
+      menu.style.left = Math.min(e.clientX, window.innerWidth - 220) + 'px';
+
+      setTimeout(function () {
+        document.addEventListener('click', function closeMenu() {
+          menu.remove();
+          document.removeEventListener('click', closeMenu);
+        });
+      }, 0);
+    });
+  }
+
   // ─── Multiselect / Bulk Operations ─────────────────────────────
 
   function toggleSelectMode() {
@@ -1595,6 +1737,13 @@ const Dashboard = (function () {
       deleteBtn.title = 'Удалить';
       deleteBtn.addEventListener('click', function () { bulkAction('delete'); });
       row.appendChild(deleteBtn);
+
+      var intervalBtn = document.createElement('button');
+      intervalBtn.className = 'btn btn-sm';
+      intervalBtn.textContent = '⏱';
+      intervalBtn.title = 'Интервал';
+      intervalBtn.addEventListener('click', function () { showBulkIntervalPicker(); });
+      row.appendChild(intervalBtn);
     }
 
     row.appendChild(createBulkSep());
@@ -1767,6 +1916,102 @@ const Dashboard = (function () {
     selectMode = false;
     updateBulkBar();
     await loadTrackers();
+  }
+
+  /**
+   * Show a modal with interval options for bulk interval change.
+   */
+  function showBulkIntervalPicker() {
+    var ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay active';
+
+    var modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-label', 'Изменить интервал');
+
+    var header = document.createElement('div');
+    header.className = 'modal-header';
+    var title = document.createElement('h2');
+    title.textContent = 'Интервал проверки (' + ids.length + ' трекеров)';
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'btn-icon';
+    closeBtn.type = 'button';
+    closeBtn.innerHTML = (typeof Icons !== 'undefined') ? Icons.el('close', 20) : '×';
+    closeBtn.addEventListener('click', function () { overlay.remove(); });
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    var body = document.createElement('div');
+    body.className = 'modal-body';
+
+    var intervals = [
+      { value: 3, label: '3 часа' },
+      { value: 6, label: '6 часов' },
+      { value: 12, label: '12 часов' },
+      { value: 24, label: '24 часа' },
+    ];
+
+    var optionsDiv = document.createElement('div');
+    optionsDiv.className = 'bulk-interval-options';
+
+    intervals.forEach(function (opt) {
+      var label = document.createElement('label');
+      label.className = 'bulk-interval-option';
+      var radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'bulk-interval';
+      radio.value = opt.value;
+      if (opt.value === 3) radio.checked = true;
+      label.appendChild(radio);
+      var span = document.createElement('span');
+      span.textContent = opt.label;
+      label.appendChild(span);
+      optionsDiv.appendChild(label);
+    });
+
+    body.appendChild(optionsDiv);
+
+    var footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    var applyBtn = document.createElement('button');
+    applyBtn.className = 'btn btn-primary';
+    applyBtn.textContent = 'Применить';
+    applyBtn.addEventListener('click', async function () {
+      var selected = overlay.querySelector('input[name="bulk-interval"]:checked');
+      if (!selected) return;
+      var hours = Number(selected.value);
+      overlay.remove();
+      showBulkProgress(0, ids.length, 'Изменение интервала...');
+      for (var i = 0; i < ids.length; i++) {
+        try {
+          await sendMessage({ action: 'updateTracker', trackerId: ids[i], data: { checkIntervalHours: hours } });
+          var t = allTrackers.find(function (t) { return t.id === ids[i]; });
+          if (t) t.checkIntervalHours = hours;
+        } catch (_) {}
+        showBulkProgress(i + 1, ids.length, 'Изменение интервала...');
+      }
+      hideBulkProgress();
+      showToast('⏱ Интервал изменён на ' + hours + 'ч (' + ids.length + ' трекеров)', 'success');
+      selectedIds.clear();
+      selectMode = false;
+      updateBulkBar();
+      applyFilters();
+      renderGrid();
+    });
+    footer.appendChild(applyBtn);
+
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) overlay.remove();
+    });
+    modalContainer.appendChild(overlay);
   }
 
   function showBulkProgress(current, total, text) {
@@ -2313,6 +2558,8 @@ const Dashboard = (function () {
     // Initialise drag & drop
     initDragAndDrop();
 
+    // Initialise right-click context menu on tracker cards
+    initCardContextMenu();
     // Keyboard shortcuts
     document.addEventListener('keydown', function (e) {
       // Ctrl+F — focus search

@@ -193,6 +193,12 @@ const TrackerCard = (function () {
 
     // Image section
     html += '<div class="tracker-card-image">';
+    // Star button
+    html += '<button class="tracker-card-star' + (tracker.starred ? ' starred' : '') + '" title="'
+          + (tracker.starred ? 'Убрать из избранного' : 'В избранное') + '" aria-label="'
+          + (tracker.starred ? 'Remove from favorites' : 'Add to favorites') + '" data-tracker-id="'
+          + escapeHtml(String(tracker.id)) + '">'
+          + (tracker.starred ? '⭐' : '☆') + '</button>';
     // Refresh button (per-card)
     html += '<button class="tracker-card-refresh" title="Обновить" aria-label="Обновить трекер">'
           + (_Icons ? _Icons.el('refresh', 14) : '↻') + '</button>';

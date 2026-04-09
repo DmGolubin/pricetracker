@@ -274,6 +274,11 @@ async function initDB() {
     ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "errorNotifiedAt" TIMESTAMP DEFAULT NULL;
   `);
 
+  // Migration: add starred boolean for favorites
+  await pool.query(`
+    ALTER TABLE trackers ADD COLUMN IF NOT EXISTS "starred" BOOLEAN DEFAULT false;
+  `);
+
   console.log('Database tables initialized');
 }
 
@@ -386,6 +391,7 @@ app.put('/trackers/:id', async (req, res) => {
       'checkMethod',
       'consecutiveErrors',
       'errorNotifiedAt',
+      'starred',
     ];
 
     for (const key of allowed) {
