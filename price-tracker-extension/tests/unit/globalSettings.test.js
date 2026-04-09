@@ -13,7 +13,7 @@ function makeSettings(overrides) {
   return Object.assign(
     {
       apiBaseUrl: 'https://api.example.com',
-      permanentPinTab: false,
+      persistentPinTab: false,
     },
     overrides || {}
   );
@@ -128,7 +128,7 @@ describe('GlobalSettings', () => {
       await flushPromises();
 
       expect(container.querySelector('[data-field="apiBaseUrl"]')).not.toBeNull();
-      expect(container.querySelector('[data-field="permanentPinTab"]')).not.toBeNull();
+      expect(container.querySelector('[data-field="persistentPinTab"]')).not.toBeNull();
       // Telegram fields removed — auto-configured by bot
       expect(container.querySelector('[data-field="telegramBotToken"]')).toBeNull();
       expect(container.querySelector('[data-field="telegramChatId"]')).toBeNull();
@@ -236,24 +236,24 @@ describe('GlobalSettings', () => {
 
     test('Permanent Pin Tab toggle reflects true', async () => {
       chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (cb) cb({ settings: makeSettings({ permanentPinTab: true }) });
+        if (cb) cb({ settings: makeSettings({ persistentPinTab: true }) });
       });
 
       GlobalSettings.open(container);
       await flushPromises();
 
-      expect(container.querySelector('[data-field="permanentPinTab"]').checked).toBe(true);
+      expect(container.querySelector('[data-field="persistentPinTab"]').checked).toBe(true);
     });
 
     test('Permanent Pin Tab toggle reflects false', async () => {
       chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (cb) cb({ settings: makeSettings({ permanentPinTab: false }) });
+        if (cb) cb({ settings: makeSettings({ persistentPinTab: false }) });
       });
 
       GlobalSettings.open(container);
       await flushPromises();
 
-      expect(container.querySelector('[data-field="permanentPinTab"]').checked).toBe(false);
+      expect(container.querySelector('[data-field="persistentPinTab"]').checked).toBe(false);
     });
   });
 
@@ -270,7 +270,7 @@ describe('GlobalSettings', () => {
 
       // Modify fields
       container.querySelector('[data-field="apiBaseUrl"]').value = 'https://new-api.test';
-      container.querySelector('[data-field="permanentPinTab"]').checked = true;
+      container.querySelector('[data-field="persistentPinTab"]').checked = true;
 
       // Reset mock to track save call
       chrome.runtime.sendMessage.mockClear();
@@ -286,7 +286,7 @@ describe('GlobalSettings', () => {
           action: 'saveSettings',
           settings: expect.objectContaining({
             apiBaseUrl: 'https://new-api.test',
-            permanentPinTab: true,
+            persistentPinTab: true,
           }),
         }),
         expect.any(Function)
@@ -380,7 +380,7 @@ describe('GlobalSettings', () => {
       await flushPromises();
 
       expect(container.querySelector('[data-field="apiBaseUrl"]').value).toBe('');
-      expect(container.querySelector('[data-field="permanentPinTab"]').checked).toBe(false);
+      expect(container.querySelector('[data-field="persistentPinTab"]').checked).toBe(false);
     });
 
     test('renders with empty fields when getSettings returns null response', async () => {
@@ -416,13 +416,13 @@ describe('GlobalSettings', () => {
   describe('permanent Pin Tab toggle', () => {
     test('toggle can be switched on', async () => {
       chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (cb) cb({ settings: makeSettings({ permanentPinTab: false }) });
+        if (cb) cb({ settings: makeSettings({ persistentPinTab: false }) });
       });
 
       GlobalSettings.open(container);
       await flushPromises();
 
-      const cb = container.querySelector('[data-field="permanentPinTab"]');
+      const cb = container.querySelector('[data-field="persistentPinTab"]');
       expect(cb.checked).toBe(false);
       cb.checked = true;
       expect(cb.checked).toBe(true);
@@ -430,13 +430,13 @@ describe('GlobalSettings', () => {
 
     test('toggle can be switched off', async () => {
       chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (cb) cb({ settings: makeSettings({ permanentPinTab: true }) });
+        if (cb) cb({ settings: makeSettings({ persistentPinTab: true }) });
       });
 
       GlobalSettings.open(container);
       await flushPromises();
 
-      const cb = container.querySelector('[data-field="permanentPinTab"]');
+      const cb = container.querySelector('[data-field="persistentPinTab"]');
       expect(cb.checked).toBe(true);
       cb.checked = false;
       expect(cb.checked).toBe(false);
@@ -444,13 +444,13 @@ describe('GlobalSettings', () => {
 
     test('toggle state is included in save data', async () => {
       chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        if (cb) cb({ settings: makeSettings({ permanentPinTab: false }) });
+        if (cb) cb({ settings: makeSettings({ persistentPinTab: false }) });
       });
 
       GlobalSettings.open(container);
       await flushPromises();
 
-      container.querySelector('[data-field="permanentPinTab"]').checked = true;
+      container.querySelector('[data-field="persistentPinTab"]').checked = true;
 
       chrome.runtime.sendMessage.mockClear();
       chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
@@ -463,7 +463,7 @@ describe('GlobalSettings', () => {
       const saveCall = chrome.runtime.sendMessage.mock.calls.find(
         c => c[0] && c[0].action === 'saveSettings'
       );
-      expect(saveCall[0].settings.permanentPinTab).toBe(true);
+      expect(saveCall[0].settings.persistentPinTab).toBe(true);
     });
   });
 

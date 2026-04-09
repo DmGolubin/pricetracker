@@ -214,7 +214,7 @@ describe('addPriceRecord', () => {
 
 describe('getSettings', () => {
   test('fetches global settings', async () => {
-    const settings = { apiBaseUrl: BASE, permanentPinTab: false };
+    const settings = { apiBaseUrl: BASE, persistentPinTab: false };
     global.fetch.mockReturnValue(jsonResponse(settings));
 
     const result = await getSettings();

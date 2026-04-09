@@ -546,8 +546,8 @@ const GlobalSettings = (function () {
     toggleLabel.className = 'toggle';
     var pinCheckbox = document.createElement('input');
     pinCheckbox.type = 'checkbox';
-    pinCheckbox.checked = s.permanentPinTab === true;
-    pinCheckbox.setAttribute('data-field', 'permanentPinTab');
+    pinCheckbox.checked = s.persistentPinTab === true;
+    pinCheckbox.setAttribute('data-field', 'persistentPinTab');
     var slider = document.createElement('span');
     slider.className = 'toggle-slider';
     toggleLabel.appendChild(pinCheckbox);
@@ -608,8 +608,8 @@ const GlobalSettings = (function () {
 
     // Telegram fields removed — auto-configured by bot
 
-    var pinCheckbox = modal.querySelector('[data-field="permanentPinTab"]');
-    var permanentPinTab = pinCheckbox ? pinCheckbox.checked : false;
+    var pinCheckbox = modal.querySelector('[data-field="persistentPinTab"]');
+    var persistentPinTab = pinCheckbox ? pinCheckbox.checked : false;
 
     // Threshold config
     var modes = getThresholdModes();
@@ -648,7 +648,7 @@ const GlobalSettings = (function () {
 
     return {
       apiBaseUrl: apiBaseUrl,
-      permanentPinTab: permanentPinTab,
+      persistentPinTab: persistentPinTab,
       thresholdConfig: thresholdConfig,
       telegramDigestEnabled: telegramDigestEnabled,
       siteCookies: siteCookies,
