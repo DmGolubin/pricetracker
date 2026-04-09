@@ -1914,6 +1914,13 @@
   padding: 0 2px;
 }
 
+.toolbar-last-checked {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
 /* ===== Responsive Toolbar ===== */
 @media (max-width: 900px) {
   .toolbar {

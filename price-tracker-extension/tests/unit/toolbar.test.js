@@ -182,11 +182,13 @@ describe('Toolbar', () => {
       const dropdown = container.querySelector('.toolbar-filter-dropdown');
       const items = dropdown.querySelectorAll('.custom-dropdown-item');
 
-      expect(items).toHaveLength(4);
+      expect(items).toHaveLength(6);
       expect(items[0].getAttribute('data-value')).toBe('all');
       expect(items[1].getAttribute('data-value')).toBe('down');
       expect(items[2].getAttribute('data-value')).toBe('up');
       expect(items[3].getAttribute('data-value')).toBe('unread');
+      expect(items[4].getAttribute('data-value')).toBe('paused');
+      expect(items[5].getAttribute('data-value')).toBe('error');
     });
 
     test('triggers onFilter callback when item is clicked', () => {

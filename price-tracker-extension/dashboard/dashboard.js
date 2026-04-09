@@ -204,6 +204,14 @@ const Dashboard = (function () {
         return tracker.unread === true || tracker.status === 'updated';
       }
 
+      // Status filters
+      if (priceFilter === 'paused') {
+        return tracker.status === 'paused';
+      }
+      if (priceFilter === 'error') {
+        return tracker.status === 'error';
+      }
+
       // Price direction filter
       if (priceFilter === 'down') {
         return tracker.currentPrice < tracker.initialPrice;
@@ -1143,12 +1151,59 @@ const Dashboard = (function () {
     // Update folder sidebar
     renderFolderSidebar();
 
+    // Update last checked indicator
+    updateLastCheckedIndicator();
+
     // Load sparklines after a short delay to ensure DOM is ready
     setTimeout(function () { loadSparklines(); }, 300);
 
     // Reset badge when dashboard opens (Requirement 17.2)
     sendMessage({ action: 'resetBadge' }).catch(() => {});
   }
+
+  // ─── Last Checked Indicator ─────────────────────────────────────
+
+  function updateLastCheckedIndicator() {
+    var el = document.getElementById('toolbar-last-checked');
+    if (!el) {
+      // Create indicator next to refresh button
+      el = document.createElement('span');
+      el.id = 'toolbar-last-checked';
+      el.className = 'toolbar-last-checked';
+      var refreshBtn = document.getElementById('toolbar-refresh-btn');
+      if (refreshBtn && refreshBtn.parentNode) {
+        refreshBtn.parentNode.insertBefore(el, refreshBtn.nextSibling);
+      }
+    }
+
+    // Find most recent lastCheckedAt
+    var latest = null;
+    allTrackers.forEach(function (t) {
+      if (t.lastCheckedAt) {
+        var d = new Date(t.lastCheckedAt).getTime();
+        if (!latest || d > latest) latest = d;
+      }
+    });
+
+    if (!latest) {
+      el.textContent = '';
+      return;
+    }
+
+    function formatAgo(ms) {
+      var mins = Math.floor(ms / 60000);
+      if (mins < 1) return 'только что';
+      if (mins < 60) return mins + 'м назад';
+      var hours = Math.floor(mins / 60);
+      if (hours < 24) return hours + 'ч назад';
+      return Math.floor(hours / 24) + 'д назад';
+    }
+
+    el.textContent = '🕐 ' + formatAgo(Date.now() - latest);
+  }
+
+  // Update indicator every minute
+  setInterval(updateLastCheckedIndicator, 60000);
 
   // ─── Folder Sidebar ─────────────────────────────────────────────
 
@@ -2257,6 +2312,36 @@ const Dashboard = (function () {
 
     // Initialise drag & drop
     initDragAndDrop();
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function (e) {
+      // Ctrl+F — focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        var searchInput = document.querySelector('.toolbar-search-input');
+        if (searchInput) searchInput.focus();
+      }
+      // Ctrl+A — select all (in select mode)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && selectMode) {
+        e.preventDefault();
+        filteredTrackers.forEach(function (t) { selectedIds.add(t.id); });
+        applyFilters(); renderGrid(); updateBulkBar();
+      }
+      // Delete — delete selected
+      if (e.key === 'Delete' && selectMode && selectedIds.size > 0) {
+        e.preventDefault();
+        bulkAction('delete');
+      }
+      // Escape — exit select mode or close modal
+      if (e.key === 'Escape') {
+        if (selectMode) {
+          selectMode = false; selectedIds.clear();
+          applyFilters(); renderGrid(); updateBulkBar();
+        }
+        var modal = document.querySelector('.modal-overlay.active');
+        if (modal) modal.remove();
+      }
+    });
 
     // Load trackers
     loadTrackers();

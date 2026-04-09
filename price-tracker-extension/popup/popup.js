@@ -145,16 +145,64 @@ function init() {
     const url = tab && tab.url;
 
     if (!url || isInternalPage(url)) {
-      // Internal page — only "Показать трекеры" is visible (default state)
       return;
     }
 
     // Regular web page — show manual tracking button
     btnTrackManual.hidden = false;
 
-    // Attempt auto-detection by injecting the autoDetector content script
-    // and listening for its response via a one-time message listener.
+    // Check for existing trackers on this URL
+    showExistingTrackers(url);
+
+    // Attempt auto-detection
     tryAutoDetect(tab);
+  });
+}
+
+/**
+ * Show existing trackers for the current page URL.
+ */
+function showExistingTrackers(pageUrl) {
+  chrome.runtime.sendMessage({ action: 'getAllTrackers' }, function (response) {
+    if (!response || !response.data) return;
+    var trackers = Array.isArray(response.data) ? response.data : [];
+
+    // Normalize URL for matching
+    var normalizedUrl = pageUrl;
+    try {
+      var u = new URL(pageUrl);
+      u.hash = '';
+      normalizedUrl = u.toString().replace(/\/+$/, '');
+    } catch (_) {}
+
+    var matching = trackers.filter(function (t) {
+      var tUrl = t.pageUrl;
+      try {
+        var tu = new URL(tUrl);
+        tu.hash = '';
+        tUrl = tu.toString().replace(/\/+$/, '');
+      } catch (_) {}
+      return tUrl === normalizedUrl || t.pageUrl === pageUrl;
+    });
+
+    if (matching.length === 0) return;
+
+    var container = document.getElementById('existing-trackers');
+    if (!container) return;
+
+    var html = '<div class="popup-existing-header">📋 Уже отслеживается (' + matching.length + ')</div>';
+    matching.forEach(function (t) {
+      var price = Number(t.currentPrice);
+      var priceStr = price > 0 ? price.toLocaleString() + ' грн' : (t.currentContent || '—');
+      var name = (t.productName || '').slice(0, 40);
+      html += '<div class="popup-existing-item">'
+        + '<span class="popup-existing-name">' + name + '</span>'
+        + '<span class="popup-existing-price">' + priceStr + '</span>'
+        + '</div>';
+    });
+
+    container.innerHTML = html;
+    container.hidden = false;
   });
 }
 
