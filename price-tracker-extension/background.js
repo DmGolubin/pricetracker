@@ -219,11 +219,23 @@ async function handleElementSelected(message) {
   // Schedule alarm for periodic checks
   alarmManager.scheduleTracker(tracker.id, tracker.checkIntervalHours);
 
+  // Auto-assign to existing group if no group was specified
+  if (!tracker.productGroup) {
+    try {
+      var autoGroupUrl = apiClient.getBaseUrl() + '/trackers/auto-group/single/' + tracker.id;
+      var agRes = await fetch(autoGroupUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      var agResult = await agRes.json();
+      if (agResult.matched && agResult.group) {
+        tracker.productGroup = agResult.group;
+        console.log('[AutoGroup] Tracker #' + tracker.id + ' assigned to group: ' + agResult.group);
+      }
+    } catch (_ag) {}
+  }
+
   // Run first price check respecting the global checkMethod setting
   setTimeout(function () {
     handleCheckSingle(tracker.id)
       .then(function () {
-        // Notify open dashboard/popup that this tracker was updated
         chrome.runtime.sendMessage({
           action: _c.MessageFromSW.TRACKER_UPDATED,
           trackerId: tracker.id,
@@ -257,6 +269,17 @@ async function handleAutoDetected(message) {
 
   // Schedule alarm for periodic checks
   alarmManager.scheduleTracker(tracker.id, tracker.checkIntervalHours);
+
+  // Auto-assign to existing group
+  try {
+    var autoGroupUrl = apiClient.getBaseUrl() + '/trackers/auto-group/single/' + tracker.id;
+    var agRes = await fetch(autoGroupUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    var agResult = await agRes.json();
+    if (agResult.matched && agResult.group) {
+      tracker.productGroup = agResult.group;
+      console.log('[AutoGroup] Tracker #' + tracker.id + ' assigned to group: ' + agResult.group);
+    }
+  } catch (_ag) {}
 
   // Run first price check respecting the global checkMethod setting
   setTimeout(function () {

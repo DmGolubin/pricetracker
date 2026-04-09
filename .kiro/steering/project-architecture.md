@@ -27,7 +27,7 @@ Price Tracker — система отслеживания цен на товар
 - `telegramSender.js` — отправка сообщений в Telegram (поддерживает personalChatId и groupChatId)
 - `telegramBot.js` — Telegram-бот с long polling, команды /start /groups /best /all /stats /check /settings /help
 - `scheduler.js` — cron-планировщик проверок (по умолчанию каждые 3 часа)
-- `autoGrouper.js` — автоматическая группировка трекеров по названию товара (cross-store)
+- `autoGrouper.js` — автоматическая группировка трекеров по названию товара (cross-store). Два режима: assignToExisting (тихо при создании трекера), suggestGroups (предложения для ручного подтверждения)
 - `priceParser.js` — парсинг цен из текста
 
 ### База данных (PostgreSQL)
@@ -38,7 +38,10 @@ Price Tracker — система отслеживания цен на товар
 
 ### REST API эндпоинты
 - `GET/POST /trackers`, `GET/PUT/DELETE /trackers/:id`
-- `POST /trackers/auto-group`
+- `POST /trackers/auto-group` — автогруппировка в существующие группы (без создания новых)
+- `GET /trackers/auto-group/suggest` — предложения группировки (preview)
+- `POST /trackers/auto-group/apply` — применить выбранные предложения
+- `POST /trackers/auto-group/single/:id` — тихо назначить трекер в существующую группу
 - `GET/POST /priceHistory`, `POST /priceHistory/clear-all`
 - `GET/PUT /settings/global`
 - `POST /server-check` — ручной запуск проверки цен

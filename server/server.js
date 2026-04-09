@@ -334,6 +334,37 @@ app.post('/trackers/auto-group', async (req, res) => {
   }
 });
 
+app.get('/trackers/auto-group/suggest', async (req, res) => {
+  try {
+    const result = await autoGrouper.suggestGroups(pool);
+    res.json(result);
+  } catch (err) {
+    console.error('GET /trackers/auto-group/suggest error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/trackers/auto-group/apply', async (req, res) => {
+  try {
+    const assignments = req.body.assignments || [];
+    const result = await autoGrouper.applyGrouping(pool, assignments);
+    res.json(result);
+  } catch (err) {
+    console.error('POST /trackers/auto-group/apply error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/trackers/auto-group/single/:id', async (req, res) => {
+  try {
+    const matchedGroup = await autoGrouper.assignToExisting(pool, req.params.id);
+    res.json({ matched: !!matchedGroup, group: matchedGroup });
+  } catch (err) {
+    console.error('POST /trackers/auto-group/single error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Price History ──────────────────────────────────────────────────
 
 // Clear all price history and reset tracker prices to initialPrice

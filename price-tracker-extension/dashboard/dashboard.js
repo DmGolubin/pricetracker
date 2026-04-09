@@ -1319,22 +1319,39 @@ const Dashboard = (function () {
     var btn = document.getElementById('toolbar-autogroup-btn');
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = '<span class="save-spinner"></span> Группировка...';
+      btn.innerHTML = '<span class="save-spinner"></span> Анализ...';
     }
 
     try {
-      var res = await fetch(API_BASE + '/trackers/auto-group', {
+      // First: silently assign to existing groups
+      var quickRes = await fetch(API_BASE + '/trackers/auto-group', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-      var result = await res.json();
-      var msg = 'Сгруппировано: ' + (result.grouped || 0) + ' трекеров';
-      if (result.newGroups) msg += ', ' + result.newGroups + ' новых групп';
-      showRefreshStatus('📦 ' + msg, false);
-      await loadTrackers();
-      setTimeout(hideRefreshStatus, 5000);
+      var quickResult = await quickRes.json();
+      var quickMsg = '';
+      if (quickResult.grouped > 0) {
+        quickMsg = '✅ Добавлено в существующие группы: ' + quickResult.grouped;
+      }
+
+      // Then: get suggestions for remaining ungrouped
+      var suggestRes = await fetch(API_BASE + '/trackers/auto-group/suggest');
+      var suggestions = await suggestRes.json();
+
+      if (suggestions.newGroupSuggestions && suggestions.newGroupSuggestions.length > 0) {
+        // Show suggestion modal
+        showAutoGroupSuggestions(suggestions, quickMsg);
+      } else {
+        if (quickMsg) {
+          showRefreshStatus(quickMsg, false);
+        } else {
+          showRefreshStatus('📦 Все трекеры уже сгруппированы или нет совпадений', false);
+        }
+        setTimeout(hideRefreshStatus, 5000);
+        await loadTrackers();
+      }
     } catch (err) {
-      showRefreshStatus('Ошибка группировки: ' + (err.message || ''), false);
+      showRefreshStatus('Ошибка: ' + (err.message || ''), false);
       setTimeout(hideRefreshStatus, 5000);
     } finally {
       if (btn) {
@@ -1343,6 +1360,156 @@ const Dashboard = (function () {
         btn.innerHTML = pkgIcon + ' Группы';
       }
     }
+  }
+
+  /**
+   * Show a modal with auto-group suggestions for user to approve/reject.
+   */
+  function showAutoGroupSuggestions(suggestions, preMessage) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay active';
+
+    var modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.maxWidth = '600px';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-label', 'Предложения группировки');
+
+    // Header
+    var header = document.createElement('div');
+    header.className = 'modal-header';
+    var title = document.createElement('h2');
+    title.textContent = '📦 Предложения группировки';
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'btn-icon';
+    closeBtn.innerHTML = (typeof Icons !== 'undefined') ? Icons.el('close', 20) : '×';
+    closeBtn.addEventListener('click', function () { overlay.remove(); });
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    // Body
+    var body = document.createElement('div');
+    body.className = 'modal-body';
+
+    if (preMessage) {
+      var preMsg = document.createElement('p');
+      preMsg.className = 'settings-info-note';
+      preMsg.textContent = preMessage;
+      preMsg.style.marginBottom = 'var(--spacing-md)';
+      body.appendChild(preMsg);
+    }
+
+    var newSuggestions = suggestions.newGroupSuggestions || [];
+    if (newSuggestions.length === 0) {
+      var noSugg = document.createElement('p');
+      noSugg.textContent = 'Нет предложений для новых групп.';
+      body.appendChild(noSugg);
+    }
+
+    // Track which suggestions are accepted
+    var accepted = new Set();
+    // Track custom names per suggestion index
+    var customNames = {};
+
+    newSuggestions.forEach(function (sugg, idx) {
+      var card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'padding:var(--spacing-md);margin-bottom:var(--spacing-sm)';
+
+      // Checkbox + group name
+      var topRow = document.createElement('div');
+      topRow.style.cssText = 'display:flex;align-items:center;gap:var(--spacing-sm);margin-bottom:var(--spacing-xs)';
+
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      accepted.add(idx);
+      cb.addEventListener('change', function () {
+        if (cb.checked) accepted.add(idx); else accepted.delete(idx);
+      });
+
+      var nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'input';
+      nameInput.value = sugg.suggestedName;
+      nameInput.style.cssText = 'flex:1;font-weight:600';
+      nameInput.addEventListener('input', function () {
+        customNames[idx] = nameInput.value.trim();
+      });
+
+      topRow.appendChild(cb);
+      topRow.appendChild(nameInput);
+      card.appendChild(topRow);
+
+      // Tracker list
+      var trackerList = document.createElement('div');
+      trackerList.style.cssText = 'font-size:12px;color:var(--text-muted);padding-left:28px';
+      sugg.trackers.forEach(function (t) {
+        var line = document.createElement('div');
+        line.textContent = '• ' + (t.name || '').slice(0, 60);
+        trackerList.appendChild(line);
+      });
+      card.appendChild(trackerList);
+
+      body.appendChild(card);
+    });
+
+    // Footer
+    var footer = document.createElement('div');
+    footer.className = 'modal-footer';
+
+    var applyBtn = document.createElement('button');
+    applyBtn.className = 'btn btn-primary';
+    applyBtn.textContent = 'Применить выбранные';
+    applyBtn.addEventListener('click', async function () {
+      applyBtn.disabled = true;
+      applyBtn.innerHTML = '<span class="save-spinner"></span>';
+
+      var assignments = [];
+      newSuggestions.forEach(function (sugg, idx) {
+        if (!accepted.has(idx)) return;
+        var groupName = customNames[idx] || sugg.suggestedName;
+        sugg.trackers.forEach(function (t) {
+          assignments.push({ trackerId: t.id, groupName: groupName });
+        });
+      });
+
+      if (assignments.length > 0) {
+        try {
+          await fetch(API_BASE + '/trackers/auto-group/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ assignments: assignments }),
+          });
+        } catch (_) {}
+      }
+
+      overlay.remove();
+      showRefreshStatus('📦 Группировка применена: ' + assignments.length + ' трекеров', false);
+      setTimeout(hideRefreshStatus, 5000);
+      await loadTrackers();
+    });
+
+    var skipBtn = document.createElement('button');
+    skipBtn.className = 'btn';
+    skipBtn.textContent = 'Пропустить';
+    skipBtn.addEventListener('click', function () {
+      overlay.remove();
+      loadTrackers();
+    });
+
+    footer.appendChild(skipBtn);
+    footer.appendChild(applyBtn);
+
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) overlay.remove();
+    });
+
+    modalContainer.appendChild(overlay);
   }
 
   // ─── Import / Export ─────────────────────────────────────────────
