@@ -557,6 +557,100 @@ const Dashboard = (function () {
   // ─── Server-side Refresh ──────────────────────────────────────────
 
   /**
+   * Determine the current check method from global settings.
+   * @returns {Promise<string>} 'server' | 'extension' | 'hybrid'
+   */
+  async function getGlobalCheckMethod() {
+    try {
+      var res = await fetch(API_BASE + '/settings/global');
+      var settings = await res.json();
+      return (settings && settings.checkMethod) || 'server';
+    } catch (_) {
+      return 'server';
+    }
+  }
+
+  /**
+   * Main refresh handler — respects the global checkMethod setting.
+   */
+  async function handleRefreshAll() {
+    var method = await getGlobalCheckMethod();
+    if (method === 'extension') {
+      return handleExtensionRefresh();
+    }
+    if (method === 'hybrid') {
+      return handleHybridRefresh();
+    }
+    return handleServerRefresh();
+  }
+
+  /**
+   * Hybrid refresh: try server first, fallback to extension on error.
+   */
+  async function handleHybridRefresh() {
+    var refreshBtn = document.getElementById('toolbar-refresh-btn');
+
+    if (!confirm('Запустить проверку цен? Сначала сервер, при ошибке — через браузер.')) return;
+
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.innerHTML = '<span class="save-spinner"></span> Проверка...';
+    }
+
+    showRefreshStatus('🔄 Гибрид: пробуем сервер...', true);
+
+    try {
+      refreshAbortController = new AbortController();
+      var res = await fetch(API_BASE + '/server-check', {
+        method: 'POST',
+        signal: refreshAbortController.signal,
+      });
+      var result = await res.json();
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      showRefreshStatus(
+        '✅ Сервер: проверено ' + result.checked + ' | изменилось ' + result.changed + ' | ошибок ' + result.errors,
+        false
+      );
+      await loadTrackers();
+    } catch (serverErr) {
+      if (serverErr.name === 'AbortError') {
+        showRefreshStatus('Проверка отменена', false);
+        return;
+      }
+      // Fallback to extension
+      showRefreshStatus('⚠️ Сервер недоступен, переключаюсь на браузер...', false);
+      try {
+        await new Promise(function (resolve, reject) {
+          chrome.runtime.sendMessage(
+            { action: 'checkAllPricesExtension' },
+            function (resp) {
+              if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+              if (resp && resp.error) return reject(new Error(resp.error));
+              resolve(resp);
+            }
+          );
+        });
+        showRefreshStatus('✅ Проверка через браузер завершена (fallback)', false);
+        await loadTrackers();
+      } catch (extErr) {
+        showRefreshStatus('Ошибка: ' + (extErr.message || 'неизвестная ошибка'), false);
+      }
+    } finally {
+      refreshAbortController = null;
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        var refreshIcon = (typeof Icons !== 'undefined') ? Icons.el('refresh', 18) : '';
+        refreshBtn.innerHTML = refreshIcon + ' Обновить все';
+      }
+      setTimeout(hideRefreshStatus, 8000);
+    }
+  }
+
+  /**
    * Trigger server-side price check with progress UI.
    */
   async function handleServerRefresh() {
@@ -675,12 +769,17 @@ const Dashboard = (function () {
    */
   async function handleExtensionRefresh() {
     var extBtn = document.getElementById('toolbar-ext-refresh-btn');
+    var refreshBtn = document.getElementById('toolbar-refresh-btn');
 
     if (!confirm('Проверить цены через браузер? Будут открываться и закрываться вкладки.')) return;
 
+    // Disable both buttons
     if (extBtn) {
       extBtn.disabled = true;
       extBtn.innerHTML = '<span class="save-spinner"></span> Проверка...';
+    }
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
     }
 
     showRefreshStatus('🌐 Проверка цен через браузер...', false);
@@ -712,6 +811,9 @@ const Dashboard = (function () {
         extBtn.disabled = false;
         var globeIcon = (typeof Icons !== 'undefined') ? Icons.el('globe', 18) : '🌐';
         extBtn.innerHTML = globeIcon + ' Браузер';
+      }
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
       }
       setTimeout(hideRefreshStatus, 8000);
     }
@@ -1067,7 +1169,7 @@ const Dashboard = (function () {
         onSearch: onSearchChange,
         onFilter: onFilterChange,
         onSort: onSortChange,
-        onRefreshAll: handleServerRefresh,
+        onRefreshAll: handleRefreshAll,
         onRefreshExtension: handleExtensionRefresh,
         onSettingsClick: () => {
           if (typeof GlobalSettings !== 'undefined' && GlobalSettings.open) {
