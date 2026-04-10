@@ -426,8 +426,9 @@ async function extractPrice(tracker, options) {
     // Strategy: extract volume from productName, find button by title, click it,
     // wait for price to update.
     if (isEva && tracker.variantSelector) {
-      // Extract desired volume from productName (e.g., "— 100" or "— 30")
+      // Extract desired volume from productName (e.g., "— 100" or "— 30" or "100 мл" or "30 мл")
       var volumeMatch = (tracker.productName || '').match(/—\s*(\d+)/);
+      if (!volumeMatch) volumeMatch = (tracker.productName || '').match(/(\d+)\s*(?:мл|ml)\b/i);
       var desiredVolume = volumeMatch ? volumeMatch[1] : null;
       console.log('[Scraper] #' + trackerId + ' EVA: looking for variant, desired volume: ' + (desiredVolume || 'unknown'));
 
@@ -535,6 +536,21 @@ async function extractPrice(tracker, options) {
           }
 
           await new Promise(function(r) { setTimeout(r, settleDelay); });
+
+          // Wait for price to actually change after variant click
+          if (priceBefore && !isOutOfStock) {
+            try {
+              await page.waitForFunction(function(oldPrice) {
+                var el = document.querySelector('[data-testid="product-price"]');
+                if (!el) return false;
+                var newPrice = (el.textContent || '').trim();
+                return newPrice && newPrice !== oldPrice;
+              }, { timeout: 8000 }, priceBefore);
+              console.log('[Scraper] #' + trackerId + ' EVA: price changed after variant click');
+            } catch (_) {
+              console.log('[Scraper] #' + trackerId + ' EVA: price did not change after click (may be same price for this variant)');
+            }
+          }
 
           // Try to read the price — may need multiple attempts if frame was detached
           var evaPrice = null;
