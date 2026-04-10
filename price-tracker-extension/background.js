@@ -505,22 +505,7 @@ async function getActiveTab(sender) {
 }
 
 // ─── Alarm Handler ──────────────────────────────────────────────────
-// When checkMethod is 'extension' or 'hybrid', alarms trigger local checks.
-// When checkMethod is 'server', alarms are not used (server cron handles it).
-
-chrome.alarms.onAlarm.addListener(function (alarm) {
-  var _getAlarmId = _c.getTrackerIdFromAlarm;
-  var trackerId = _getAlarmId ? _getAlarmId(alarm.name) : null;
-  if (!trackerId) return;
-
-  // Check the global method — only run extension check if not server-only
-  getCheckMethod().then(function (method) {
-    if (method === CheckMethod.SERVER) return; // server cron handles it
-    priceChecker.checkPrice(trackerId, extensionCheckDeps).catch(function (err) {
-      console.warn('Alarm check failed for tracker #' + trackerId + ':', err);
-    });
-  });
-});
+// Periodic checks are handled by server cron. Extension alarms disabled.
 
 // ─── Notification Click Handler ─────────────────────────────────────
 
@@ -549,25 +534,10 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
  * Only sets alarms when checkMethod is 'extension' or 'hybrid'.
  */
 async function rescheduleAllAlarms() {
-  var method = await getCheckMethod();
-  if (method === CheckMethod.SERVER) {
-    chrome.alarms.clearAll();
-    return;
-  }
-  try {
-    var trackers = await apiClient.getTrackers();
-    for (var i = 0; i < trackers.length; i++) {
-      var t = trackers[i];
-      if (t.status !== TrackerStatus.PAUSED && t.status !== TrackerStatus.ERROR) {
-        var interval = t.checkIntervalHours || DEFAULT_CHECK_INTERVAL;
-        if (interval > 0) {
-          alarmManager.scheduleTracker(t.id, interval);
-        }
-      }
-    }
-  } catch (_) {
-    // Cannot fetch trackers — alarms will be set on next check
-  }
+  // Extension-based periodic checks are disabled — all periodic checking
+  // is handled by the server cron (scheduler.js). Extension checks are
+  // manual only (via "Обновить все" button). Clear any leftover alarms.
+  chrome.alarms.clearAll();
 }
 
 chrome.runtime.onInstalled.addListener(() => {
