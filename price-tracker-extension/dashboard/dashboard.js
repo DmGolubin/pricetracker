@@ -985,6 +985,40 @@ const Dashboard = (function () {
   /**
    * Refresh only the currently filtered/visible trackers (e.g. a specific folder).
    */
+  /**
+   * Run async tasks with concurrency limit.
+   * @param {Array} items
+   * @param {number} concurrency
+   * @param {Function} fn - async function(item, index)
+   * @param {Function} [onProgress] - callback(completed, total)
+   * @returns {Promise<{errors: number}>}
+   */
+  async function runConcurrent(items, concurrency, fn, onProgress) {
+    var completed = 0;
+    var errors = 0;
+    var idx = 0;
+
+    async function worker() {
+      while (idx < items.length) {
+        var i = idx++;
+        try {
+          await fn(items[i], i);
+        } catch (_) {
+          errors++;
+        }
+        completed++;
+        if (onProgress) onProgress(completed, items.length);
+      }
+    }
+
+    var workers = [];
+    for (var w = 0; w < Math.min(concurrency, items.length); w++) {
+      workers.push(worker());
+    }
+    await Promise.all(workers);
+    return { errors: errors };
+  }
+
   async function handleRefreshFiltered() {
     var ids = filteredTrackers.map(function (t) { return t.id; });
     if (ids.length === 0) {
@@ -1003,18 +1037,14 @@ const Dashboard = (function () {
 
     showRefreshStatus('🔄 Обновление "' + folderName + '": 0/' + ids.length, false);
 
-    var errors = 0;
-    for (var i = 0; i < ids.length; i++) {
-      try {
-        await sendMessage({ action: 'checkPrice', trackerId: ids[i] });
-      } catch (_) {
-        errors++;
-      }
-      showRefreshStatus('🔄 Обновление "' + folderName + '": ' + (i + 1) + '/' + ids.length, false);
-    }
+    var result = await runConcurrent(ids, 3, function (id) {
+      return sendMessage({ action: 'checkPrice', trackerId: id });
+    }, function (done, total) {
+      showRefreshStatus('🔄 Обновление "' + folderName + '": ' + done + '/' + total, false);
+    });
 
-    var msg = '✅ ' + folderName + ': обновлено ' + (ids.length - errors) + '/' + ids.length;
-    if (errors > 0) msg += ' (ошибок: ' + errors + ')';
+    var msg = '✅ ' + folderName + ': обновлено ' + (ids.length - result.errors) + '/' + ids.length;
+    if (result.errors > 0) msg += ' (ошибок: ' + result.errors + ')';
     showRefreshStatus(msg, false);
     setTimeout(hideRefreshStatus, 5000);
 
@@ -2227,8 +2257,29 @@ const Dashboard = (function () {
 
     if (action === 'refresh') {
       showBulkProgress(0, ids.length, 'Обновление цен...');
+
+      var result = await runConcurrent(ids, 3, function (id) {
+        return sendMessage({ action: 'checkPrice', trackerId: id });
+      }, function (done, total) {
+        showBulkProgress(done, total, 'Обновление цен...');
+      });
+
+      hideBulkProgress();
+      var msg = '✅ Обновлено: ' + (ids.length - result.errors) + '/' + ids.length;
+      if (result.errors > 0) msg += ' (ошибок: ' + result.errors + ')';
+      showRefreshStatus(msg, false);
+      setTimeout(hideRefreshStatus, 5000);
+      await loadTrackers();
+
+      selectedIds.clear();
+      selectMode = false;
+      applyFilters();
+      renderGrid();
+      updateBulkBar();
+      return;
     }
 
+    // Sequential for non-refresh actions (delete, pause, resume)
     var errors = 0;
     for (var i = 0; i < ids.length; i++) {
       try {
@@ -2243,25 +2294,10 @@ const Dashboard = (function () {
           await sendMessage({ action: 'updateTracker', trackerId: ids[i], data: { status: 'active' } });
           var t2 = allTrackers.find(function (t) { return t.id === ids[i]; });
           if (t2) t2.status = 'active';
-        } else if (action === 'refresh') {
-          await sendMessage({ action: 'checkPrice', trackerId: ids[i] });
         }
       } catch (_) {
         errors++;
       }
-      if (action === 'refresh') {
-        showBulkProgress(i + 1, ids.length, 'Обновление цен...');
-      }
-    }
-
-    hideBulkProgress();
-
-    if (action === 'refresh') {
-      var msg = '✅ Обновлено: ' + (ids.length - errors) + '/' + ids.length;
-      if (errors > 0) msg += ' (ошибок: ' + errors + ')';
-      showRefreshStatus(msg, false);
-      setTimeout(hideRefreshStatus, 5000);
-      await loadTrackers();
     }
 
     selectedIds.clear();
