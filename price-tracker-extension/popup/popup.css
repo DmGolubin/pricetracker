@@ -1,147 +1,88 @@
 /**
  * Popup-specific styles for Price Tracker Extension.
  * Dark theme — inherits CSS variables from shared/styles.css.
- *
- * Requirements: 3.1, 12.1
  */
 
 /* ===== Container ===== */
 .popup-container {
-  width: 300px;
+  width: 340px;
   padding: var(--spacing-md);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
 }
 
 /* ===== Header ===== */
 .popup-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding-bottom: var(--spacing-md);
-  position: relative;
+  justify-content: space-between;
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-primary);
 }
 
-.popup-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(to right, transparent, var(--border-light, rgba(255,255,255,0.12)), transparent);
-}
-
-.popup-logo {
-  font-size: 22px;
-  line-height: 1;
-}
-
-.popup-title {
-  font-size: var(--font-lg);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-/* ===== Actions ===== */
-.popup-actions {
+.popup-header-left {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--spacing-sm);
 }
 
-.popup-btn {
-  width: 100%;
-  padding: 10px var(--spacing-md);
-  font-size: var(--font-md);
-  text-align: center;
-}
-
-.popup-btn-track {
-  background-color: var(--bg-card);
-  border-color: var(--border-primary);
-  color: var(--text-primary);
-}
-
-.popup-btn-track:hover {
-  background-color: var(--bg-card-hover);
-  border-color: var(--border-light);
-}
-
-/* Auto-detect button uses primary style */
-#btn-track-auto {
-  background-color: var(--accent-green);
-  border-color: var(--accent-green);
-  color: #fff;
-}
-
-#btn-track-auto:hover {
-  background-color: #43a047;
-  border-color: #43a047;
-}
-
-#btn-track-auto:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* ===== Status message ===== */
-.popup-status {
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
-  text-align: center;
-  padding: var(--spacing-xs) 0;
-}
-
-.popup-status-error {
-  color: var(--accent-red);
-}
-
-
-/* ===== SVG Logo ===== */
 .popup-logo {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 24px;
+  line-height: 1;
 }
 
 .popup-logo svg {
-  color: var(--accent-primary, #5C6BC0);
+  color: var(--accent-primary);
 }
 
-/* ===== Status message animations ===== */
-.popup-status-enter {
-  animation: slideDown 200ms ease-out forwards;
+.popup-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
 }
 
-.popup-status-exit {
-  animation: slideUp 200ms ease-in forwards;
+.popup-stats {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
 }
 
 /* ===== Existing Trackers ===== */
 .popup-existing {
-  border-top: 1px solid var(--border-primary);
-  padding-top: var(--spacing-sm);
-  margin-top: var(--spacing-xs);
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm);
 }
 
 .popup-existing-header {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-muted);
-  margin-bottom: var(--spacing-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--accent-primary);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .popup-existing-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  padding: 5px 0;
   font-size: 12px;
   gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.popup-existing-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .popup-existing-name {
@@ -154,6 +95,123 @@
 
 .popup-existing-price {
   color: var(--accent-green, #4CAF50);
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.popup-existing-vol {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.popup-existing-refresh {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.popup-existing-refresh:hover {
+  opacity: 1;
+}
+
+/* ===== Actions ===== */
+.popup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.popup-btn {
+  width: 100%;
+  padding: 10px var(--spacing-md);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.popup-btn-icon {
+  font-size: 15px;
+}
+
+.popup-btn-auto {
+  background: linear-gradient(135deg, var(--accent-green), #2dd4bf);
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  padding: 12px;
+}
+
+.popup-btn-auto:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.popup-btn-auto:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.popup-btn-manual {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+}
+
+.popup-btn-manual:hover {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.popup-btn-dashboard {
+  font-size: 13px;
+}
+
+/* ===== Status message ===== */
+.popup-status {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: var(--spacing-xs) 0;
+  border-radius: var(--radius-sm);
+}
+
+.popup-status-error {
+  color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.08);
+  padding: 6px 10px;
+}
+
+/* ===== Animations ===== */
+.popup-status-enter {
+  animation: slideDown 200ms ease-out forwards;
+}
+
+.popup-status-exit {
+  animation: slideUp 200ms ease-in forwards;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-8px); }
 }

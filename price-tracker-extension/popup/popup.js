@@ -167,6 +167,14 @@ function showExistingTrackers(pageUrl) {
     if (!response || !response.data) return;
     var trackers = Array.isArray(response.data) ? response.data : [];
 
+    // Show stats in header
+    var statsEl = document.getElementById('popup-stats');
+    if (statsEl) {
+      var groups = {};
+      trackers.forEach(function (t) { if (t.productGroup) groups[t.productGroup] = true; });
+      statsEl.textContent = trackers.length + ' трекеров · ' + Object.keys(groups).length + ' групп';
+    }
+
     // Normalize URL for matching
     var normalizedUrl = pageUrl;
     try {
@@ -190,13 +198,17 @@ function showExistingTrackers(pageUrl) {
     var container = document.getElementById('existing-trackers');
     if (!container) return;
 
-    var html = '<div class="popup-existing-header">📋 Уже отслеживается (' + matching.length + ')</div>';
+    var html = '<div class="popup-existing-header">✅ Уже отслеживается (' + matching.length + ')</div>';
     matching.forEach(function (t) {
       var price = Number(t.currentPrice);
-      var priceStr = price > 0 ? price.toLocaleString() + ' грн' : (t.currentContent || '—');
-      var name = (t.productName || '').slice(0, 40);
+      var priceStr = price > 0 ? price.toLocaleString() + ' ₴' : (t.currentContent || '—');
+      var name = (t.productName || '').slice(0, 35);
+      // Extract volume
+      var volMatch = (t.productName || '').match(/(\d+)\s*(?:ml|мл)\b/i);
+      var volTag = volMatch ? '<span class="popup-existing-vol">' + volMatch[1] + ' мл</span>' : '';
       html += '<div class="popup-existing-item">'
         + '<span class="popup-existing-name">' + name + '</span>'
+        + volTag
         + '<span class="popup-existing-price">' + priceStr + '</span>'
         + '</div>';
     });
@@ -243,14 +255,16 @@ function tryAutoDetect(tab) {
 
 /**
  * Show the auto-detect button with the found price.
+ * Only shows if price is valid and non-empty.
  */
 function showAutoButton(price) {
-  var text = 'Отслеживать цену (авто)';
-  if (price != null && price !== 0 && price !== '') {
-    var formatted = typeof price === 'number' ? price.toLocaleString() : String(price);
-    if (formatted) text = 'Отслеживать цену: ' + formatted;
+  if (price == null || price === 0 || price === '') {
+    // Don't show empty button
+    return;
   }
-  btnTrackAuto.textContent = text;
+  var formatted = typeof price === 'number' ? price.toLocaleString() : String(price);
+  if (!formatted) return;
+  btnTrackAuto.innerHTML = '<span class="popup-btn-icon">⚡</span> Отслеживать: ' + formatted + ' грн';
   btnTrackAuto.hidden = false;
 }
 

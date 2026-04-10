@@ -9,27 +9,35 @@
 </head>
 <body>
   <div class="popup-container">
+    <!-- Header -->
     <div class="popup-header">
-      <span class="popup-logo" id="popup-logo"></span>
-      <h1 class="popup-title">Price Tracker</h1>
+      <div class="popup-header-left">
+        <span class="popup-logo" id="popup-logo"></span>
+        <div>
+          <h1 class="popup-title">Price Tracker</h1>
+          <span class="popup-stats" id="popup-stats"></span>
+        </div>
+      </div>
     </div>
 
-    <div class="popup-actions">
-      <button id="btn-track-manual" class="btn popup-btn popup-btn-track" hidden>
-        Отслеживать цену на этой странице
-      </button>
+    <!-- Existing trackers for this page -->
+    <div id="existing-trackers" class="popup-existing" hidden></div>
 
-      <button id="btn-track-auto" class="btn btn-primary popup-btn popup-btn-track" hidden>
+    <!-- Actions -->
+    <div class="popup-actions">
+      <button id="btn-track-auto" class="btn popup-btn popup-btn-auto" hidden>
         <!-- Text set dynamically -->
       </button>
 
-      <button id="btn-show-trackers" class="btn btn-primary popup-btn">
-        Показать трекеры
+      <button id="btn-track-manual" class="btn popup-btn popup-btn-manual" hidden>
+        <span class="popup-btn-icon">🎯</span> Выбрать элемент
+      </button>
+
+      <button id="btn-show-trackers" class="btn btn-primary popup-btn popup-btn-dashboard">
+        <span class="popup-btn-icon">📊</span> Дашборд
       </button>
 
       <p id="status-message" class="popup-status" hidden></p>
-
-      <div id="existing-trackers" class="popup-existing" hidden></div>
     </div>
   </div>
 
