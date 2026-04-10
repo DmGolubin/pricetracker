@@ -59,6 +59,17 @@ function start(pool, cronExpression) {
     }
 
     console.log('[Scheduler] ⏰ Cron tick — starting check cycle...');
+
+    // Check if server-side checks are enabled (skip if checkMethod is 'extension')
+    try {
+      var settingsResult = await pool.query("SELECT * FROM settings WHERE id = 'global'");
+      var settings = settingsResult.rows[0] || {};
+      if (settings.checkMethod === 'extension') {
+        console.log('[Scheduler] ⏭ Skipping — checkMethod is "extension" (browser-only mode)');
+        return;
+      }
+    } catch (_) {}
+
     isRunning = true;
     cancelRequested = false;
     lastRunAt = new Date().toISOString();

@@ -1118,6 +1118,12 @@ async function extractPrice(tracker, options) {
       }
       if (notinoPrice) {
         var price = parsePrice(notinoPrice);
+        // Sanity check: Notino prices should be at least 300 грн for perfume
+        // Values like 50, 80, 100, 200 are likely volume (ml) not price
+        if (price !== null && price > 0 && price < 300) {
+          console.log('[Scraper] #' + trackerId + ' Notino: suspicious low price ' + price + ' (likely volume, not price). Skipping.');
+          price = null;
+        }
         if (price !== null && price > 0) {
           var volume = await extractNotinoVolume(page);
           var elapsed = Date.now() - pageStart;
