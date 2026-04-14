@@ -579,11 +579,17 @@ async function extractPrice(tracker, options) {
               return { success: true, price: price };
             }
           }
+
+          // EVA variant click didn't produce a price — variant likely out of stock
+          var elapsed = Date.now() - pageStart;
+          console.log('[Scraper] #' + trackerId + ' ❌ EVA variant price not found after click (' + elapsed + 'ms) — ' + shortName);
+          return { success: false, error: 'EVA variant out of stock or price not found' };
         } catch (clickErr) {
           console.log('[Scraper] #' + trackerId + ' EVA: click failed: ' + clickErr.message);
         }
       } else {
         console.log('[Scraper] #' + trackerId + ' EVA: no matching variant button found. Buttons:', JSON.stringify((evaVariantResult || {}).allButtons));
+        return { success: false, error: 'EVA variant button not found on page' };
       }
     }
 
@@ -829,12 +835,7 @@ async function extractPrice(tracker, options) {
                 }
               }
               
-              // Last resort: read the main displayed price (itemprop="price")
-              var mainPrice = document.querySelector('span[itemprop="price"]');
-              if (mainPrice) {
-                return { found: true, price: mainPrice.textContent.trim(), method: 'main-itemprop-price' };
-              }
-              
+              // Do NOT fall back to main displayed price — it may be a different variant
               return { found: false };
             }, tracker.variantSelector, tracker.productName);
           } catch (e) {
@@ -957,26 +958,12 @@ async function extractPrice(tracker, options) {
         console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + variantPrice + ' (variant price selector, ' + elapsed + 'ms) — ' + shortName);
         return { success: true, price: variantPrice };
       }
-      console.log('[Scraper] #' + trackerId + ' Site-specific selectors failed after variant click, trying auto-detect...');
 
-      var autoPrice = await autoDetectPriceOnPage(page);
-      if (autoPrice !== null) {
-        var elapsed = Date.now() - pageStart;
-        console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + autoPrice + ' (auto-detect after variant, ' + elapsed + 'ms) — ' + shortName);
-        return { success: true, price: autoPrice };
-      }
-
-      // Last resort: try extracting price from productName field
-      var namePrice = extractPriceFromProductName(tracker.productName);
-      if (namePrice !== null) {
-        var elapsed = Date.now() - pageStart;
-        console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + namePrice + ' (from productName, ' + elapsed + 'ms) — ' + shortName);
-        return { success: true, price: namePrice };
-      }
-
+      // NO FALLBACK for variant trackers — auto-detect or productName extraction
+      // would pick up the wrong variant's price. Mark as error instead.
       var elapsed = Date.now() - pageStart;
       console.log('[Scraper] #' + trackerId + ' ❌ Failed (variant, ' + elapsed + 'ms): Could not read price after variant click — ' + shortName);
-      return { success: false, error: 'Could not read price after variant click for: ' + tracker.variantSelector };
+      return { success: false, error: 'Variant price not found (variant may be out of stock): ' + tracker.variantSelector };
     }
 
     // ─── Non-variant trackers: try the CSS selector directly ─────────
