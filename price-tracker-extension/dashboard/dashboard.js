@@ -1652,12 +1652,20 @@ const Dashboard = (function () {
     }
 
     showToast('✏️ Переименование...', 'info');
-    for (var i = 0; i < ids.length; i++) {
-      try {
-        await apiClient.updateTracker(ids[i], { productGroup: newName });
-        var t = allTrackers.find(function (tr) { return tr.id === ids[i]; });
+    try {
+      var updates = ids.map(function (id) { return { id: id, productGroup: newName }; });
+      await apiFetch(API_BASE + '/trackers/batch', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: updates })
+      });
+      ids.forEach(function (id) {
+        var t = allTrackers.find(function (tr) { return tr.id === id; });
         if (t) t.productGroup = newName;
-      } catch (_) {}
+      });
+    } catch (e) {
+      showToast('Ошибка переименования: ' + e.message, 'error');
+      return;
     }
     emptyGroups.delete(oldName);
     if (sidebarFilterGroup === oldName) sidebarFilterGroup = newName;
@@ -1685,12 +1693,20 @@ const Dashboard = (function () {
     if (!confirm('Удалить папку «' + groupName + '»?\n\n' + ids.length + ' трекеров станут без группы.\nСами трекеры НЕ удаляются.')) return;
 
     showToast('🗑️ Удаление папки...', 'info');
-    for (var i = 0; i < ids.length; i++) {
-      try {
-        await apiClient.updateTracker(ids[i], { productGroup: '' });
-        var t = allTrackers.find(function (tr) { return tr.id === ids[i]; });
+    try {
+      var updates = ids.map(function (id) { return { id: id, productGroup: '' }; });
+      await apiFetch(API_BASE + '/trackers/batch', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: updates })
+      });
+      ids.forEach(function (id) {
+        var t = allTrackers.find(function (tr) { return tr.id === id; });
         if (t) t.productGroup = '';
-      } catch (_) {}
+      });
+    } catch (e) {
+      showToast('Ошибка удаления папки: ' + e.message, 'error');
+      return;
     }
     emptyGroups.delete(groupName);
     if (sidebarFilterGroup === groupName) sidebarFilterGroup = null;
