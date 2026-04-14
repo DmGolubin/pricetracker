@@ -139,8 +139,25 @@
   // ─── Helpers ───────────────────────────────────────────────────────
 
   function getProductImage() {
+    // og:image meta tag (most reliable for most sites)
     var ogImg = document.querySelector('meta[property="og:image"]');
     if (ogImg && ogImg.content) return ogImg.content;
+
+    // Makeup.com.ua: link[itemprop="image"] has the product image URL
+    var itemImg = document.querySelector('link[itemprop="image"]');
+    if (itemImg && itemImg.href) return itemImg.href;
+
+    // Makeup.com.ua: main product picture in the carousel
+    var makeupMainImg = document.querySelector('div[class*="ProductMainPicture"] img');
+    if (makeupMainImg && makeupMainImg.src && makeupMainImg.src.indexOf('data:') !== 0) return makeupMainImg.src;
+
+    // Generic: itemprop="image" on any element
+    var schemaImg = document.querySelector('[itemprop="image"]');
+    if (schemaImg) {
+      var src = schemaImg.getAttribute('content') || schemaImg.getAttribute('src') || schemaImg.getAttribute('href');
+      if (src) return src;
+    }
+
     var imgs = document.querySelectorAll('img');
     for (var i = 0; i < imgs.length; i++) {
       if (imgs[i].naturalWidth >= 150 || imgs[i].width >= 150) return imgs[i].src;
