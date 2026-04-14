@@ -1548,6 +1548,10 @@ const Dashboard = (function () {
         applyFilters();
         renderGrid();
       });
+      item.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        showFolderContextMenu(e, name);
+      });
       list.appendChild(item);
     });
 
@@ -1579,6 +1583,150 @@ const Dashboard = (function () {
       }
     });
     list.appendChild(createBtn);
+  }
+
+  /**
+   * Show context menu for a folder with management actions.
+   */
+  function showFolderContextMenu(event, groupName) {
+    // Remove any existing context menu
+    var old = document.querySelector('.folder-context-menu');
+    if (old) old.remove();
+
+    var menu = document.createElement('div');
+    menu.className = 'folder-context-menu';
+    menu.style.position = 'fixed';
+    menu.style.left = event.clientX + 'px';
+    menu.style.top = event.clientY + 'px';
+    menu.style.zIndex = '10000';
+
+    var trackersInGroup = allTrackers.filter(function (t) { return t.productGroup === groupName; });
+
+    var actions = [
+      { icon: '✏️', label: 'Переименовать', action: function () { renameFolderAction(groupName); } },
+      { icon: '🔗', label: 'Открыть все (' + trackersInGroup.length + ')', action: function () { openFolderTabs(groupName); } },
+      { icon: '☑️', label: 'Выделить все', action: function () { selectFolderTrackers(groupName); } },
+      { icon: '🗑️', label: 'Удалить папку', danger: true, action: function () { deleteFolderAction(groupName); } },
+    ];
+
+    actions.forEach(function (a) {
+      var btn = document.createElement('button');
+      btn.className = 'folder-context-item' + (a.danger ? ' folder-context-danger' : '');
+      btn.textContent = a.icon + ' ' + a.label;
+      btn.addEventListener('click', function () {
+        menu.remove();
+        a.action();
+      });
+      menu.appendChild(btn);
+    });
+
+    document.body.appendChild(menu);
+
+    // Close on click outside
+    function closeMenu(e) {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu, true);
+      }
+    }
+    setTimeout(function () { document.addEventListener('click', closeMenu, true); }, 0);
+  }
+
+  /**
+   * Rename a folder (group) — updates all trackers in that group.
+   */
+  async function renameFolderAction(oldName) {
+    var newName = prompt('Новое название папки:', oldName);
+    if (!newName || !newName.trim() || newName.trim() === oldName) return;
+    newName = newName.trim();
+
+    var ids = allTrackers.filter(function (t) { return t.productGroup === oldName; }).map(function (t) { return t.id; });
+    if (ids.length === 0) {
+      // Empty folder — just rename in local set
+      emptyGroups.delete(oldName);
+      emptyGroups.add(newName);
+      if (sidebarFilterGroup === oldName) sidebarFilterGroup = newName;
+      renderFolderSidebar();
+      showToast('✏️ Папка переименована', 'success');
+      return;
+    }
+
+    showToast('✏️ Переименование...', 'info');
+    for (var i = 0; i < ids.length; i++) {
+      try {
+        await apiClient.updateTracker(ids[i], { productGroup: newName });
+        var t = allTrackers.find(function (tr) { return tr.id === ids[i]; });
+        if (t) t.productGroup = newName;
+      } catch (_) {}
+    }
+    emptyGroups.delete(oldName);
+    if (sidebarFilterGroup === oldName) sidebarFilterGroup = newName;
+    renderFolderSidebar();
+    applyFilters();
+    renderGrid();
+    showToast('✏️ Папка «' + oldName + '» → «' + newName + '» (' + ids.length + ')', 'success');
+  }
+
+  /**
+   * Delete a folder — removes group from all trackers (trackers stay, become ungrouped).
+   */
+  async function deleteFolderAction(groupName) {
+    var ids = allTrackers.filter(function (t) { return t.productGroup === groupName; }).map(function (t) { return t.id; });
+
+    if (ids.length === 0) {
+      // Empty folder
+      emptyGroups.delete(groupName);
+      if (sidebarFilterGroup === groupName) sidebarFilterGroup = null;
+      renderFolderSidebar();
+      showToast('🗑️ Пустая папка удалена', 'success');
+      return;
+    }
+
+    if (!confirm('Удалить папку «' + groupName + '»?\n\n' + ids.length + ' трекеров станут без группы.\nСами трекеры НЕ удаляются.')) return;
+
+    showToast('🗑️ Удаление папки...', 'info');
+    for (var i = 0; i < ids.length; i++) {
+      try {
+        await apiClient.updateTracker(ids[i], { productGroup: '' });
+        var t = allTrackers.find(function (tr) { return tr.id === ids[i]; });
+        if (t) t.productGroup = '';
+      } catch (_) {}
+    }
+    emptyGroups.delete(groupName);
+    if (sidebarFilterGroup === groupName) sidebarFilterGroup = null;
+    renderFolderSidebar();
+    applyFilters();
+    renderGrid();
+    showToast('🗑️ Папка «' + groupName + '» удалена (' + ids.length + ' трекеров без группы)', 'success');
+  }
+
+  /**
+   * Open all tracker URLs in a folder in new tabs.
+   */
+  function openFolderTabs(groupName) {
+    var urls = allTrackers
+      .filter(function (t) { return t.productGroup === groupName && t.pageUrl; })
+      .map(function (t) { return t.pageUrl; });
+    if (urls.length === 0) { showToast('Нет URL для открытия', 'error'); return; }
+    if (urls.length > 10 && !confirm('Открыть ' + urls.length + ' вкладок?')) return;
+    urls.forEach(function (url) { window.open(url, '_blank'); });
+    showToast('🔗 Открыто ' + urls.length + ' вкладок', 'success');
+  }
+
+  /**
+   * Select all trackers in a folder (enter select mode).
+   */
+  function selectFolderTrackers(groupName) {
+    var ids = allTrackers.filter(function (t) { return t.productGroup === groupName; }).map(function (t) { return t.id; });
+    if (ids.length === 0) return;
+    selectMode = true;
+    selectedIds.clear();
+    ids.forEach(function (id) { selectedIds.add(id); });
+    sidebarFilterGroup = groupName;
+    renderFolderSidebar();
+    applyFilters();
+    renderGrid();
+    updateBulkBar();
   }
 
   function initFolderSidebar() {

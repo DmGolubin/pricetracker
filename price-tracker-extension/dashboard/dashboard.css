@@ -199,6 +199,46 @@
   background: rgba(99, 102, 241, 0.08);
 }
 
+/* Folder context menu */
+.folder-context-menu {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 6px;
+  min-width: 200px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: fadeIn 0.15s ease;
+}
+
+.folder-context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s;
+  text-align: left;
+}
+
+.folder-context-item:hover {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.folder-context-danger {
+  color: #ef4444;
+}
+
+.folder-context-danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
 @media (max-width: 900px) {
   .folder-sidebar {
     display: none;
