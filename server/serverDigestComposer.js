@@ -108,13 +108,11 @@ function formatDigestHtml(entries, unchangedCount) {
   const crossStoreMin = [];
   const histMin = [];
   const decreased = [];
-  const increased = [];
 
   for (const entry of entries) {
     if (entry.isCrossStoreMinimum) crossStoreMin.push(entry);
     else if (entry.isHistoricalMinimum) histMin.push(entry);
-    else if (entry.newPrice < entry.oldPrice) decreased.push(entry);
-    else if (entry.newPrice > entry.oldPrice) increased.push(entry);
+    else decreased.push(entry);
   }
 
   const parts = [];
@@ -142,15 +140,6 @@ function formatDigestHtml(entries, unchangedCount) {
     for (let i = 0; i < decreased.length; i++) {
       section += '\n' + formatEntryHtml(decreased[i]);
       if (i < decreased.length - 1) section += '\n';
-    }
-    parts.push(section);
-  }
-
-  if (increased.length > 0) {
-    let section = '<b>📈 Цена выросла</b>\n';
-    for (let i = 0; i < increased.length; i++) {
-      section += '\n' + formatEntryHtml(increased[i]);
-      if (i < increased.length - 1) section += '\n';
     }
     parts.push(section);
   }

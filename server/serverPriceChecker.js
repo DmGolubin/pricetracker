@@ -439,16 +439,26 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
     }
   }
 
-  // Feed digest collector
+  // Feed digest collector — only notify on price DECREASES
   if (priceChanged && !isFirstVariantCheck) {
-    var thresholdConfig = thresholdEngine.resolveThresholdConfig(tracker, settings);
-    var significant = thresholdEngine.isSignificant(oldPrice, newPrice, thresholdConfig);
     var direction = newPrice > oldPrice ? '📈' : '📉';
     var diff = newPrice - oldPrice;
     var pctChange = oldPrice !== 0 ? ((diff / oldPrice) * 100).toFixed(1) : 'N/A';
 
+    // Price increased — log but never notify
+    if (newPrice > oldPrice) {
+      console.log('[ServerCheck] #' + tracker.id + ' ' + direction + ' ' + oldPrice + ' → ' + newPrice
+        + ' (+' + pctChange + '%) — increase, no notification');
+      collector.addUnchanged();
+      return 'changed';
+    }
+
+    // Price decreased — check thresholds and group suppression
+    var thresholdConfig = thresholdEngine.resolveThresholdConfig(tracker, settings);
+    var significant = thresholdEngine.isSignificant(oldPrice, newPrice, thresholdConfig);
+
     var logMsg = '[ServerCheck] #' + tracker.id + ' ' + direction + ' ' + oldPrice + ' → ' + newPrice
-      + ' (' + (diff > 0 ? '+' : '') + pctChange + '%)'
+      + ' (' + pctChange + '%)'
       + (isCrossStoreMin ? ' 🏆🏆 CROSS-STORE MIN' : isHistMin ? ' 🏆 HIST MIN' : '')
       + (significant ? '' : ' (below threshold)')
       + (suppressedByGroup ? ' [SUPPRESSED by group]' : '');
