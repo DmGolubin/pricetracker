@@ -106,8 +106,15 @@
 - Wait-page detection: "Трохи зачекайте…" — ждём до 30 секунд.
 
 ### eva.ua
-- Vue/Nuxt SPA, цена в `[data-testid="product-price"]`.
-- Варианты: кнопки `button[title="VOLUME (ID)"]`, клик через JS dispatchEvent.
+- Vue/Nuxt SPA, цена в `[data-testid="product-price"]` (textContent, e.g. "6 547 ₴").
+- JSON-LD и meta tags содержат цену ДЕФОЛТНОГО варианта (обычно 30 мл), НЕ выбранного. Всегда приоритизировать `[data-testid="product-price"]`.
+- Варианты: кнопки `button[title="VOLUME (PRODUCT_ID)"]` (e.g. `button[title="80 (808730)"]`).
+- Выбранный вариант: класс содержит `border-apple` (зелёная рамка). Невыбранные: `border-dark-300`.
+- Hash-based URLs: `#/PRODUCT_ID` (e.g. `#/73311` для 80ml). Hash не работает при серверной загрузке — scraper стрипает hash и кликает кнопку.
+- `variantSelector` сохраняется как `button[title="VOLUME (PRODUCT_ID)"]`.
+- При браузерной auto-detect: `autoDetector.js` → `checkSiteSpecific()` читает `[data-testid="product-price"]` напрямую, `detectEvaVariant()` определяет выбранный вариант.
+- При серверной проверке: `scraper.js` извлекает объём из productName, находит кнопку по title, кликает через JS dispatchEvent, ждёт обновления цены.
+- Out-of-stock варианты: EVA убирает элемент цены — используется быстрый путь с короткими таймаутами.
 
 ### kasta.ua
 - Динамические ID (`#kcPriceXXX`) — не работают на сервере.

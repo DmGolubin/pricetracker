@@ -72,7 +72,7 @@ Price Tracker — система отслеживания цен на товар
     - `contentDiff.js` — diff контента
 - `content/` — content scripts:
   - `selectorPicker.js` — визуальный выбор CSS-селектора на странице
-  - `autoDetector.js` — автоматическое определение цены на странице. Site-specific: makeup.com.ua (React SPA, variant detection), notino.ua (content attr). Определяет выбранный вариант и сохраняет variantSelector.
+  - `autoDetector.js` — автоматическое определение цены на странице. Site-specific: makeup.com.ua (React SPA, variant detection), notino.ua (content attr), eva.ua (product-price + variant buttons). Определяет выбранный вариант и сохраняет variantSelector.
   - `priceExtractor.js` — извлечение цены по селектору при браузерной проверке. Makeup.com.ua: читает цену из meta[itemprop="price"] внутри варианта напрямую. Универсальный auto-detect fallback для всех сайтов если основной селектор не найден.
   - `selectorGenerator.js` — генерация уникального CSS-селектора
 - `lib/` — библиотечные модули:

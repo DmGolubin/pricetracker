@@ -245,6 +245,24 @@
    * Returns { element, price, confidence } or null.
    */
   function checkSiteSpecific() {
+      // ─── EVA.UA ─────────────────────────────────────────────────────
+      // EVA is a Vue/Nuxt SPA. The displayed price for the SELECTED variant
+      // is in span[data-testid="product-price"]. JSON-LD and meta tags contain
+      // the DEFAULT variant price (usually 30ml), NOT the selected one.
+      // Always prioritize the displayed price element.
+      if (location.hostname.includes('eva.ua')) {
+        var evaPriceEl = document.querySelector('[data-testid="product-price"]');
+        if (evaPriceEl) {
+          var evaText = (evaPriceEl.textContent || '').replace(/\u00A0/g, ' ').trim();
+          if (evaText) {
+            var evaPrice = parsePrice(evaText);
+            if (evaPrice !== null && evaPrice > 0) {
+              return { element: evaPriceEl, price: evaPrice, confidence: 0.97 };
+            }
+          }
+        }
+      }
+
       // ─── Notino.ua ───────────────────────────────────────────────────
       // Notino has two price blocks:
       //   1. originalPriceDiscountWrapper → pd-price-wrapper with content="9 090" — OLD/original price
@@ -707,6 +725,47 @@
     return title + ' — ' + suffix;
   }
 
+  // ─── EVA.UA variant detection ──────────────────────────────────────
+  /**
+   * Detect the currently selected variant on eva.ua.
+   * Variant buttons have title="VOLUME (PRODUCT_ID)" pattern.
+   * The selected variant has border-apple-200 class (green border).
+   * Returns { volume, productId, title } or null.
+   */
+  function detectEvaVariant() {
+    if (location.hostname.indexOf('eva.ua') === -1) return null;
+
+    var buttons = document.querySelectorAll('button[title]');
+    var selected = null;
+    for (var i = 0; i < buttons.length; i++) {
+      var t = (buttons[i].getAttribute('title') || '').trim();
+      var m = t.match(/^(\d+)\s*\((\d+)\)$/);
+      if (!m) continue;
+      var cls = buttons[i].className || '';
+      // Selected variant has border-apple (green) class
+      if (cls.indexOf('border-apple') !== -1) {
+        selected = { volume: m[1], productId: m[2], title: t };
+        break;
+      }
+    }
+    return selected;
+  }
+
+  /**
+   * Append EVA.UA volume to title if not already present.
+   * @param {string} title
+   * @returns {string}
+   */
+  function appendEvaVolumeToTitle(title) {
+    var variant = detectEvaVariant();
+    if (!variant || !variant.volume) return title;
+    var vol = variant.volume;
+    // Check if title already contains this volume
+    if (new RegExp('\\b' + vol + '\\s*мл', 'i').test(title)) return title;
+    if (new RegExp('\\b' + vol + '\\s*ml\\b', 'i').test(title)) return title;
+    return title + ' — ' + vol + ' мл';
+  }
+
   // ─── Execute and store result ─────────────────────────────────────
   // Store result on DOM element (accessible across all execution contexts).
   // Popup reads this via chrome.scripting.executeScript.
@@ -717,6 +776,7 @@
   if (result.found) {
     var title = appendVolumeToTitle(document.title || '');
     title = appendMakeupVolumeToTitle(title);
+    title = appendEvaVolumeToTitle(title);
 
     var resultObj = {
       found: true,
@@ -732,6 +792,13 @@
     if (makeupVariant && makeupVariant.variantId) {
       resultObj.variantSelector = '#' + cssEscape(makeupVariant.variantId);
       resultObj.variantId = makeupVariant.variantId;
+    }
+
+    // EVA.UA: include variant info so scraper clicks the correct variant button
+    // variantSelector is stored as button[title="VOLUME (PRODUCT_ID)"]
+    var evaVariant = detectEvaVariant();
+    if (evaVariant && evaVariant.title) {
+      resultObj.variantSelector = 'button[title="' + evaVariant.title + '"]';
     }
 
     output = JSON.stringify(resultObj);

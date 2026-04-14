@@ -278,6 +278,81 @@ describe('AutoDetector', () => {
     });
   });
 
+  describe('Site-specific detection (EVA.UA)', () => {
+    test('detects price from EVA span[data-testid="product-price"]', () => {
+      delete window.location;
+      window.location = { hostname: 'eva.ua', href: 'https://eva.ua/ua/pr650878/#/73311' };
+      var restore = setupPriceElement(
+        '<span data-testid="product-price">6 547 ₴</span>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(6547);
+    });
+
+    test('EVA price takes priority over JSON-LD default variant price', () => {
+      delete window.location;
+      window.location = { hostname: 'eva.ua', href: 'https://eva.ua/ua/pr650878/#/73311' };
+      // JSON-LD has 3676 (30ml default), but displayed price is 6547 (80ml selected)
+      var jsonLd = { '@type': 'Product', name: 'Good Girl Blush, 30 мл', offers: { '@type': 'Offer', price: 3676 } };
+      document.head.innerHTML = '<script type="application/ld+json">' + JSON.stringify(jsonLd) + '</script>';
+      var restore = setupPriceElement(
+        '<span data-testid="product-price">6 547 ₴</span>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(6547);
+    });
+
+    test('detects EVA variant and includes variantSelector in result', () => {
+      delete window.location;
+      window.location = { hostname: 'eva.ua', href: 'https://eva.ua/ua/pr650878/#/73311' };
+      var restore = setupPriceElement(
+        '<div>' +
+          '<span data-testid="product-price">6 547 ₴</span>' +
+          '<button type="button" title="30 (804605)" class="border-dark-300">30</button>' +
+          '<button type="button" title="50 (804606)" class="border-dark-300">50</button>' +
+          '<button type="button" title="80 (808730)" class="border-apple-200">80</button>' +
+        '</div>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(6547);
+      expect(r.variantSelector).toBe('button[title="80 (808730)"]');
+    });
+
+    test('EVA title includes volume when variant detected', () => {
+      delete window.location;
+      window.location = { hostname: 'eva.ua', href: 'https://eva.ua/ua/pr650878/#/73311' };
+      var restore = setupPriceElement(
+        '<div>' +
+          '<span data-testid="product-price">6 547 ₴</span>' +
+          '<button type="button" title="80 (808730)" class="border-apple-200">80</button>' +
+        '</div>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.title).toContain('80 мл');
+    });
+
+    test('EVA no variantSelector when no variant buttons found', () => {
+      delete window.location;
+      window.location = { hostname: 'eva.ua', href: 'https://eva.ua/ua/pr650878/' };
+      var restore = setupPriceElement(
+        '<span data-testid="product-price">3 676 ₴</span>'
+      );
+      runDetector(); restore();
+      var r = getResult();
+      expect(r.found).toBe(true);
+      expect(r.price).toBe(3676);
+      expect(r.variantSelector).toBeUndefined();
+    });
+  });
+
   describe('Scoring and candidate selection', () => {
     test('prefers structured data price when DOM element matches', () => {
       var jsonLd = { '@type': 'Product', offers: { '@type': 'Offer', price: 99.99 } };
