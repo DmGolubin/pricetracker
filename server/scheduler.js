@@ -162,7 +162,9 @@ async function retryFailedTrackers(pool) {
     return;
   }
   var settings = (settingsResult.rows && settingsResult.rows[0]) || {};
-  var noopCollector = { addChange: function() {}, addUnchanged: function() {} };
+  var digestComposer = require('./serverDigestComposer');
+  var telegram = require('./telegramSender');
+  var collector = digestComposer.createCollector();
 
   var retried = 0;
   var fixed = 0;
@@ -173,7 +175,7 @@ async function retryFailedTrackers(pool) {
     console.log('[Retry] #' + tracker.id + ' attempt ' + retryNum + '/' + MAX_RETRIES + ' — ' + (tracker.productName || '').substring(0, 50));
 
     try {
-      var checkResult = await checkSingleTracker(pool, tracker, settings, noopCollector);
+      var checkResult = await checkSingleTracker(pool, tracker, settings, collector);
       retried++;
       if (checkResult !== 'error' && checkResult !== 'waf_blocked') {
         fixed++;
@@ -195,6 +197,15 @@ async function retryFailedTrackers(pool) {
   // Close browser after retry batch
   try { await scraper.closeBrowser(); } catch (_) {}
 
+  // Send digest for any price changes detected during retry
+  if (collector.hasChanges() && settings.telegramDigestEnabled) {
+    var messages = collector.compose();
+    if (messages.length > 0 && settings.telegramBotToken && (settings.telegramChatId || settings.telegramPersonalChatId)) {
+      console.log('[Retry] 📨 Sending digest (' + messages.length + ' message(s))...');
+      var sent = await telegram.sendDigest(settings.telegramBotToken, settings.telegramChatId, messages, settings.telegramPersonalChatId);
+      console.log('[Retry] ' + (sent > 0 ? '✅' : '⚠') + ' Digest sent: ' + sent + '/' + messages.length);
+    }
+  }
   console.log('[Retry] Done: ' + retried + ' retried, ' + fixed + ' recovered');
   isRetrying = false;
 }
