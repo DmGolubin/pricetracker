@@ -1416,9 +1416,18 @@ async function extractPrice(tracker, options) {
       }
     }
 
-    // No fallback — if the CSS selector didn't find the price, it's an error.
-    // Auto-detect and productName extraction are disabled because they
-    // frequently return wrong prices (different variant, different product).
+    // ─── Universal fallback: auto-detect price on page ─────────────────
+    // If the CSS selector didn't find the price (site redesign, dynamic classes),
+    // try auto-detecting the price from the page as last resort.
+    // This is better than returning an error — at least we get the main price.
+    if (!tracker.variantSelector) {
+      var autoDetectedPrice = await autoDetectPriceOnPage(page);
+      if (autoDetectedPrice !== null) {
+        var elapsed = Date.now() - pageStart;
+        console.log(`[Scraper] #${trackerId} ✅ Price: ${autoDetectedPrice} (auto-detect fallback, ${elapsed}ms) — ${shortName}`);
+        return { success: true, price: autoDetectedPrice };
+      }
+    }
 
     var elapsed = Date.now() - pageStart;
     const errorMsg = result.found

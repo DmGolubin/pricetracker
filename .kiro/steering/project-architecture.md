@@ -20,7 +20,7 @@ Price Tracker — система отслеживания цен на товар
 
 ### Ключевые модули
 - `server.js` — Express-сервер, REST API, инициализация БД (миграции через ALTER TABLE IF NOT EXISTS), статика для Mini App
-- `scraper.js` — Puppeteer-скрапер, извлечение цен со страниц магазинов, cookie injection для авторизованных проверок
+- `scraper.js` — Puppeteer-скрапер, извлечение цен со страниц магазинов, cookie injection для авторизованных проверок. Site-specific логика для makeup.com.ua (React SPA, variant meta), notino.ua (React SPA, wait-page), eva.ua (Vue SPA, variant click), kasta.ua (dynamic IDs). Универсальный auto-detect fallback если основной селектор сломался.
 - `serverPriceChecker.js` — цикл проверки всех трекеров: скрапинг → сравнение → пороги → дайджест
 - `serverThresholdEngine.js` — определение значимости изменения цены (адаптивный/абсолютный/процентный режимы)
 - `serverDigestComposer.js` — формирование Telegram-дайджеста из изменений
@@ -72,8 +72,8 @@ Price Tracker — система отслеживания цен на товар
     - `contentDiff.js` — diff контента
 - `content/` — content scripts:
   - `selectorPicker.js` — визуальный выбор CSS-селектора на странице
-  - `autoDetector.js` — автоматическое определение цены на странице
-  - `priceExtractor.js` — извлечение цены по селектору
+  - `autoDetector.js` — автоматическое определение цены на странице. Site-specific: makeup.com.ua (React SPA, variant detection), notino.ua (content attr). Определяет выбранный вариант и сохраняет variantSelector.
+  - `priceExtractor.js` — извлечение цены по селектору при браузерной проверке. Makeup.com.ua: читает цену из meta[itemprop="price"] внутри варианта напрямую. Универсальный auto-detect fallback для всех сайтов если основной селектор не найден.
   - `selectorGenerator.js` — генерация уникального CSS-селектора
 - `lib/` — библиотечные модули:
   - `apiClient.js` — HTTP-клиент к серверному API

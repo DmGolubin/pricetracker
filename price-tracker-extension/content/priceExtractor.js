@@ -400,10 +400,22 @@
       }
 
       if (!element) {
-        // For variant trackers, the price element may be rendered differently
-        // (e.g. eva.ua hides [data-testid="product-price"] for out-of-stock variants).
-        // Fall back to auto-detecting the price on the page.
-        if (variantSelector && trackingType !== 'content') {
+        // Primary selector and fallbacks failed.
+        // Try auto-detecting the price on the page as last resort.
+        // This handles cases where sites redesign and old selectors break.
+        if (trackingType !== 'content') {
+          // Makeup.com.ua: try reading the displayed price directly
+          var makeupDisplayed = tryMakeupDisplayedPrice();
+          if (makeupDisplayed !== null) {
+            chrome.runtime.sendMessage({
+              action: 'priceExtracted',
+              trackerId: trackerId,
+              price: makeupDisplayed
+            });
+            return;
+          }
+
+          // Universal auto-detect fallback for any site
           var autoPrice = tryAutoDetectPrice(null);
           if (autoPrice !== null) {
             chrome.runtime.sendMessage({
@@ -413,17 +425,6 @@
             });
             return;
           }
-        }
-
-        // Makeup.com.ua fallback: try reading the displayed price directly
-        var makeupDisplayed = tryMakeupDisplayedPrice();
-        if (makeupDisplayed !== null) {
-          chrome.runtime.sendMessage({
-            action: 'priceExtracted',
-            trackerId: trackerId,
-            price: makeupDisplayed
-          });
-          return;
         }
 
         chrome.runtime.sendMessage({

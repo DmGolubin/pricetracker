@@ -73,6 +73,41 @@
 - Кнопка "Обновить все" в дашборде вызывает `POST /server-check`, НЕ extension alarm.
 - Автоматическая проверка — cron каждые 3 часа (`scheduler.js`).
 - Между проверками трекеров — рандомная задержка 5-15 секунд для обхода WAF.
+- Также поддерживается браузерная проверка (checkMethod = 'extension'): расширение открывает вкладку, инжектит `priceExtractor.js`, читает цену по `cssSelector`.
+
+## Извлечение цен: стратегия fallback
+
+- Основной путь: читать цену по сохранённому `cssSelector`.
+- Если основной селектор не найден — **всегда** пытаться auto-detect цену на странице (и в браузере, и на сервере).
+- **ЗАПРЕЩЕНО** просто возвращать ошибку, если основной селектор сломался — нужен fallback через auto-detect.
+- Для variant-трекеров: сначала читать цену из `meta[itemprop="price"]` внутри варианта (без клика), затем fallback на клик + чтение отображаемой цены.
+- Auto-detect приоритеты: site-specific селекторы → `[itemprop="price"]` → DOM-сканирование с scoring.
+
+## Поддержка магазинов (site-specific логика)
+
+### makeup.com.ua
+- Сайт использует React SPA с CSS Modules (обновлён в 2025).
+- Цена: `span[class*="Price__priceCurrent"]` (отображаемая), `meta[itemprop="price"]` (structured data).
+- Варианты: `div[class*="ProductBuySection__variant"]` с `id` атрибутом и `meta[itemprop="price"]` внутри.
+- Выбранный вариант: класс содержит `selected`/`Selected`, или `li[role="option"][aria-selected="true"]` в дропдауне.
+- Варианты различаются по объёму (30ml, 50ml, 80ml) и региону (с флажком ЕС = доставка из Европы, без = Украина). Цены разные.
+- `variantSelector` сохраняется как `#elementId` (например `#2921590_3`). Суффикс `_3` = вариант из ЕС.
+- При браузерной проверке: `priceExtractor.js` → `tryMakeupVariantPrice()` читает цену из `meta[itemprop="price"]` внутри варианта напрямую, без клика.
+- При серверной проверке: `scraper.js` матчит вариант по ID, объёму и региону (EU/non-EU).
+- Старые селекторы (`.product-item__price`, `.price-block__price`) больше не работают — есть fallback на новые.
+
+### notino.ua
+- React SPA, цена в `span[data-testid="pd-price"]` (атрибут `content`).
+- Промо-цена: `span[data-testid="pd-price-wrapper"]` вне `#pd-price`.
+- Wait-page detection: "Трохи зачекайте…" — ждём до 30 секунд.
+
+### eva.ua
+- Vue/Nuxt SPA, цена в `[data-testid="product-price"]`.
+- Варианты: кнопки `button[title="VOLUME (ID)"]`, клик через JS dispatchEvent.
+
+### kasta.ua
+- Динамические ID (`#kcPriceXXX`) — не работают на сервере.
+- Fallback: `.kcPrice span.t-bold` (Kasta Card цена) → `#productPrice`.
 
 ## API Base URL
 
