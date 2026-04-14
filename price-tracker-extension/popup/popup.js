@@ -207,15 +207,66 @@ function showExistingTrackers(pageUrl) {
       // Extract volume
       var volMatch = (t.productName || '').match(/(\d+)\s*(?:ml|мл)\b/i);
       var volTag = volMatch ? '<span class="popup-existing-vol">' + volMatch[1] + ' мл</span>' : '';
-      html += '<div class="popup-existing-item">'
+      html += '<div class="popup-existing-item" data-tracker-id="' + t.id + '">'
         + '<span class="popup-existing-name">' + name + '</span>'
         + volTag
         + '<span class="popup-existing-price">' + priceStr + '</span>'
+        + '<button class="popup-existing-delete" title="Удалить трекер">×</button>'
         + '</div>';
     });
 
     container.innerHTML = html;
     container.hidden = false;
+
+    // Attach delete handlers
+    container.querySelectorAll('.popup-existing-delete').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var item = btn.closest('.popup-existing-item');
+        var trackerId = item && item.getAttribute('data-tracker-id');
+        if (!trackerId) return;
+        var trackerName = item.querySelector('.popup-existing-name');
+        var name = trackerName ? trackerName.textContent : '';
+        if (!confirm('Удалить трекер «' + name + '»?')) return;
+
+        btn.disabled = true;
+        btn.textContent = '…';
+        chrome.runtime.sendMessage({ action: 'deleteTracker', trackerId: Number(trackerId) }, function (resp) {
+          if (chrome.runtime.lastError || (resp && !resp.success)) {
+            btn.disabled = false;
+            btn.textContent = '×';
+            showStatus('Ошибка удаления', true);
+            return;
+          }
+          // Remove item from DOM with animation
+          item.style.transition = 'opacity 0.2s, max-height 0.2s';
+          item.style.opacity = '0';
+          item.style.maxHeight = '0';
+          item.style.overflow = 'hidden';
+          setTimeout(function () {
+            item.remove();
+            // Update header count
+            var remaining = container.querySelectorAll('.popup-existing-item');
+            var header = container.querySelector('.popup-existing-header');
+            if (remaining.length === 0) {
+              container.hidden = true;
+            } else if (header) {
+              header.textContent = '✅ Уже отслеживается (' + remaining.length + ')';
+            }
+            // Update stats
+            var statsEl = document.getElementById('popup-stats');
+            if (statsEl) {
+              var currentText = statsEl.textContent;
+              var numMatch = currentText.match(/^(\d+)/);
+              if (numMatch) {
+                var newCount = Math.max(0, parseInt(numMatch[1], 10) - 1);
+                statsEl.textContent = currentText.replace(/^\d+/, newCount);
+              }
+            }
+          }, 200);
+        });
+      });
+    });
   });
 }
 
