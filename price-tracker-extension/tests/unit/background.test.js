@@ -412,10 +412,32 @@ describe('getActiveTab', () => {
 // ─── rescheduleAllAlarms ────────────────────────────────────────────
 
 describe('rescheduleAllAlarms', () => {
-  test('clears all alarms (periodic checks handled by server cron)', async () => {
+  test('clears all alarms when checkMethod is server', async () => {
+    apiClient.getSettings.mockResolvedValue({ checkMethod: 'server' });
+
     await background.rescheduleAllAlarms();
 
     expect(chrome.alarms.clearAll).toHaveBeenCalled();
-    expect(alarmManager.scheduleTracker).not.toHaveBeenCalled();
+  });
+
+  test('creates alarms when checkMethod is extension', async () => {
+    apiClient.getSettings.mockResolvedValue({ checkMethod: 'extension' });
+    apiClient.getTrackers.mockResolvedValue([
+      makeTracker({ id: 't1', status: 'active', checkIntervalHours: 3 }),
+      makeTracker({ id: 't2', status: 'paused', checkIntervalHours: 3 }),
+    ]);
+
+    await background.rescheduleAllAlarms();
+
+    expect(chrome.alarms.clearAll).toHaveBeenCalled();
+    // Should create alarm for active tracker, not paused
+    expect(chrome.alarms.create).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not throw when getTrackers fails', async () => {
+    apiClient.getSettings.mockResolvedValue({ checkMethod: 'extension' });
+    apiClient.getTrackers.mockRejectedValue(new Error('Network error'));
+
+    await expect(background.rescheduleAllAlarms()).resolves.not.toThrow();
   });
 });

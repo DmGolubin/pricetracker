@@ -505,7 +505,28 @@ async function getActiveTab(sender) {
 }
 
 // ─── Alarm Handler ──────────────────────────────────────────────────
-// Periodic checks are handled by server cron. Extension alarms disabled.
+// When checkMethod is 'extension' or 'hybrid', alarms trigger local checks.
+// When checkMethod is 'server', alarms are not used (server cron handles it).
+
+chrome.alarms.onAlarm.addListener(function (alarm) {
+  var _getAlarmId = _c.getTrackerIdFromAlarm;
+  var trackerId = _getAlarmId ? _getAlarmId(alarm.name) : null;
+  if (!trackerId) return;
+
+  getCheckMethod().then(function (method) {
+    if (method === CheckMethod.SERVER) return;
+    console.log('[Alarm] Checking tracker #' + trackerId + ' via ' + method);
+    priceChecker.checkPrice(trackerId, extensionCheckDeps).then(function () {
+      // Notify dashboard about update
+      chrome.runtime.sendMessage({
+        action: _c.MessageFromSW.TRACKER_UPDATED,
+        trackerId: trackerId,
+      }).catch(function () {});
+    }).catch(function (err) {
+      console.warn('[Alarm] Check failed for #' + trackerId + ':', err.message || err);
+    });
+  });
+});
 
 // ─── Notification Click Handler ─────────────────────────────────────
 
@@ -534,10 +555,47 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
  * Only sets alarms when checkMethod is 'extension' or 'hybrid'.
  */
 async function rescheduleAllAlarms() {
-  // Extension-based periodic checks are disabled — all periodic checking
-  // is handled by the server cron (scheduler.js). Extension checks are
-  // manual only (via "Обновить все" button). Clear any leftover alarms.
-  chrome.alarms.clearAll();
+  var method = await getCheckMethod();
+
+  // If server mode — no alarms needed, server cron handles it
+  if (method === CheckMethod.SERVER) {
+    chrome.alarms.clearAll();
+    return;
+  }
+
+  // Extension or hybrid mode — create alarms for periodic checks
+  try {
+    var trackers = await apiClient.getTrackers();
+    if (!Array.isArray(trackers)) return;
+
+    // Clear old alarms first
+    chrome.alarms.clearAll();
+
+    // Stagger alarm creation: each tracker gets a different initial delay
+    // to prevent all tabs opening at once when browser starts
+    var activeTrackers = trackers.filter(function (t) {
+      return t.status !== TrackerStatus.PAUSED && t.status !== TrackerStatus.ERROR;
+    });
+
+    for (var i = 0; i < activeTrackers.length; i++) {
+      var t = activeTrackers[i];
+      var interval = t.checkIntervalHours || DEFAULT_CHECK_INTERVAL;
+      if (interval <= 0) continue;
+
+      var intervalMinutes = interval * 60;
+      // Stagger: first alarm fires after (interval + random 5-15 min) to avoid burst
+      var delayMinutes = intervalMinutes + 5 + Math.floor(Math.random() * 10) + (i * 2);
+
+      chrome.alarms.create(_c.getAlarmName(t.id), {
+        delayInMinutes: delayMinutes,
+        periodInMinutes: intervalMinutes,
+      });
+    }
+
+    console.log('[Alarms] Scheduled ' + activeTrackers.length + ' alarms (method: ' + method + ')');
+  } catch (err) {
+    console.warn('[Alarms] Failed to schedule:', err.message || err);
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
