@@ -79,11 +79,22 @@ function findMatchingGroup(normalizedName, existingGroups, threshold = 0.75) {
   // This allows users to name groups like "16 Pro Max" and only products
   // containing that exact phrase will match, avoiding false positives.
   // If multiple groups match, pick the longest (most specific) one.
+  // Word boundary check: after the match, the next char must be a space,
+  // end of string, or non-letter (prevents "Good Girl" matching "Good Girlfriend").
   let substringMatch = null;
   let substringLen = 0;
   for (const group of existingGroups) {
     if (!group.normalizedName || group.normalizedName.length < 2) continue;
-    if (normalizedName.includes(group.normalizedName) && group.normalizedName.length > substringLen) {
+    const pos = normalizedName.indexOf(group.normalizedName);
+    if (pos === -1) continue;
+    // Check word boundary after the match
+    const afterIdx = pos + group.normalizedName.length;
+    if (afterIdx < normalizedName.length) {
+      const afterChar = normalizedName[afterIdx];
+      // If next char is a letter, this is a partial word match — skip
+      if (/[a-zа-яёіїєґ]/i.test(afterChar)) continue;
+    }
+    if (group.normalizedName.length > substringLen) {
       substringMatch = group.groupName;
       substringLen = group.normalizedName.length;
     }
