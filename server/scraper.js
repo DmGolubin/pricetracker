@@ -479,15 +479,12 @@ async function extractPrice(tracker, options) {
       if (evaVariantResult && evaVariantResult.matched) {
         var matched = evaVariantResult.matched;
 
-        if (matched.selected && evaVariantResult.currentPrice) {
-          // Variant is already selected (default variant) — just read the price
-          var price = parsePrice(evaVariantResult.currentPrice);
-          if (price !== null && price > 0) {
-            var elapsed = Date.now() - pageStart;
-            console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA default variant, ' + elapsed + 'ms) — ' + shortName);
-            return { success: true, price: price };
-          }
-        }
+        // NOTE: Do NOT trust matched.selected here. When EVA loads without hash
+        // (which is always the case for server-side Puppeteer), the SSR HTML may
+        // mark a variant button as "selected" (border-apple class) based on the
+        // URL hash from the original page, but the DISPLAYED PRICE on the page
+        // is always for the DEFAULT variant (usually 30ml). So we must ALWAYS
+        // click the desired variant button to ensure the price updates correctly.
 
         // Click the variant button using title-based selector
         var titleSelector = 'button[title="' + matched.title + '"]';
