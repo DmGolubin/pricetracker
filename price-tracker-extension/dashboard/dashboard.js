@@ -1961,6 +1961,13 @@ const Dashboard = (function () {
       intervalBtn.title = 'Интервал';
       intervalBtn.addEventListener('click', function () { showBulkIntervalPicker(); });
       row.appendChild(intervalBtn);
+
+      var openTabsBtn = document.createElement('button');
+      openTabsBtn.className = 'btn btn-sm';
+      openTabsBtn.textContent = '🔗';
+      openTabsBtn.title = 'Открыть в новых вкладках';
+      openTabsBtn.addEventListener('click', function () { bulkOpenTabs(); });
+      row.appendChild(openTabsBtn);
     }
 
     row.appendChild(createBulkSep());
@@ -2229,6 +2236,37 @@ const Dashboard = (function () {
       if (e.target === overlay) overlay.remove();
     });
     modalContainer.appendChild(overlay);
+  }
+
+  /**
+   * Open all selected trackers in new browser tabs.
+   */
+  function bulkOpenTabs() {
+    var ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    // Collect URLs from selected trackers
+    var urls = [];
+    ids.forEach(function (id) {
+      var t = allTrackers.find(function (tr) { return tr.id === id; });
+      if (t && t.pageUrl) urls.push(t.pageUrl);
+    });
+
+    if (urls.length === 0) {
+      showToast('Нет URL для открытия', 'error');
+      return;
+    }
+
+    // Warn if opening many tabs
+    if (urls.length > 10) {
+      if (!confirm('Открыть ' + urls.length + ' вкладок?')) return;
+    }
+
+    urls.forEach(function (url) {
+      window.open(url, '_blank');
+    });
+
+    showToast('🔗 Открыто ' + urls.length + ' вкладок', 'success');
   }
 
   function showBulkProgress(current, total, text) {
