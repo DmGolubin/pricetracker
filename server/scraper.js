@@ -74,6 +74,13 @@ async function isWafBlocked(page) {
  * the price in these elements updates dynamically.
  */
 const MAKEUP_PRICE_SELECTORS = [
+  // New React SPA layout (2025+)
+  'span[class*="Price__priceCurrent"]',
+  'div[class*="ProductBuySection__price"] span[class*="Price__priceCurrent"]',
+  'div[class*="Price__price"] span[class*="Price__priceCurrent"]',
+  // Structured data
+  '.ProductBuySection__container meta[itemprop="price"]',
+  // Legacy selectors (pre-2025)
   '.product-item__price .product-item__price-current',
   '.product-item__price',
   '.price-block__price',
@@ -674,6 +681,121 @@ async function extractPrice(tracker, options) {
         // Wait for page to fully settle (Makeup may do JS redirects)
         await new Promise(function(r) { setTimeout(r, 2000); });
 
+        // ─── New React SPA layout (2025+) ───
+        // Variants are div[class*="ProductBuySection__variant"] with meta[itemprop="price"]
+        // The selected variant has class *="ProductBuySection__selected"
+        // Each variant has a title div with volume text (e.g. "80ml")
+        var makeupNewLayout = await page.evaluate(function() {
+          return !!document.querySelector('div[class*="ProductBuySection__variant"]') ||
+                 !!document.querySelector('span[class*="Price__priceCurrent"]');
+        });
+
+        if (makeupNewLayout) {
+          console.log('[Scraper] #' + trackerId + ' Makeup: detected new React SPA layout');
+
+          // Extract desired volume from productName or variantSelector
+          var volMatch = (tracker.productName || '').match(/—\s*(\d+)ml/i);
+          if (!volMatch) volMatch = (tracker.productName || '').match(/(\d+)\s*ml\b/i);
+          if (!volMatch) volMatch = (tracker.variantSelector || '').match(/(\d+)ml/i);
+          var desiredVolume = volMatch ? volMatch[1] : null;
+
+          // Also try to extract variant ID from the old-style selector
+          var wantedVariantId = null;
+          var vidMatch = (tracker.variantSelector || '').match(/data-variant-id[*~|^$]?=["']?([^"'\]]+)/);
+          if (vidMatch) {
+            wantedVariantId = vidMatch[1]
+              .replace(/\\3(\d)\s*/g, function(_, d) { return String.fromCharCode(0x30 + parseInt(d)); })
+              .replace(/\\(\d)/g, function(_, d) { return d; })
+              .replace(/\\/g, '')
+              .trim();
+          }
+
+          console.log('[Scraper] #' + trackerId + ' Makeup: looking for volume=' + (desiredVolume || 'unknown') + ', variantId=' + (wantedVariantId || 'unknown'));
+
+          var makeupResult = await page.evaluate(function(wantedVol, wantedVid) {
+            var variants = document.querySelectorAll('div[class*="ProductBuySection__variant"]');
+            var allVariants = [];
+            var matchedPrice = null;
+
+            for (var i = 0; i < variants.length; i++) {
+              var v = variants[i];
+              var id = v.getAttribute('id') || '';
+              var meta = v.querySelector('meta[itemprop="price"]');
+              var price = meta ? meta.getAttribute('content') : null;
+              var titleEl = v.querySelector('div[class*="ProductBuySection__title"]');
+              var title = titleEl ? (titleEl.textContent || '').trim() : '';
+              var isSelected = (v.className || '').indexOf('selected') !== -1 ||
+                               (v.className || '').indexOf('Selected') !== -1;
+
+              allVariants.push({ id: id, title: title, price: price, selected: isSelected });
+
+              // Match by variant ID
+              if (wantedVid && (id === wantedVid || id.indexOf(wantedVid) !== -1 || wantedVid.indexOf(id) !== -1)) {
+                if (price) matchedPrice = price;
+              }
+              // Match by volume
+              if (!matchedPrice && wantedVol && title) {
+                var volNum = title.match(/(\d+)/);
+                if (volNum && volNum[1] === wantedVol) {
+                  if (price) matchedPrice = price;
+                }
+              }
+            }
+
+            // Also check li[role="option"] in the dropdown selector
+            if (!matchedPrice) {
+              var options = document.querySelectorAll('li[role="option"] meta[itemprop="price"]');
+              for (var j = 0; j < options.length; j++) {
+                var optMeta = options[j];
+                var optContainer = optMeta.closest('li[role="option"]') || optMeta.closest('div[itemprop="offers"]');
+                if (!optContainer) continue;
+                var optName = optContainer.querySelector('meta[itemprop="name"]');
+                var optNameText = optName ? (optName.getAttribute('content') || '') : (optContainer.textContent || '');
+                var optPrice = optMeta.getAttribute('content');
+
+                if (wantedVid) {
+                  var optUrl = optContainer.querySelector('meta[itemprop="url"]');
+                  var optUrlText = optUrl ? (optUrl.getAttribute('content') || '') : '';
+                  if (optUrlText.indexOf(wantedVid) !== -1 && optPrice) {
+                    matchedPrice = optPrice;
+                    break;
+                  }
+                }
+                if (wantedVol && optNameText.indexOf(wantedVol + 'ml') !== -1) {
+                  if (optPrice) { matchedPrice = optPrice; break; }
+                }
+              }
+            }
+
+            // Fallback: read the currently displayed price
+            var displayedPrice = null;
+            var priceEl = document.querySelector('span[class*="Price__priceCurrent"]');
+            if (priceEl) displayedPrice = (priceEl.textContent || '').trim();
+
+            return {
+              matchedPrice: matchedPrice,
+              displayedPrice: displayedPrice,
+              allVariants: allVariants
+            };
+          }, desiredVolume, wantedVariantId);
+
+          console.log('[Scraper] #' + trackerId + ' Makeup new layout result:', JSON.stringify(makeupResult));
+
+          if (makeupResult) {
+            var priceStr = makeupResult.matchedPrice || makeupResult.displayedPrice;
+            if (priceStr) {
+              var price = parsePrice(priceStr);
+              if (price !== null && price > 0) {
+                var elapsed = Date.now() - pageStart;
+                var method = makeupResult.matchedPrice ? 'variant meta' : 'displayed price';
+                console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (Makeup ' + method + ', ' + elapsed + 'ms) — ' + shortName);
+                return { success: true, price: price };
+              }
+            }
+          }
+        }
+
+        // ─── Legacy layout fallback ───
         // Wait for variant elements to appear in DOM
         try {
           await page.waitForSelector('.variant[data-variant-id]', { timeout: 8000 });
@@ -1226,6 +1348,48 @@ async function extractPrice(tracker, options) {
       }
     }
 
+    // ─── Makeup.com.ua fallback: new React SPA layout (2025+) ───
+    // Old selectors like .product-item__price don't exist in the new layout.
+    // Try new selectors: Price__priceCurrent, meta[itemprop="price"]
+    if (isMakeup && !result.found) {
+      console.log(`[Scraper] #${trackerId} Makeup: original selector failed, trying new React SPA selectors...`);
+      var makeupFallbackPrice = await page.evaluate(function() {
+        // 1. span[class*="Price__priceCurrent"] — main displayed price
+        var priceCurrent = document.querySelector('span[class*="Price__priceCurrent"]');
+        if (priceCurrent) {
+          var text = (priceCurrent.textContent || '').trim();
+          if (text && /\d/.test(text)) return { text: text, source: 'Price__priceCurrent' };
+        }
+        // 2. meta[itemprop="price"] in the buy section
+        var buySection = document.querySelector('div[class*="ProductBuySection"]');
+        if (buySection) {
+          var meta = buySection.querySelector('meta[itemprop="price"]');
+          if (meta) {
+            var content = meta.getAttribute('content');
+            if (content && /\d/.test(content)) return { text: content, source: 'ProductBuySection meta' };
+          }
+        }
+        // 3. First meta[itemprop="price"] on page
+        var anyMeta = document.querySelector('meta[itemprop="price"]');
+        if (anyMeta) {
+          var c = anyMeta.getAttribute('content');
+          if (c && /\d/.test(c)) return { text: c, source: 'itemprop price' };
+        }
+        return null;
+      });
+      if (makeupFallbackPrice) {
+        var price = parsePrice(makeupFallbackPrice.text);
+        if (price !== null && price > 0) {
+          var elapsed = Date.now() - pageStart;
+          console.log(`[Scraper] #${trackerId} ✅ Price: ${price} (Makeup ${makeupFallbackPrice.source}, ${elapsed}ms) — ${shortName}`);
+          return { success: true, price: price };
+        }
+        console.log(`[Scraper] #${trackerId} Makeup: found "${makeupFallbackPrice.text}" via ${makeupFallbackPrice.source} but parse failed`);
+      } else {
+        console.log(`[Scraper] #${trackerId} Makeup: no new selectors found either`);
+      }
+    }
+
     // No fallback — if the CSS selector didn't find the price, it's an error.
     // Auto-detect and productName extraction are disabled because they
     // frequently return wrong prices (different variant, different product).
@@ -1288,7 +1452,10 @@ async function readPriceFromSelectors(page, selectors) {
 async function autoDetectPriceOnPage(page) {
   const priceText = await page.evaluate(() => {
     const PRICE_SELECTORS = [
-      // Makeup.ua specific (most reliable for this site)
+      // Makeup.ua new React SPA (2025+)
+      'span[class*="Price__priceCurrent"]',
+      'div[class*="ProductBuySection__price"] span[class*="Price__priceCurrent"]',
+      // Makeup.ua legacy
       '.product-item__price .product-item__price-current',
       '.product-item__price',
       '.price-block__price',

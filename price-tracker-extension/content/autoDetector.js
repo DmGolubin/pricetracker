@@ -329,6 +329,32 @@
       } catch (_) {}
     }
 
+    // Makeup.com.ua: React SPA with CSS Modules (2025+)
+    // Price is in span[class*="Price__priceCurrent"] e.g. "6300 ₴"
+    // Variants have meta[itemprop="price"] inside offer containers
+    if (location.hostname.indexOf('makeup.com.ua') !== -1 || location.hostname.indexOf('makeup.') !== -1) {
+      // Try the main displayed price
+      var makeupPriceEl = document.querySelector('span[class*="Price__priceCurrent"]');
+      if (makeupPriceEl) {
+        var makeupText = (makeupPriceEl.textContent || '').trim();
+        var makeupPrice = parsePrice(makeupText);
+        if (makeupPrice !== null && makeupPrice > 0) {
+          return { element: makeupPriceEl, price: makeupPrice, confidence: 0.95 };
+        }
+      }
+      // Fallback: meta itemprop="price" in the main offer block
+      var makeupMeta = document.querySelector('div[class*="ProductBuySection__container"] > meta[itemprop="price"]');
+      if (!makeupMeta) makeupMeta = document.querySelector('div[class*="ProductBuySection"] meta[itemprop="price"]');
+      if (makeupMeta) {
+        var makeupMetaPrice = parsePrice(makeupMeta.getAttribute('content'));
+        if (makeupMetaPrice !== null && makeupMetaPrice > 0) {
+          // Return the visible price element for selector generation
+          var visibleEl = document.querySelector('span[class*="Price__priceCurrent"]');
+          return { element: visibleEl || makeupMeta, price: makeupMetaPrice, confidence: 0.93 };
+        }
+      }
+    }
+
     // Generic: elements with content attribute containing a price
     var contentAttrSelectors = [
       '[data-testid*="price"][content]',
