@@ -811,15 +811,19 @@
    */
   function cleanPageTitle(title) {
     if (!title) return '';
-    // EVA.UA suffix patterns
-    title = title.replace(/\s*[—–-]\s*купити на.*$/i, '');
+    // EVA.UA suffix: "— купити на ▷ EVA.UA - гіпермаркет краси" or "- купити на ▷ EVA.UA ◁"
+    title = title.replace(/\s*[—–\-]\s*купит[иь]\s+на\s.*$/i, '');
     // Notino.ua suffix
     title = title.replace(/\s*[|｜]\s*notino\.ua.*$/i, '');
-    title = title.replace(/\s*[—–-]\s*купити.*notino.*$/i, '');
+    title = title.replace(/\s*[—–\-]\s*купит[иь].*notino.*$/i, '');
     // Makeup.com.ua suffix
     title = title.replace(/\s*[|｜]\s*MAKEUP.*$/i, '');
-    title = title.replace(/\s*[—–-]\s*купити.*makeup.*$/i, '');
-    // Generic: remove " - Store Name" or " | Store Name" at the end
+    title = title.replace(/\s*[—–\-]\s*купит[иь].*makeup.*$/i, '');
+    // Kasta.ua suffix
+    title = title.replace(/\s*[|｜]\s*kasta.*$/i, '');
+    // Generic: " - купити ..." / " — купить ..."
+    title = title.replace(/\s*[—–\-]\s*купит[иь]\s.*$/i, '');
+    // Generic: remove " | Store Name" or " - Store Name" at the end (short suffix)
     title = title.replace(/\s*[|｜]\s*[^|]{2,30}$/, '');
     return title.trim();
   }
