@@ -82,6 +82,7 @@ btnTrackAuto.addEventListener('click', () => {
     title: autoDetectData.title,
     imageUrl: autoDetectData.imageUrl,
     pageUrl: autoDetectData.pageUrl,
+    variantSelector: autoDetectData.variantSelector,
   }, (response) => {
     if (chrome.runtime.lastError) {
       showStatus('Нет связи с расширением', true);
@@ -245,6 +246,7 @@ function tryAutoDetect(tab) {
         title: data.title,
         imageUrl: data.imageUrl,
         pageUrl: data.pageUrl,
+        variantSelector: data.variantSelector || null,
       };
       showAutoButton(data.price);
     })

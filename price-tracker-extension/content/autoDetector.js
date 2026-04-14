@@ -661,6 +661,66 @@
     return title + ' — ' + volume;
   }
 
+  // ─── Makeup.com.ua variant detection ──────────────────────────────
+  /**
+   * Detect the currently selected variant on makeup.com.ua.
+   * Returns { variantId, volume, region } or null.
+   */
+  function detectMakeupVariant() {
+    if (location.hostname.indexOf('makeup.com.ua') === -1 && location.hostname.indexOf('makeup.') === -1) return null;
+
+    // The selected variant in the dropdown has aria-selected="true"
+    var selectedOption = document.querySelector('li[role="option"][aria-selected="true"]');
+    if (!selectedOption) {
+      // Try the selected variant tile (has class *="selected" or *="Selected")
+      var allVariants = document.querySelectorAll('div[class*="ProductBuySection__variant"]');
+      for (var i = 0; i < allVariants.length; i++) {
+        var cls = allVariants[i].className || '';
+        if (cls.indexOf('selected') !== -1 || cls.indexOf('Selected') !== -1) {
+          selectedOption = allVariants[i];
+          break;
+        }
+      }
+    }
+    if (!selectedOption) return null;
+
+    var meta = selectedOption.querySelector('meta[itemprop="price"]');
+    var price = meta ? meta.getAttribute('content') : null;
+    var nameMeta = selectedOption.querySelector('meta[itemprop="name"]');
+    var nameText = nameMeta ? (nameMeta.getAttribute('content') || '') : '';
+    var id = selectedOption.getAttribute('id') || '';
+
+    // Extract volume from name (e.g. "Carolina Herrera Good Girl ... 80ml")
+    var volMatch = nameText.match(/(\d+)\s*ml\b/i);
+    var volume = volMatch ? volMatch[1] + 'ml' : null;
+
+    // Detect EU region (has a flag image)
+    var hasFlag = !!selectedOption.querySelector('img[class*="Flag"]');
+
+    return {
+      variantId: id,
+      volume: volume,
+      region: hasFlag ? 'eu' : null,
+      price: price ? parsePrice(price) : null,
+      nameText: nameText
+    };
+  }
+
+  /**
+   * Append makeup.com.ua volume to title if not already present.
+   * @param {string} title
+   * @returns {string}
+   */
+  function appendMakeupVolumeToTitle(title) {
+    var variant = detectMakeupVariant();
+    if (!variant || !variant.volume) return title;
+    var vol = variant.volume;
+    if (new RegExp(vol, 'i').test(title)) return title;
+    var suffix = vol;
+    if (variant.region === 'eu') suffix += ' (ЕС)';
+    return title + ' — ' + suffix;
+  }
+
   // ─── Execute and store result ─────────────────────────────────────
   // Store result on DOM element (accessible across all execution contexts).
   // Popup reads this via chrome.scripting.executeScript.
@@ -669,14 +729,26 @@
   var output;
 
   if (result.found) {
-    output = JSON.stringify({
+    var title = appendVolumeToTitle(document.title || '');
+    title = appendMakeupVolumeToTitle(title);
+
+    var resultObj = {
       found: true,
       selector: result.selector,
       price: result.price,
-      title: appendVolumeToTitle(document.title || ''),
+      title: title,
       imageUrl: getProductImage(),
       pageUrl: location.href
-    });
+    };
+
+    // Makeup.com.ua: include variant info so scraper reads the correct variant price
+    var makeupVariant = detectMakeupVariant();
+    if (makeupVariant && makeupVariant.variantId) {
+      resultObj.variantSelector = '#' + cssEscape(makeupVariant.variantId);
+      resultObj.variantId = makeupVariant.variantId;
+    }
+
+    output = JSON.stringify(resultObj);
   } else {
     output = JSON.stringify({ found: false });
   }

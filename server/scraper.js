@@ -699,20 +699,31 @@ async function extractPrice(tracker, options) {
           if (!volMatch) volMatch = (tracker.variantSelector || '').match(/(\d+)ml/i);
           var desiredVolume = volMatch ? volMatch[1] : null;
 
-          // Also try to extract variant ID from the old-style selector
+          // Also try to extract variant ID from the selector
           var wantedVariantId = null;
-          var vidMatch = (tracker.variantSelector || '').match(/data-variant-id[*~|^$]?=["']?([^"'\]]+)/);
-          if (vidMatch) {
-            wantedVariantId = vidMatch[1]
-              .replace(/\\3(\d)\s*/g, function(_, d) { return String.fromCharCode(0x30 + parseInt(d)); })
-              .replace(/\\(\d)/g, function(_, d) { return d; })
-              .replace(/\\/g, '')
-              .trim();
+          // New format: #variantId (e.g. #2921590_3)
+          var hashIdMatch = (tracker.variantSelector || '').match(/^#(.+)$/);
+          if (hashIdMatch) {
+            wantedVariantId = hashIdMatch[1];
+          }
+          // Old format: [data-variant-id="..."]
+          if (!wantedVariantId) {
+            var vidMatch = (tracker.variantSelector || '').match(/data-variant-id[*~|^$]?=["']?([^"'\]]+)/);
+            if (vidMatch) {
+              wantedVariantId = vidMatch[1]
+                .replace(/\\3(\d)\s*/g, function(_, d) { return String.fromCharCode(0x30 + parseInt(d)); })
+                .replace(/\\(\d)/g, function(_, d) { return d; })
+                .replace(/\\/g, '')
+                .trim();
+            }
           }
 
-          console.log('[Scraper] #' + trackerId + ' Makeup: looking for volume=' + (desiredVolume || 'unknown') + ', variantId=' + (wantedVariantId || 'unknown'));
+          // Detect EU region from productName (e.g. "... — 80ml (ЕС)")
+          var wantEU = /\(ЕС\)/i.test(tracker.productName || '') || /_3$/.test(wantedVariantId || '');
 
-          var makeupResult = await page.evaluate(function(wantedVol, wantedVid) {
+          console.log('[Scraper] #' + trackerId + ' Makeup: looking for volume=' + (desiredVolume || 'unknown') + ', variantId=' + (wantedVariantId || 'unknown') + ', wantEU=' + wantEU);
+
+          var makeupResult = await page.evaluate(function(wantedVol, wantedVid, wantEU) {
             var variants = document.querySelectorAll('div[class*="ProductBuySection__variant"]');
             var allVariants = [];
             var matchedPrice = null;
@@ -726,18 +737,33 @@ async function extractPrice(tracker, options) {
               var title = titleEl ? (titleEl.textContent || '').trim() : '';
               var isSelected = (v.className || '').indexOf('selected') !== -1 ||
                                (v.className || '').indexOf('Selected') !== -1;
+              var hasFlag = !!v.querySelector('img[class*="Flag"]');
 
-              allVariants.push({ id: id, title: title, price: price, selected: isSelected });
+              allVariants.push({ id: id, title: title, price: price, selected: isSelected, eu: hasFlag });
 
-              // Match by variant ID
-              if (wantedVid && (id === wantedVid || id.indexOf(wantedVid) !== -1 || wantedVid.indexOf(id) !== -1)) {
+              // Match by exact variant ID
+              if (wantedVid && id === wantedVid) {
                 if (price) matchedPrice = price;
               }
-              // Match by volume
-              if (!matchedPrice && wantedVol && title) {
-                var volNum = title.match(/(\d+)/);
-                if (volNum && volNum[1] === wantedVol) {
-                  if (price) matchedPrice = price;
+            }
+
+            // If no exact ID match, try matching by volume + region
+            if (!matchedPrice && wantedVol) {
+              for (var j = 0; j < allVariants.length; j++) {
+                var av = allVariants[j];
+                var volNum = av.title.match(/(\d+)/);
+                if (volNum && volNum[1] === wantedVol && av.eu === wantEU) {
+                  if (av.price) { matchedPrice = av.price; break; }
+                }
+              }
+              // Fallback: match volume without region check
+              if (!matchedPrice) {
+                for (var k = 0; k < allVariants.length; k++) {
+                  var av2 = allVariants[k];
+                  var volNum2 = av2.title.match(/(\d+)/);
+                  if (volNum2 && volNum2[1] === wantedVol) {
+                    if (av2.price) { matchedPrice = av2.price; break; }
+                  }
                 }
               }
             }
@@ -777,7 +803,7 @@ async function extractPrice(tracker, options) {
               displayedPrice: displayedPrice,
               allVariants: allVariants
             };
-          }, desiredVolume, wantedVariantId);
+          }, desiredVolume, wantedVariantId, wantEU);
 
           console.log('[Scraper] #' + trackerId + ' Makeup new layout result:', JSON.stringify(makeupResult));
 

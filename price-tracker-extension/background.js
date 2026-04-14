@@ -268,6 +268,11 @@ async function handleAutoDetected(message) {
     isAutoDetected: true,
   };
 
+  // Include variant selector if detected (e.g. makeup.com.ua volume variants)
+  if (message.variantSelector) {
+    payload.variantSelector = message.variantSelector;
+  }
+
   const tracker = await apiClient.createTracker(payload);
 
   // Schedule alarm for periodic checks

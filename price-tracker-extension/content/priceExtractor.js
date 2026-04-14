@@ -190,6 +190,9 @@
   function tryAutoDetectPrice(excludeElement) {
     // 1. Well-known price selectors
     var PRICE_SELECTORS = [
+      // Makeup.com.ua new React SPA (2025+)
+      'span[class*="Price__priceCurrent"]',
+      // Generic
       '[data-testid="product-price"]', '[data-testid="price"]',
       '[itemprop="price"]', '[data-price]',
       '.product-price__big', '.product__price', '.price-current',
@@ -359,6 +362,18 @@
   }
 
   function tryExtract(attempt) {
+    // ─── Makeup.com.ua fast path: read price from variant meta ───
+    // This avoids relying on potentially stale cssSelector
+    var makeupPrice = tryMakeupVariantPrice();
+    if (makeupPrice !== null) {
+      chrome.runtime.sendMessage({
+        action: 'priceExtracted',
+        trackerId: trackerId,
+        price: makeupPrice
+      });
+      return;
+    }
+
     var element;
     try {
       element = document.querySelector(cssSelector);
@@ -398,6 +413,17 @@
             });
             return;
           }
+        }
+
+        // Makeup.com.ua fallback: try reading the displayed price directly
+        var makeupDisplayed = tryMakeupDisplayedPrice();
+        if (makeupDisplayed !== null) {
+          chrome.runtime.sendMessage({
+            action: 'priceExtracted',
+            trackerId: trackerId,
+            price: makeupDisplayed
+          });
+          return;
         }
 
         chrome.runtime.sendMessage({
@@ -449,6 +475,62 @@
       trackerId: trackerId,
       price: price
     });
+  }
+
+  // ─── Makeup.com.ua: read variant price directly from meta ─────────
+  /**
+   * On makeup.com.ua (React SPA), each variant div has meta[itemprop="price"]
+   * with the exact price. We can read it directly without clicking.
+   * This is more reliable than clicking + reading the displayed price.
+   * @returns {number|null}
+   */
+  function tryMakeupVariantPrice() {
+    if (!variantSelector) return null;
+    var host = location.hostname || '';
+    if (host.indexOf('makeup.com.ua') === -1 && host.indexOf('makeup.') === -1) return null;
+
+    var variantEl = findElement(variantSelector);
+    if (!variantEl) return null;
+
+    // Read meta[itemprop="price"] inside the variant element
+    var meta = variantEl.querySelector('meta[itemprop="price"]');
+    if (meta) {
+      var content = meta.getAttribute('content');
+      if (content) {
+        var p = parsePrice(content);
+        if (p !== null && p > 0) return p;
+      }
+    }
+
+    // The variant element itself might be a li[role="option"] in the dropdown
+    var container = variantEl.closest('[itemprop="offers"]') || variantEl;
+    meta = container.querySelector('meta[itemprop="price"]');
+    if (meta) {
+      var content2 = meta.getAttribute('content');
+      if (content2) {
+        var p2 = parsePrice(content2);
+        if (p2 !== null && p2 > 0) return p2;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Makeup.com.ua fallback: read the currently displayed price.
+   * @returns {number|null}
+   */
+  function tryMakeupDisplayedPrice() {
+    var host = location.hostname || '';
+    if (host.indexOf('makeup.com.ua') === -1 && host.indexOf('makeup.') === -1) return null;
+
+    var priceEl = document.querySelector('span[class*="Price__priceCurrent"]');
+    if (priceEl) {
+      var text = (priceEl.textContent || '').trim();
+      var p = parsePrice(text);
+      if (p !== null && p > 0) return p;
+    }
+    return null;
   }
 
   clickVariantAndWait(function () {
