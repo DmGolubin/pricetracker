@@ -173,6 +173,10 @@
   transition: all 0.15s ease;
 }
 
+.popup-btn[hidden] {
+  display: none;
+}
+
 .popup-btn-icon {
   font-size: 15px;
 }
