@@ -1653,7 +1653,7 @@ const Dashboard = (function () {
 
     showToast('✏️ Переименование...', 'info');
     try {
-      var updates = ids.map(function (id) { return { id: id, productGroup: newName }; });
+      var updates = ids.map(function (id) { return { id: id, data: { productGroup: newName } }; });
       await apiFetch(API_BASE + '/trackers/batch', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1694,7 +1694,7 @@ const Dashboard = (function () {
 
     showToast('🗑️ Удаление папки...', 'info');
     try {
-      var updates = ids.map(function (id) { return { id: id, productGroup: '' }; });
+      var updates = ids.map(function (id) { return { id: id, data: { productGroup: '' } }; });
       await apiFetch(API_BASE + '/trackers/batch', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
