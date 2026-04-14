@@ -1226,33 +1226,9 @@ async function extractPrice(tracker, options) {
       }
     }
 
-    // Fallback: try auto-detecting price on the page
-    console.log(`[Scraper] #${trackerId} Trying auto-detect fallback...`);
-    const fallbackPrice = await autoDetectPriceOnPage(page);
-    if (fallbackPrice !== null) {
-      var elapsed = Date.now() - pageStart;
-      console.log(`[Scraper] #${trackerId} ✅ Price: ${fallbackPrice} (auto-detect, ${elapsed}ms) — ${shortName}`);
-      return { success: true, price: fallbackPrice, volume: notinoVolume };
-    }
-
-    // CSS selector element not found — try fallback selectors
-    if (!result.found) {
-      console.log(`[Scraper] #${trackerId} Trying fallback selectors...`);
-      const fallbackResult = await tryFallbackSelectors(page, tracker.cssSelector);
-      if (fallbackResult !== null) {
-        var elapsed = Date.now() - pageStart;
-        console.log(`[Scraper] #${trackerId} ✅ Price: ${fallbackResult} (fallback selector, ${elapsed}ms) — ${shortName}`);
-        return { success: true, price: fallbackResult, volume: notinoVolume };
-      }
-    }
-
-    // Last resort: try extracting price from productName field
-    var namePrice2 = extractPriceFromProductName(tracker.productName);
-    if (namePrice2 !== null) {
-      var elapsed = Date.now() - pageStart;
-      console.log(`[Scraper] #${trackerId} ✅ Price: ${namePrice2} (from productName, ${elapsed}ms) — ${shortName}`);
-      return { success: true, price: namePrice2 };
-    }
+    // No fallback — if the CSS selector didn't find the price, it's an error.
+    // Auto-detect and productName extraction are disabled because they
+    // frequently return wrong prices (different variant, different product).
 
     var elapsed = Date.now() - pageStart;
     const errorMsg = result.found
@@ -1262,14 +1238,6 @@ async function extractPrice(tracker, options) {
 
     return { success: false, error: errorMsg };
   } catch (err) {
-    // Last resort in catch: try extracting price from productName
-    var namePrice3 = extractPriceFromProductName(tracker.productName);
-    if (namePrice3 !== null) {
-      var elapsed = Date.now() - pageStart;
-      console.log(`[Scraper] #${trackerId} ✅ Price: ${namePrice3} (from productName after error, ${elapsed}ms) — ${shortName}`);
-      return { success: true, price: namePrice3 };
-    }
-
     var elapsed = Date.now() - pageStart;
     console.error(`[Scraper] #${trackerId} ❌ Error (${elapsed}ms): ${err.message} — ${shortName}`);
     return { success: false, error: err.message };
