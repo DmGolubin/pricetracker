@@ -598,8 +598,7 @@
   function extractNotinoVolume() {
     if (!location.hostname.includes('notino')) return null;
 
-    // 1. Selected variant area: #pdSelectedVariant > .fwfy74o > .luz844u span
-    //    This contains e.g. "50 мл" right above the price
+    // 1. Selected variant area: #pdSelectedVariant [aria-live] contains "80 мл" span
     try {
       var selectedArea = document.querySelector('#pdSelectedVariant [aria-live]');
       if (selectedArea) {
@@ -608,10 +607,16 @@
           var txt = (spans[i].textContent || '').replace(/\u00A0/g, ' ').trim();
           if (/^\d+\s*мл$/i.test(txt)) return txt;
         }
+        // Also check direct child divs (volume may be in a div, not span)
+        var divs = selectedArea.querySelectorAll('div');
+        for (var d = 0; d < divs.length; d++) {
+          var dtxt = (divs[d].textContent || '').replace(/\u00A0/g, ' ').trim();
+          if (/^\d+\s*мл$/i.test(dtxt)) return dtxt;
+        }
       }
     } catch (_) {}
 
-    // 2. Selected variant tile label
+    // 2. Selected variant tile: .pd-variant-selected contains .pd-variant-label with "80 мл"
     try {
       var selectedTile = document.querySelector('.pd-variant-selected .pd-variant-label');
       if (selectedTile) {
@@ -620,29 +625,61 @@
       }
     } catch (_) {}
 
-    // 3. Product specs: look for standalone volume, but SKIP "price / N мл" patterns
-    //    (those are price-per-unit, not product volume)
+    // 3. Selected variant tile by data-testid: a.pd-variant-selected has pd-variant-label inside
+    try {
+      var selectedByClass = document.querySelector('a.pd-variant-selected');
+      if (selectedByClass) {
+        var labelEl = selectedByClass.querySelector('[class*="pd-variant-label"], [class*="n19p5b2u"]');
+        if (labelEl) {
+          var lbl = (labelEl.textContent || '').replace(/\u00A0/g, ' ').trim();
+          if (/^\d+\s*мл$/i.test(lbl)) return lbl;
+        }
+      }
+    } catch (_) {}
+
+    // 4. Variant tiles: find the one with border-2 (selected) and read its label
+    try {
+      var allVariants = document.querySelectorAll('[data-testid^="pd-variant-"]');
+      for (var v = 0; v < allVariants.length; v++) {
+        var variant = allVariants[v];
+        var isSelected = (variant.className || '').indexOf('pd-variant-selected') !== -1;
+        if (!isSelected) continue;
+        var volText = (variant.textContent || '').replace(/\u00A0/g, ' ');
+        var volMatch = volText.match(/(\d+)\s*мл/i);
+        if (volMatch) return volMatch[0].trim();
+      }
+    } catch (_) {}
+
+    // 5. Product specs: look for standalone volume, skip "price / N мл" patterns
     try {
       var specs = document.querySelector('[data-testid="product-specifications"]');
       if (specs) {
         var specText = (specs.textContent || '').replace(/\u00A0/g, ' ');
-        // Skip "X грн / N мл" (price per unit) — match only standalone volume
         var specVolumes = specText.match(/(\d+)\s*мл/gi);
         if (specVolumes) {
           for (var sv = 0; sv < specVolumes.length; sv++) {
             var volCandidate = specVolumes[sv].trim();
             var volNum = parseInt(volCandidate, 10);
-            // Check if this volume is preceded by "/" (price-per-unit indicator)
             var volIdx = specText.indexOf(volCandidate);
             var before = specText.substring(Math.max(0, volIdx - 5), volIdx).trim();
-            if (before.endsWith('/')) continue; // Skip price-per-unit
+            if (before.endsWith('/')) continue;
             if (volNum > 0 && volNum <= 1000) return volCandidate;
           }
         }
       }
     } catch (_) {}
 
-    // 4. URL pattern: sometimes volume is in the URL slug
+    // 6. Meta description often contains volume: "... 80 мл ..."
+    try {
+      var metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc) {
+        var descContent = (metaDesc.getAttribute('content') || '');
+        var descMatch = descContent.match(/(\d+)\s*мл/i);
+        if (descMatch) return descMatch[0].trim();
+      }
+    } catch (_) {}
+
+    // 7. URL pattern: sometimes volume is in the URL slug
     try {
       var urlMatch = location.pathname.match(/(\d+)-ml\b/i);
       if (urlMatch) return urlMatch[1] + ' мл';
