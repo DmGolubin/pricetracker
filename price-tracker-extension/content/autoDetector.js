@@ -245,156 +245,125 @@
    * Returns { element, price, confidence } or null.
    */
   function checkSiteSpecific() {
-    // Notino.ua: promo/voucher price takes priority over regular price.
-    // The promo price block contains span[data-testid="pd-price-wrapper"] outside #pd-price.
-    // CSS-in-JS class (e.g. span.dlmrqim) may change between builds, so we use
-    // a more stable approach: find all pd-price-wrapper outside #pd-price.
+      // ─── Notino.ua ───────────────────────────────────────────────────
+      // Notino has two price blocks:
+      //   1. originalPriceDiscountWrapper → pd-price-wrapper with content="9 090" — OLD/original price
+      //   2. #pd-price → span[data-testid="pd-price"] with content="6 300" — CURRENT discounted price
+      // The CURRENT price is ALWAYS inside #pd-price. The wrapper outside #pd-price is the OLD price.
+      // For variant pages: each variant tile has span[data-testid="price-variant"] with content attr.
+      // For gift sets (no variants): same #pd-price structure applies.
 
-    // First get regular price for comparison
-    var regularPrice = null;
-    var regularEl = null;
-    try {
-      var regSpan = document.querySelector('#pd-price span[data-testid="pd-price"]') ||
-                    document.querySelector('span[data-testid="pd-price"]');
-      if (regSpan) {
-        var rc = (regSpan.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
-        if (rc) {
-          regularPrice = parsePrice(rc);
-          regularEl = regSpan;
-        }
-        if (regularPrice === null) {
-          var rt = (regSpan.textContent || '').trim();
-          if (rt) {
-            regularPrice = parsePrice(rt);
-            regularEl = regSpan;
-          }
-        }
-      }
-    } catch (_) {}
-
-    // Search for promo price wrappers outside #pd-price
-    try {
-      var allWrappers = document.querySelectorAll('span[data-testid="pd-price-wrapper"]');
-      var pdPriceEl = document.querySelector('#pd-price');
-      var bestPromoPrice = null;
-      var bestPromoEl = null;
-      for (var pw = 0; pw < allWrappers.length; pw++) {
-        var wrapper = allWrappers[pw];
-        if (pdPriceEl && pdPriceEl.contains(wrapper)) continue;
-        var priceSpan = wrapper.querySelector('span[content]');
-        if (!priceSpan) continue;
-        var pc = (priceSpan.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
-        if (!pc || /^[A-Z]{3}$/.test(pc)) continue;
-        var pp = parsePrice(pc);
-        if (pp !== null && pp > 0 && (bestPromoPrice === null || pp < bestPromoPrice)) {
-          bestPromoPrice = pp;
-          bestPromoEl = priceSpan;
-        }
-      }
-      // Also try legacy CSS-in-JS selector
-      if (bestPromoPrice === null) {
-        var legacyPromo = document.querySelector('span.dlmrqim span[data-testid="pd-price-wrapper"]');
-        if (legacyPromo) {
-          var lps = legacyPromo.querySelector('span[content]');
-          if (lps) {
-            var lpc = (lps.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
-            if (lpc && !/^[A-Z]{3}$/.test(lpc)) {
-              var lpp = parsePrice(lpc);
-              if (lpp !== null && lpp > 0) { bestPromoPrice = lpp; bestPromoEl = lps; }
-            }
-          }
-        }
-      }
-      // Use promo if lower than regular
-      if (bestPromoPrice !== null && bestPromoEl && (regularPrice === null || bestPromoPrice < regularPrice)) {
-        return { element: bestPromoEl, price: bestPromoPrice, confidence: 0.97 };
-      }
-    } catch (_) {}
-
-    // Notino.ua: regular price
-    if (regularPrice !== null && regularEl) {
-      return { element: regularEl, price: regularPrice, confidence: 0.95 };
-    }
-
-    // Notino.ua: fallback regular price selectors
-    var notinoSelectors = [
-      'span[data-testid="pd-price"]',
-      '#pd-price span[data-testid="pd-price"]'
-    ];
-    for (var i = 0; i < notinoSelectors.length; i++) {
-      try {
-        var el = document.querySelector(notinoSelectors[i]);
-        if (el) {
-          // Try content attribute first (most reliable on Notino)
-          var content = el.getAttribute('content');
+      if (location.hostname.includes('notino')) {
+        // Priority 1: Current price from #pd-price (the actual selling price)
+        var currentPriceEl = document.querySelector('#pd-price span[data-testid="pd-price"]');
+        if (!currentPriceEl) currentPriceEl = document.querySelector('span[data-testid="pd-price"]');
+        if (currentPriceEl) {
+          var content = (currentPriceEl.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
           if (content) {
-            var cleaned = content.replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
-            var price = parsePrice(cleaned);
+            var price = parsePrice(content);
             if (price !== null && price > 0) {
-              return { element: el, price: price, confidence: 0.95 };
+              return { element: currentPriceEl, price: price, confidence: 0.97 };
             }
           }
           // Fallback to textContent
-          var text = (el.textContent || '').trim();
+          var text = (currentPriceEl.textContent || '').trim();
           if (text) {
             var price2 = parsePrice(text);
             if (price2 !== null && price2 > 0) {
-              return { element: el, price: price2, confidence: 0.9 };
+              return { element: currentPriceEl, price: price2, confidence: 0.95 };
             }
           }
         }
-      } catch (_) {}
-    }
 
-    // Makeup.com.ua: React SPA with CSS Modules (2025+)
-    // Price is in span[class*="Price__priceCurrent"] e.g. "6300 ₴"
-    // Variants have meta[itemprop="price"] inside offer containers
-    if (location.hostname.indexOf('makeup.com.ua') !== -1 || location.hostname.indexOf('makeup.') !== -1) {
-      // Try the main displayed price
-      var makeupPriceEl = document.querySelector('span[class*="Price__priceCurrent"]');
-      if (makeupPriceEl) {
-        var makeupText = (makeupPriceEl.textContent || '').trim();
-        var makeupPrice = parsePrice(makeupText);
-        if (makeupPrice !== null && makeupPrice > 0) {
-          return { element: makeupPriceEl, price: makeupPrice, confidence: 0.95 };
-        }
-      }
-      // Fallback: meta itemprop="price" in the main offer block
-      var makeupMeta = document.querySelector('div[class*="ProductBuySection__container"] > meta[itemprop="price"]');
-      if (!makeupMeta) makeupMeta = document.querySelector('div[class*="ProductBuySection"] meta[itemprop="price"]');
-      if (makeupMeta) {
-        var makeupMetaPrice = parsePrice(makeupMeta.getAttribute('content'));
-        if (makeupMetaPrice !== null && makeupMetaPrice > 0) {
-          // Return the visible price element for selector generation
-          var visibleEl = document.querySelector('span[class*="Price__priceCurrent"]');
-          return { element: visibleEl || makeupMeta, price: makeupMetaPrice, confidence: 0.93 };
-        }
-      }
-    }
-
-    // Generic: elements with content attribute containing a price
-    var contentAttrSelectors = [
-      '[data-testid*="price"][content]',
-      '[itemprop="price"][content]'
-    ];
-    for (var j = 0; j < contentAttrSelectors.length; j++) {
-      try {
-        var els = document.querySelectorAll(contentAttrSelectors[j]);
-        for (var k = 0; k < els.length; k++) {
-          var elem = els[k];
-          var contentVal = (elem.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
-          if (contentVal) {
-            var p = parsePrice(contentVal);
-            if (p !== null && p > 0) {
-              return { element: elem, price: p, confidence: 0.9 };
+        // Priority 2: Selected variant price (multi-variant pages)
+        var selectedVariant = document.querySelector('a.pd-variant-selected span[data-testid="price-variant"]');
+        if (selectedVariant) {
+          var vc = (selectedVariant.getAttribute('content') || '').replace(/\u00A0/g, ' ').trim();
+          if (vc) {
+            var vp = parsePrice(vc);
+            if (vp !== null && vp > 0) {
+              return { element: selectedVariant, price: vp, confidence: 0.95 };
             }
           }
         }
-      } catch (_) {}
+
+        // Priority 3: First variant tile price
+        var anyVariant = document.querySelector('span[data-testid="price-variant"]');
+        if (anyVariant) {
+          var avc = (anyVariant.getAttribute('content') || '').replace(/\u00A0/g, ' ').trim();
+          if (avc) {
+            var avp = parsePrice(avc);
+            if (avp !== null && avp > 0) {
+              return { element: anyVariant, price: avp, confidence: 0.9 };
+            }
+          }
+        }
+
+        // Priority 4: #pdSelectedVariant container (gift sets)
+        var pdSelected = document.querySelector('#pdSelectedVariant');
+        if (pdSelected) {
+          var innerSpan = pdSelected.querySelector('span[data-testid="pd-price"]') ||
+                          pdSelected.querySelector('span[content]');
+          if (innerSpan) {
+            var ic = (innerSpan.getAttribute('content') || '').replace(/\u00A0/g, ' ').trim();
+            if (ic && !/^[A-Z]{3}$/.test(ic)) {
+              var ip = parsePrice(ic);
+              if (ip !== null && ip > 0) {
+                return { element: innerSpan, price: ip, confidence: 0.9 };
+              }
+            }
+          }
+        }
+      }
+
+      // ─── Makeup.com.ua: React SPA with CSS Modules (2025+) ──────────
+      if (location.hostname.indexOf('makeup.com.ua') !== -1 || location.hostname.indexOf('makeup.') !== -1) {
+        // Try the main displayed price
+        var makeupPriceEl = document.querySelector('span[class*="Price__priceCurrent"]');
+        if (makeupPriceEl) {
+          var makeupText = (makeupPriceEl.textContent || '').trim();
+          var makeupPrice = parsePrice(makeupText);
+          if (makeupPrice !== null && makeupPrice > 0) {
+            return { element: makeupPriceEl, price: makeupPrice, confidence: 0.95 };
+          }
+        }
+        // Fallback: meta itemprop="price" in the main offer block
+        var makeupMeta = document.querySelector('div[class*="ProductBuySection__container"] > meta[itemprop="price"]');
+        if (!makeupMeta) makeupMeta = document.querySelector('div[class*="ProductBuySection"] meta[itemprop="price"]');
+        if (makeupMeta) {
+          var makeupMetaPrice = parsePrice(makeupMeta.getAttribute('content'));
+          if (makeupMetaPrice !== null && makeupMetaPrice > 0) {
+            var visibleEl = document.querySelector('span[class*="Price__priceCurrent"]');
+            return { element: visibleEl || makeupMeta, price: makeupMetaPrice, confidence: 0.93 };
+          }
+        }
+      }
+
+      // Generic: elements with content attribute containing a price
+      var contentAttrSelectors = [
+        '[data-testid*="price"][content]',
+        '[itemprop="price"][content]'
+      ];
+      for (var j = 0; j < contentAttrSelectors.length; j++) {
+        try {
+          var els = document.querySelectorAll(contentAttrSelectors[j]);
+          for (var k = 0; k < els.length; k++) {
+            var elem = els[k];
+            var contentVal = (elem.getAttribute('content') || '').replace(/&nbsp;/g, ' ').replace(/\u00A0/g, ' ').trim();
+            if (contentVal) {
+              var p = parsePrice(contentVal);
+              if (p !== null && p > 0) {
+                return { element: elem, price: p, confidence: 0.9 };
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      return null;
     }
 
-    return null;
-  }
+
 
 
   function extractPriceFromJsonLd(data) {

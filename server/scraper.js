@@ -1118,128 +1118,63 @@ async function extractPrice(tracker, options) {
 
     // Notino special: read price from content attribute of span[data-testid="pd-price"]
     // This is more reliable than textContent because font tags may not render in headless
+    // IMPORTANT: Notino has two price blocks:
+    //   1. originalPriceDiscountWrapper → pd-price-wrapper outside #pd-price = OLD/original price
+    //   2. #pd-price → span[data-testid="pd-price"] = CURRENT discounted price (the real selling price)
+    // Always prioritize #pd-price — it contains the actual price the customer pays.
     if (isNotino) {
       var notinoPrice = null;
       for (var notinoAttempt = 0; notinoAttempt < 2; notinoAttempt++) {
         try {
           notinoPrice = await page.evaluate(function() {
-        // Notino promo/voucher price detection.
-        // The promo price block contains a span[data-testid="pd-price-wrapper"]
-        // with a lower price than the regular #pd-price. It may be inside a
-        // CSS-in-JS class (e.g. span.dlmrqim) which can change between builds.
-        // Strategy: find all pd-price-wrapper spans outside #pd-price, pick the
-        // one with the lowest price. If lower than regular price, use it.
-        var regularPrice = null;
-        var regularSpan = document.querySelector('#pd-price span[data-testid="pd-price"]');
-        if (!regularSpan) regularSpan = document.querySelector('span[data-testid="pd-price"]');
-        if (regularSpan) {
-          var rc = regularSpan.getAttribute('content');
-          if (rc && /\d/.test(rc)) {
-            var rNum = parseFloat(rc.replace(/[\s\u00A0]/g, '').replace(',', '.'));
-            if (!isNaN(rNum) && rNum > 0) regularPrice = rNum;
-          }
-        }
-
-        // Look for promo price wrappers outside #pd-price
-        var allWrappers = document.querySelectorAll('span[data-testid="pd-price-wrapper"]');
-        var pdPriceEl = document.querySelector('#pd-price');
-        var bestPromo = null;
-        for (var i = 0; i < allWrappers.length; i++) {
-          var wrapper = allWrappers[i];
-          // Skip the main price wrapper inside #pd-price
-          if (pdPriceEl && pdPriceEl.contains(wrapper)) continue;
-          // Find span with content attribute (the price value)
-          var priceSpan = wrapper.querySelector('span[content]');
-          if (!priceSpan) continue;
-          var pc = priceSpan.getAttribute('content');
-          if (!pc || !/\d/.test(pc)) continue;
-          // Skip currency spans (content="UAH")
-          if (/^[A-Z]{3}$/.test(pc.trim())) continue;
-          var pNum = parseFloat(pc.replace(/[\s\u00A0]/g, '').replace(',', '.'));
-          if (isNaN(pNum) || pNum <= 0) continue;
-          if (bestPromo === null || pNum < bestPromo) bestPromo = pNum;
-        }
-
-        // Also try the legacy CSS-in-JS selector as fallback
-        if (bestPromo === null) {
-          var legacyPromo = document.querySelector('span.dlmrqim span[data-testid="pd-price-wrapper"]');
-          if (legacyPromo) {
-            var lps = legacyPromo.querySelector('span[content]');
-            if (lps) {
-              var lpc = lps.getAttribute('content');
-              if (lpc && /\d/.test(lpc) && !/^[A-Z]{3}$/.test(lpc.trim())) {
-                var lpNum = parseFloat(lpc.replace(/[\s\u00A0]/g, '').replace(',', '.'));
-                if (!isNaN(lpNum) && lpNum > 0) bestPromo = lpNum;
-              }
-            }
-          }
-        }
-
-        // Use promo price if it's lower than regular price
-        if (bestPromo !== null && (regularPrice === null || bestPromo < regularPrice)) {
-          return String(bestPromo);
-        }
-        // Fall back to regular price
-        if (regularPrice !== null) return String(regularPrice);
-
-        // Legacy fallbacks for edge cases
-        // Regular price: span[data-testid="pd-price"] content attribute (most reliable)
-        var span = document.querySelector('span[data-testid="pd-price"]');
-        if (span) {
-          var content = span.getAttribute('content');
+        // Priority 1: Current price from #pd-price (the actual selling price)
+        // This is ALWAYS the discounted/current price, even when there's a sale.
+        var currentSpan = document.querySelector('#pd-price span[data-testid="pd-price"]');
+        if (!currentSpan) currentSpan = document.querySelector('span[data-testid="pd-price"]');
+        if (currentSpan) {
+          var content = currentSpan.getAttribute('content');
           if (content && /\d/.test(content)) return content;
-          var text = (span.textContent || '').trim();
+          var text = (currentSpan.textContent || '').trim();
           if (text && /\d/.test(text)) return text;
         }
-        // Fallback: #pd-price textContent
+
+        // Priority 2: #pd-price container textContent
         var pdPrice = document.querySelector('#pd-price');
         if (pdPrice) {
           var text2 = (pdPrice.textContent || '').trim();
           if (text2 && /\d/.test(text2)) return text2;
         }
-        // Fallback: #pdSelectedVariant — gift set pages have price inside this container
-        var pdSelected = document.querySelector('#pdSelectedVariant');
-        if (pdSelected) {
-          // Look for span with content attribute inside
-          var innerSpan = pdSelected.querySelector('span[content]');
-          if (innerSpan) {
-            var ic = innerSpan.getAttribute('content');
-            if (ic && /\d/.test(ic)) return ic;
-          }
-          // Try any price-like text
-          var selText = (pdSelected.textContent || '').trim();
-          // Extract just the price part (digits and spaces before currency)
-          var priceMatch = selText.match(/([\d\s]+)\s*грн/);
-          if (priceMatch) return priceMatch[1].trim();
-          if (selText && /\d/.test(selText)) return selText;
-        }
-        // Fallback: originalPriceWrapper — gift sets with discount show current price here
-        var origWrapper = document.querySelector('[data-testid="originalPriceWrapper"]');
-        if (origWrapper) {
-          // The actual (discounted) price is usually a sibling or nearby element
-          var parent = origWrapper.parentElement;
-          if (parent) {
-            var priceSpan = parent.querySelector('span[content]');
-            if (priceSpan) {
-              var pc = priceSpan.getAttribute('content');
-              if (pc && /\d/.test(pc)) return pc;
-            }
-          }
-        }
-        // Fallback: selected variant tile price (multi-variant pages)
+
+        // Priority 3: Selected variant tile price (multi-variant pages)
         var selectedVariant = document.querySelector('a.pd-variant-selected span[data-testid="price-variant"]');
         if (selectedVariant) {
-          var content3 = selectedVariant.getAttribute('content');
-          if (content3 && /\d/.test(content3)) return content3;
-          var text3 = (selectedVariant.textContent || '').trim();
-          if (text3 && /\d/.test(text3)) return text3;
+          var vc = selectedVariant.getAttribute('content');
+          if (vc && /\d/.test(vc)) return vc;
+          var vt = (selectedVariant.textContent || '').trim();
+          if (vt && /\d/.test(vt)) return vt;
         }
-        // Last resort: first variant tile price
+
+        // Priority 4: First variant tile price
         var anyVariant = document.querySelector('span[data-testid="price-variant"]');
         if (anyVariant) {
-          var content4 = anyVariant.getAttribute('content');
-          if (content4 && /\d/.test(content4)) return content4;
+          var avc = anyVariant.getAttribute('content');
+          if (avc && /\d/.test(avc)) return avc;
         }
+
+        // Priority 5: #pdSelectedVariant container (gift sets)
+        var pdSelected = document.querySelector('#pdSelectedVariant');
+        if (pdSelected) {
+          var innerSpan = pdSelected.querySelector('span[data-testid="pd-price"]') ||
+                          pdSelected.querySelector('span[content]');
+          if (innerSpan) {
+            var ic = innerSpan.getAttribute('content');
+            if (ic && /\d/.test(ic) && !/^[A-Z]{3}$/.test(ic.trim())) return ic;
+          }
+          var selText = (pdSelected.textContent || '').trim();
+          var priceMatch = selText.match(/([\d\s]+)\s*грн/);
+          if (priceMatch) return priceMatch[1].trim();
+        }
+
         return null;
       });
           if (notinoPrice) break; // Got a result, exit retry loop

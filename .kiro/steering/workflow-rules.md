@@ -97,8 +97,12 @@
 - Старые селекторы (`.product-item__price`, `.price-block__price`) больше не работают — есть fallback на новые.
 
 ### notino.ua
-- React SPA, цена в `span[data-testid="pd-price"]` (атрибут `content`).
-- Промо-цена: `span[data-testid="pd-price-wrapper"]` вне `#pd-price`.
+- React SPA, два ценовых блока:
+  - `#pd-price span[data-testid="pd-price"]` (атрибут `content`) — АКТУАЛЬНАЯ цена (скидочная, если есть скидка).
+  - `span[data-testid="pd-price-wrapper"]` вне `#pd-price` (внутри `originalPriceDiscountWrapper`) — СТАРАЯ/оригинальная цена (зачёркнутая).
+- Всегда приоритизировать `#pd-price` — это реальная цена, которую платит покупатель.
+- Варианты (объёмы): каждый вариант — `span[data-testid="price-variant"]` с `content` атрибутом. URL меняется при выборе варианта (разные product ID в URL).
+- Наборы (gift sets): та же структура `#pd-price`, без вариантов.
 - Wait-page detection: "Трохи зачекайте…" — ждём до 30 секунд.
 
 ### eva.ua

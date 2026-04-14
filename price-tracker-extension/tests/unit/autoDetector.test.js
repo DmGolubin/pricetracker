@@ -222,17 +222,19 @@ describe('AutoDetector', () => {
       expect(r.selector).toBeTruthy();
     });
 
-    test('prefers Notino promo/voucher price over regular price', () => {
+    test('prefers #pd-price current price over original price outside it', () => {
+      // On Notino, #pd-price contains the CURRENT (discounted) price,
+      // while pd-price-wrapper outside #pd-price is the OLD/original price.
       var restore = setupPriceElement(
         '<div>' +
-          '<div id="pd-price"><span data-testid="pd-price" content="3&nbsp;150">3 150</span> <span data-testid="currency-variant">₴</span></div>' +
-          '<span class="dlmrqim"><span data-testid="pd-price-wrapper"><span content="2&nbsp;675">2 675</span> <span data-testid="currency-variant">₴</span></span></span>' +
+          '<div data-testid="originalPriceDiscountWrapper"><span data-testid="originalPriceWrapper"><span data-testid="pd-price-wrapper"><span content="9&nbsp;090">9 090</span></span></span></div>' +
+          '<div id="pd-price" data-testid="pd-price-wrapper"><span data-testid="pd-price" content="6&nbsp;300">6 300</span> <span data-testid="currency-variant">₴</span></div>' +
         '</div>'
       );
       runDetector(); restore();
       var r = getResult();
       expect(r.found).toBe(true);
-      expect(r.price).toBe(2675);
+      expect(r.price).toBe(6300);
     });
 
     test('falls back to regular Notino price when no promo price', () => {
