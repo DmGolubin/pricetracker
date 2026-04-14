@@ -803,6 +803,27 @@
     return title + ' — ' + vol + ' мл';
   }
 
+  /**
+   * Clean page title by removing common store suffixes.
+   * E.g. "Product Name — купити на ▷ EVA.UA - гіпермаркет краси" → "Product Name"
+   * @param {string} title
+   * @returns {string}
+   */
+  function cleanPageTitle(title) {
+    if (!title) return '';
+    // EVA.UA suffix patterns
+    title = title.replace(/\s*[—–-]\s*купити на.*$/i, '');
+    // Notino.ua suffix
+    title = title.replace(/\s*[|｜]\s*notino\.ua.*$/i, '');
+    title = title.replace(/\s*[—–-]\s*купити.*notino.*$/i, '');
+    // Makeup.com.ua suffix
+    title = title.replace(/\s*[|｜]\s*MAKEUP.*$/i, '');
+    title = title.replace(/\s*[—–-]\s*купити.*makeup.*$/i, '');
+    // Generic: remove " - Store Name" or " | Store Name" at the end
+    title = title.replace(/\s*[|｜]\s*[^|]{2,30}$/, '');
+    return title.trim();
+  }
+
   // ─── Execute and store result ─────────────────────────────────────
   // Store result on DOM element (accessible across all execution contexts).
   // Popup reads this via chrome.scripting.executeScript.
@@ -811,7 +832,8 @@
   var output;
 
   if (result.found) {
-    var title = appendVolumeToTitle(document.title || '');
+    var title = cleanPageTitle(document.title || '');
+    title = appendVolumeToTitle(title);
     title = appendMakeupVolumeToTitle(title);
     title = appendEvaVolumeToTitle(title);
 
