@@ -296,6 +296,28 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
   var oldPrice = Number(tracker.currentPrice);
   var now = new Date().toISOString();
 
+  // Sanity check: reject suspiciously low prices that are likely parsing errors
+  // (e.g., rating numbers, review counts, etc.)
+  if (newPrice < 50) {
+    console.warn('[ServerCheck] #' + tracker.id + ' ⚠ Suspicious price: ' + newPrice + ' (too low, likely parsing error)');
+    await pool.query(
+      'UPDATE trackers SET status = $1, "errorMessage" = $2, "consecutiveErrors" = COALESCE("consecutiveErrors", 0) + 1, "lastCheckedAt" = NOW(), "updatedAt" = NOW() WHERE id = $3',
+      ['error', 'Suspicious price: ' + newPrice + ' (too low)', tracker.id]
+    );
+    return 'error';
+  }
+
+  // Sanity check: if price dropped more than 80% from previous known price,
+  // it's likely a parsing error (wrong element on page)
+  if (oldPrice > 0 && newPrice < oldPrice * 0.2) {
+    console.warn('[ServerCheck] #' + tracker.id + ' ⚠ Suspicious price drop: ' + oldPrice + ' → ' + newPrice + ' (-' + ((1 - newPrice / oldPrice) * 100).toFixed(0) + '%)');
+    await pool.query(
+      'UPDATE trackers SET status = $1, "errorMessage" = $2, "consecutiveErrors" = COALESCE("consecutiveErrors", 0) + 1, "lastCheckedAt" = NOW(), "updatedAt" = NOW() WHERE id = $3',
+      ['error', 'Suspicious price: ' + newPrice + ' (dropped ' + ((1 - newPrice / oldPrice) * 100).toFixed(0) + '% from ' + oldPrice + ')', tracker.id]
+    );
+    return 'error';
+  }
+
   // Save price history record
   await pool.query(
     'INSERT INTO price_history ("trackerId", price, "checkedAt") VALUES ($1, $2, $3)',
