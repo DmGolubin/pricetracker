@@ -193,28 +193,10 @@ async function runCheckCycle(pool, isCancelled) {
   // 5. Close browser after cycle
   await scraper.closeBrowser();
 
-  // 6. Send Telegram digest
+  // 6. Log digest summary (individual alerts already sent inline)
   var digestEntries = collector.getEntries();
   var unchangedCount = collector.getUnchangedCount();
-  console.log('[ServerCheck] Digest: ' + digestEntries.length + ' changes, ' + unchangedCount + ' unchanged');
-
-  if (collector.hasChanges() && settings.telegramDigestEnabled) {
-    var messages = collector.compose();
-    if (messages.length > 0 && settings.telegramBotToken && (settings.telegramChatId || settings.telegramPersonalChatId)) {
-      console.log('[ServerCheck] 📨 Sending digest (' + messages.length + ' message(s), ' + digestEntries.length + ' changes)...');
-      var sent = await telegram.sendDigest(settings.telegramBotToken, settings.telegramChatId, messages, settings.telegramPersonalChatId);
-      var icon = sent === messages.length ? '✅' : '⚠';
-      console.log('[ServerCheck] ' + icon + ' Digest sent: ' + sent + '/' + messages.length + ' messages');
-    } else if (messages.length === 0) {
-      console.log('[ServerCheck] Digest composed but empty — skipping send.');
-    } else {
-      console.log('[ServerCheck] ⚠ Telegram not configured — digest not sent.');
-    }
-  } else if (!collector.hasChanges()) {
-    console.log('[ServerCheck] No price changes — no digest to send.');
-  } else {
-    console.log('[ServerCheck] Digest mode disabled — skipping.');
-  }
+  console.log('[ServerCheck] Digest summary: ' + digestEntries.length + ' changes, ' + unchangedCount + ' unchanged');
 
   var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
@@ -468,6 +450,28 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
       collector.addUnchanged();
     } else if (significant || isHistMin) {
       collector.addChange(tracker, oldPrice, newPrice, isHistMin, isCrossStoreMin);
+
+      // Send immediate Telegram alert for this price drop
+      // (don't wait for end of cycle — process may be killed by hosting timeout)
+      try {
+        if (settings.telegramDigestEnabled && settings.telegramBotToken && (settings.telegramPersonalChatId || settings.telegramChatId)) {
+          var domain = '';
+          try { domain = new URL(tracker.pageUrl).hostname; } catch(_) {}
+          var shopLabel = domain.indexOf('makeup') !== -1 ? 'Makeup' : domain.indexOf('eva.ua') !== -1 ? 'EVA' : domain.indexOf('notino') !== -1 ? 'Notino' : domain.indexOf('kasta') !== -1 ? 'Kasta' : domain;
+          var cleanName = (tracker.productName || '').replace(/\s*[-–—]\s*купит[иь]\s.*$/i, '').substring(0, 60);
+          var pctStr = pctChange + '%';
+          var minTag = isCrossStoreMin ? ' 🏆🏆 Лучшая цена!' : isHistMin ? ' 🏆 Ист. минимум!' : '';
+          var alertMsg = '📉 <b>' + telegram.escapeHtml(cleanName) + '</b>\n'
+            + '<s>' + oldPrice + '</s> → <b>' + newPrice + '</b> грн (' + pctStr + ')'
+            + ' · ' + telegram.escapeHtml(shopLabel) + minTag
+            + '\n<a href="' + (tracker.pageUrl || '') + '">Открыть</a>';
+          var chatTarget = settings.telegramPersonalChatId || settings.telegramChatId;
+          await telegram.sendMessage(settings.telegramBotToken, chatTarget, alertMsg);
+          console.log('[ServerCheck] #' + tracker.id + ' 📨 Immediate alert sent');
+        }
+      } catch (alertErr) {
+        console.warn('[ServerCheck] #' + tracker.id + ' ⚠ Failed to send immediate alert: ' + alertErr.message);
+      }
     } else {
       collector.addUnchanged();
     }

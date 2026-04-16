@@ -78,4 +78,12 @@ async function sendDigest(botToken, chatId, messages, personalChatId) {
   return sent;
 }
 
-module.exports = { sendMessage, sendDigest };
+/**
+ * Escape HTML special characters for Telegram HTML parse mode.
+ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+module.exports = { sendMessage, sendDigest, escapeHtml };
