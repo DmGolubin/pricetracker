@@ -1257,39 +1257,62 @@ async function extractPrice(tracker, options) {
     // ─── Kasta.ua fallback: dynamic CSS selectors (#kcPriceXXX) don't work ───
     // Kasta generates unique IDs per session, so selectors like #kcPrice5767287522
     // won't exist on server-side Puppeteer. Use stable selectors instead.
-    // Priority: Kasta Card price (.kcPrice) > regular price (#productPrice)
-    if (isKasta && !result.found) {
-      console.log(`[Scraper] #${trackerId} Kasta: original selector failed, trying stable fallbacks...`);
+    // Also trigger when selector was found but price parse failed (e.g. empty text).
+    // Priority: #productPrice (stable, regular price) > .kcPrice (Kasta Card) > JSON-LD
+    // IMPORTANT: Exclude BNPL/installment prices (46 ₴ / 2 weeks) — these are NOT product prices.
+    if (isKasta && (!result.found || (result.found && (parsePrice(result.text) === null || parsePrice(result.text) <= 0)))) {
+      console.log(`[Scraper] #${trackerId} Kasta: original selector ${result.found ? 'found but parse failed' : 'not found'}, trying stable fallbacks...`);
       var kastaPrice = await page.evaluate(function() {
-        // 1. .kcPrice span.t-bold — Kasta Visa Card price (preferred, lower price)
-        var kcBold = document.querySelector('.kcPrice span.t-bold');
-        if (kcBold) {
-          var boldText = (kcBold.textContent || '').trim();
-          if (boldText && /^\d/.test(boldText)) return { text: boldText, source: '.kcPrice span.t-bold' };
-        }
-        // 2. .kcPrice span — any Kasta Card price span
-        var kcSpans = document.querySelectorAll('.kcPrice span');
-        for (var i = 0; i < kcSpans.length; i++) {
-          var spanText = (kcSpans[i].textContent || '').trim();
-          if (spanText && /^\d/.test(spanText)) return { text: spanText, source: '.kcPrice span' };
-        }
-        // 3. #productPrice — main regular price (fallback)
+        // 1. #productPrice — main regular price (most stable selector on Kasta)
         var productPrice = document.querySelector('#productPrice');
         if (productPrice) {
           var text = (productPrice.textContent || '').trim();
           if (text && /\d/.test(text)) return { text: text, source: '#productPrice' };
         }
-        // 4. [itemprop="price"] — structured data
+        // 2. .kcPrice span.t-bold — Kasta Visa Card price (lower, preferred if available)
+        var kcBold = document.querySelector('.kcPrice span.t-bold');
+        if (kcBold) {
+          var boldText = (kcBold.textContent || '').trim();
+          if (boldText && /^\d/.test(boldText)) return { text: boldText, source: '.kcPrice span.t-bold' };
+        }
+        // 3. #productOldPrice — original price before discount
+        var oldPrice = document.querySelector('#productOldPrice');
+        if (oldPrice) {
+          var oldText = (oldPrice.textContent || '').trim();
+          if (oldText && /\d/.test(oldText)) return { text: oldText, source: '#productOldPrice (old price)' };
+        }
+        // 4. JSON-LD structured data — SalePrice from priceSpecification
+        try {
+          var scripts = document.querySelectorAll('script[type="application/ld+json"]');
+          for (var s = 0; s < scripts.length; s++) {
+            var data = JSON.parse(scripts[s].textContent);
+            if (data && data['@type'] === 'Product' && data.offers) {
+              var offers = data.offers;
+              // Check priceSpecification for SalePrice
+              if (offers.priceSpecification && Array.isArray(offers.priceSpecification)) {
+                for (var ps = 0; ps < offers.priceSpecification.length; ps++) {
+                  var spec = offers.priceSpecification[ps];
+                  if (spec.priceType && spec.priceType.indexOf('SalePrice') !== -1 && spec.price) {
+                    return { text: String(spec.price), source: 'JSON-LD SalePrice' };
+                  }
+                }
+                // Fallback: first priceSpecification with a price
+                for (var ps2 = 0; ps2 < offers.priceSpecification.length; ps2++) {
+                  if (offers.priceSpecification[ps2].price) {
+                    return { text: String(offers.priceSpecification[ps2].price), source: 'JSON-LD priceSpecification' };
+                  }
+                }
+              }
+              // Direct price on offers
+              if (offers.price) return { text: String(offers.price), source: 'JSON-LD offers.price' };
+            }
+          }
+        } catch (_) {}
+        // 5. [itemprop="price"] — structured data meta tag
         var itemprop = document.querySelector('[itemprop="price"]');
         if (itemprop) {
           var content = itemprop.getAttribute('content');
           if (content && /\d/.test(content)) return { text: content, source: 'itemprop price' };
-        }
-        // 5. .product-price — generic price class
-        var generic = document.querySelector('.product-price');
-        if (generic) {
-          var gText = (generic.textContent || '').trim();
-          if (gText && /\d/.test(gText)) return { text: gText, source: '.product-price' };
         }
         return null;
       });
@@ -1419,6 +1442,8 @@ async function readPriceFromSelectors(page, selectors) {
 async function autoDetectPriceOnPage(page) {
   const priceText = await page.evaluate(() => {
     const PRICE_SELECTORS = [
+      // Kasta.ua stable selectors
+      '#productPrice',
       // Makeup.ua new React SPA (2025+)
       'span[class*="Price__priceCurrent"]',
       'div[class*="ProductBuySection__price"] span[class*="Price__priceCurrent"]',
@@ -1460,6 +1485,17 @@ async function autoDetectPriceOnPage(page) {
     while ((node = walker.nextNode())) {
       const tag = node.tagName;
       if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG'].includes(tag)) continue;
+
+      // Skip BNPL/installment price elements (Kasta "рассрочка" blocks)
+      // These contain per-payment amounts (e.g. "46 ₴ / 2 weeks") not product prices
+      const isInsideBnpl = node.closest && (
+        node.closest('.BnplPayment') ||
+        node.closest('[id^="bnplPayment"]') ||
+        node.closest('[id^="bnplBtn"]') ||
+        node.closest('.p__bnpl') ||
+        node.closest('[class*="bnpl"]')
+      );
+      if (isInsideBnpl) continue;
 
       let ownText = '';
       for (const child of node.childNodes) {

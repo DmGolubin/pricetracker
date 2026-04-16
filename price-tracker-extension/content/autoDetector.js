@@ -245,6 +245,32 @@
    * Returns { element, price, confidence } or null.
    */
   function checkSiteSpecific() {
+      // ─── Kasta.ua ───────────────────────────────────────────────────
+      // Kasta has dynamic IDs (#kcPriceXXX) that change per session.
+      // Stable selectors: #productPrice (regular price), .kcPrice span.t-bold (Kasta Card price).
+      // IMPORTANT: Exclude BNPL/installment prices (.BnplPayment, #bnplPayment) —
+      // these show per-payment amounts (e.g. "46 ₴ / 2 weeks"), NOT product prices.
+      if (location.hostname.includes('kasta.ua')) {
+        // Priority 1: #productPrice — stable regular price
+        var kastaProductPrice = document.querySelector('#productPrice');
+        if (kastaProductPrice) {
+          var kastaText = (kastaProductPrice.textContent || '').trim();
+          var kastaPrice = parsePrice(kastaText);
+          if (kastaPrice !== null && kastaPrice > 0) {
+            return { element: kastaProductPrice, price: kastaPrice, confidence: 0.97 };
+          }
+        }
+        // Priority 2: .kcPrice span.t-bold — Kasta Visa Card price (lower)
+        var kastaCardEl = document.querySelector('.kcPrice span.t-bold');
+        if (kastaCardEl) {
+          var kastaCardText = (kastaCardEl.textContent || '').trim();
+          var kastaCardPrice = parsePrice(kastaCardText);
+          if (kastaCardPrice !== null && kastaCardPrice > 0) {
+            return { element: kastaCardEl, price: kastaCardPrice, confidence: 0.95 };
+          }
+        }
+      }
+
       // ─── EVA.UA ─────────────────────────────────────────────────────
       // EVA is a Vue/Nuxt SPA. The displayed price for the SELECTED variant
       // is in span[data-testid="product-price"]. JSON-LD and meta tags contain
@@ -456,6 +482,16 @@
 
       // Skip non-visible, script, style, meta elements
       if (tag === 'script' || tag === 'style' || tag === 'meta' || tag === 'link' || tag === 'noscript') continue;
+
+      // Skip BNPL/installment price elements (Kasta "рассрочка" blocks)
+      // These contain per-payment amounts (e.g. "46 ₴"), NOT product prices
+      if (el.closest && (
+        el.closest('.BnplPayment') ||
+        el.closest('[id^="bnplPayment"]') ||
+        el.closest('[id^="bnplBtn"]') ||
+        el.closest('.p__bnpl') ||
+        el.closest('[class*="bnpl"]')
+      )) continue;
 
       var text = (el.textContent || '').trim();
       if (!text || text.length > 50) continue; // Skip very long text (unlikely to be just a price)

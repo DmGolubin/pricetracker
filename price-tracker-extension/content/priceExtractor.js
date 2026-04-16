@@ -190,6 +190,8 @@
   function tryAutoDetectPrice(excludeElement) {
     // 1. Well-known price selectors
     var PRICE_SELECTORS = [
+      // Kasta.ua stable selectors (dynamic #kcPriceXXX IDs don't work across sessions)
+      '#productPrice',
       // Makeup.com.ua new React SPA (2025+)
       'span[class*="Price__priceCurrent"]',
       // Generic
@@ -229,6 +231,16 @@
       // Skip script/style/noscript
       var tag = node.tagName;
       if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'SVG') continue;
+
+      // Skip BNPL/installment price elements (Kasta "рассрочка" blocks)
+      // These contain per-payment amounts (e.g. "46 ₴"), NOT product prices
+      if (node.closest && (
+        node.closest('.BnplPayment') ||
+        node.closest('[id^="bnplPayment"]') ||
+        node.closest('[id^="bnplBtn"]') ||
+        node.closest('.p__bnpl') ||
+        node.closest('[class*="bnpl"]')
+      )) continue;
 
       // Get the element's own direct text (not from children)
       var ownText = '';
