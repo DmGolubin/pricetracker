@@ -190,7 +190,8 @@
   function tryAutoDetectPrice(excludeElement) {
     // 1. Well-known price selectors
     var PRICE_SELECTORS = [
-      // Kasta.ua stable selectors (dynamic #kcPriceXXX IDs don't work across sessions)
+      // Kasta.ua stable selectors — Kasta Card price first (lower, preferred)
+      '.kcPrice span.t-bold',
       '#productPrice',
       // Makeup.com.ua new React SPA (2025+)
       'span[class*="Price__priceCurrent"]',

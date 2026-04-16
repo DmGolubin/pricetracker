@@ -251,22 +251,22 @@
       // IMPORTANT: Exclude BNPL/installment prices (.BnplPayment, #bnplPayment) —
       // these show per-payment amounts (e.g. "46 ₴ / 2 weeks"), NOT product prices.
       if (location.hostname.includes('kasta.ua')) {
-        // Priority 1: #productPrice — stable regular price
-        var kastaProductPrice = document.querySelector('#productPrice');
-        if (kastaProductPrice) {
-          var kastaText = (kastaProductPrice.textContent || '').trim();
-          var kastaPrice = parsePrice(kastaText);
-          if (kastaPrice !== null && kastaPrice > 0) {
-            return { element: kastaProductPrice, price: kastaPrice, confidence: 0.97 };
-          }
-        }
-        // Priority 2: .kcPrice span.t-bold — Kasta Visa Card price (lower)
+        // Priority 1: .kcPrice span.t-bold — Kasta Visa Card price (lower, preferred)
         var kastaCardEl = document.querySelector('.kcPrice span.t-bold');
         if (kastaCardEl) {
           var kastaCardText = (kastaCardEl.textContent || '').trim();
           var kastaCardPrice = parsePrice(kastaCardText);
           if (kastaCardPrice !== null && kastaCardPrice > 0) {
-            return { element: kastaCardEl, price: kastaCardPrice, confidence: 0.95 };
+            return { element: kastaCardEl, price: kastaCardPrice, confidence: 0.97 };
+          }
+        }
+        // Priority 2: #productPrice — stable regular price (fallback)
+        var kastaProductPrice = document.querySelector('#productPrice');
+        if (kastaProductPrice) {
+          var kastaText = (kastaProductPrice.textContent || '').trim();
+          var kastaPrice = parsePrice(kastaText);
+          if (kastaPrice !== null && kastaPrice > 0) {
+            return { element: kastaProductPrice, price: kastaPrice, confidence: 0.95 };
           }
         }
       }

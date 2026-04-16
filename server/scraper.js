@@ -1258,22 +1258,22 @@ async function extractPrice(tracker, options) {
     // Kasta generates unique IDs per session, so selectors like #kcPrice5767287522
     // won't exist on server-side Puppeteer. Use stable selectors instead.
     // Also trigger when selector was found but price parse failed (e.g. empty text).
-    // Priority: #productPrice (stable, regular price) > .kcPrice (Kasta Card) > JSON-LD
+    // Priority: .kcPrice (Kasta Card price, lower) > #productPrice (regular) > JSON-LD
     // IMPORTANT: Exclude BNPL/installment prices (46 ₴ / 2 weeks) — these are NOT product prices.
     if (isKasta && (!result.found || (result.found && (parsePrice(result.text) === null || parsePrice(result.text) <= 0)))) {
       console.log(`[Scraper] #${trackerId} Kasta: original selector ${result.found ? 'found but parse failed' : 'not found'}, trying stable fallbacks...`);
       var kastaPrice = await page.evaluate(function() {
-        // 1. #productPrice — main regular price (most stable selector on Kasta)
-        var productPrice = document.querySelector('#productPrice');
-        if (productPrice) {
-          var text = (productPrice.textContent || '').trim();
-          if (text && /\d/.test(text)) return { text: text, source: '#productPrice' };
-        }
-        // 2. .kcPrice span.t-bold — Kasta Visa Card price (lower, preferred if available)
+        // 1. .kcPrice span.t-bold — Kasta Visa Card price (preferred, lower price)
         var kcBold = document.querySelector('.kcPrice span.t-bold');
         if (kcBold) {
           var boldText = (kcBold.textContent || '').trim();
           if (boldText && /^\d/.test(boldText)) return { text: boldText, source: '.kcPrice span.t-bold' };
+        }
+        // 2. #productPrice — main regular price (stable ID)
+        var productPrice = document.querySelector('#productPrice');
+        if (productPrice) {
+          var text = (productPrice.textContent || '').trim();
+          if (text && /\d/.test(text)) return { text: text, source: '#productPrice' };
         }
         // 3. #productOldPrice — original price before discount
         var oldPrice = document.querySelector('#productOldPrice');
@@ -1442,7 +1442,8 @@ async function readPriceFromSelectors(page, selectors) {
 async function autoDetectPriceOnPage(page) {
   const priceText = await page.evaluate(() => {
     const PRICE_SELECTORS = [
-      // Kasta.ua stable selectors
+      // Kasta.ua stable selectors — Kasta Card price first (lower, preferred)
+      '.kcPrice span.t-bold',
       '#productPrice',
       // Makeup.ua new React SPA (2025+)
       'span[class*="Price__priceCurrent"]',
