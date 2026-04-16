@@ -1290,9 +1290,15 @@ async function extractPrice(tracker, options) {
         }
         var elapsed = Date.now() - pageStart;
         console.log(`[Scraper] #${trackerId} ✅ Price: ${price} (from selector, ${elapsed}ms) — ${shortName}`);
-        return { success: true, price, volume: notinoVolume };
+        return { success: true, price, volume: notinoVolume, rawText: result.text };
       }
-      console.log(`[Scraper] #${trackerId} Selector found but parse failed: "${result.text.substring(0, 80)}"`);
+      // Price parse failed — but for content trackers, raw text is still useful
+      if (result.text) {
+        var elapsed = Date.now() - pageStart;
+        console.log(`[Scraper] #${trackerId} Selector found, text: "${result.text.substring(0, 80)}" (${elapsed}ms) — ${shortName}`);
+        return { success: true, price: 0, rawText: result.text };
+      }
+      console.log(`[Scraper] #${trackerId} Selector found but empty text`);
     } else {
       console.log(`[Scraper] #${trackerId} Selector not found: ${tracker.cssSelector}`);
     }

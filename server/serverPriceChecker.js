@@ -94,7 +94,7 @@ async function runCheckCycle(pool, isCancelled) {
 
   var priceTrackers = trackers.filter(function(t) { return t.trackingType !== 'content'; });
   var contentTrackers = trackers.filter(function(t) { return t.trackingType === 'content'; });
-  console.log('[ServerCheck] Found ' + trackers.length + ' active trackers (' + priceTrackers.length + ' price, ' + contentTrackers.length + ' content — skipped)');
+  console.log('[ServerCheck] Found ' + trackers.length + ' active trackers (' + priceTrackers.length + ' price, ' + contentTrackers.length + ' content)');
 
   // 3. Create digest collector
   var collector = digestComposer.createCollector();
@@ -103,11 +103,11 @@ async function runCheckCycle(pool, isCancelled) {
   var changed = 0;
   var errors = 0;
 
-  // Count content trackers as unchanged
-  contentTrackers.forEach(function() { collector.addUnchanged(); checked++; });
+  // Include ALL trackers (price + content) in the check cycle
+  var allTrackers = priceTrackers.concat(contentTrackers);
 
   // Shuffle trackers to randomize order — avoids hitting same domain repeatedly
-  shuffleArray(priceTrackers);
+  shuffleArray(allTrackers);
   console.log('[ServerCheck] Tracker order randomized');
 
   // WAF cooldown tracker: domain → timestamp of last WAF block
@@ -123,12 +123,12 @@ async function runCheckCycle(pool, isCancelled) {
   var index = 0;
 
   async function processNext() {
-    while (index < priceTrackers.length) {
+    while (index < allTrackers.length) {
       if (isCancelled()) {
         console.log('[ServerCheck] ⛔ Check cancelled by user.');
         break;
       }
-      var tracker = priceTrackers[index++];
+      var tracker = allTrackers[index++];
       var domain = getDomain(tracker.pageUrl || '');
 
       // Skip domain entirely if too many consecutive WAF blocks
@@ -185,7 +185,7 @@ async function runCheckCycle(pool, isCancelled) {
   }
 
   var workers = [];
-  for (var w = 0; w < Math.min(CONCURRENCY, priceTrackers.length); w++) {
+  for (var w = 0; w < Math.min(CONCURRENCY, allTrackers.length); w++) {
     workers.push(processNext());
   }
   await Promise.all(workers);
@@ -219,9 +219,99 @@ async function runCheckCycle(pool, isCancelled) {
 }
 
 /**
+ * Check a content tracker: extract text, compare, update DB, send alert.
+ */
+async function checkContentTracker(pool, tracker, settings, collector) {
+  var extractOptions = {};
+  if (settings && settings.siteCookies) extractOptions.siteCookies = settings.siteCookies;
+
+  var result = await scraper.extractPrice(tracker, extractOptions);
+
+  if (!result.success) {
+    console.warn('[ServerCheck] #' + tracker.id + ' ❌ Content extraction failed: ' + result.error);
+    await pool.query(
+      'UPDATE trackers SET status = $1, "errorMessage" = $2, "consecutiveErrors" = COALESCE("consecutiveErrors", 0) + 1, "lastCheckedAt" = NOW(), "updatedAt" = NOW() WHERE id = $3',
+      ['error', result.error, tracker.id]
+    );
+    return 'error';
+  }
+
+  // For content trackers, the "price" text IS the content
+  var newContent = result.rawText || String(result.price || '');
+  var oldContent = tracker.currentContent || '';
+  var now = new Date().toISOString();
+  var contentChanged = newContent !== oldContent && newContent !== '';
+
+  // Save history
+  await pool.query(
+    'INSERT INTO price_history ("trackerId", "contentValue", "previousContent", "checkedAt") VALUES ($1, $2, $3, $4)',
+    [tracker.id, newContent, oldContent, now]
+  );
+
+  // Update tracker
+  var updateFields = {
+    currentContent: newContent,
+    previousContent: oldContent,
+    lastCheckedAt: now,
+    status: contentChanged ? 'updated' : 'active',
+    consecutiveErrors: 0,
+    errorMessage: null,
+  };
+  if (contentChanged) {
+    updateFields.unread = true;
+  }
+
+  var setClauses = [];
+  var values = [];
+  var idx = 1;
+  var keys = Object.keys(updateFields);
+  for (var k = 0; k < keys.length; k++) {
+    setClauses.push('"' + keys[k] + '" = $' + idx);
+    values.push(updateFields[keys[k]]);
+    idx++;
+  }
+  setClauses.push('"updatedAt" = NOW()');
+  values.push(tracker.id);
+  await pool.query('UPDATE trackers SET ' + setClauses.join(', ') + ' WHERE id = $' + idx, values);
+
+  if (contentChanged) {
+    console.log('[ServerCheck] #' + tracker.id + ' 📝 Content changed: "' + oldContent.substring(0, 40) + '" → "' + newContent.substring(0, 40) + '"');
+    collector.addUnchanged(); // content changes don't go into price digest
+
+    // Send immediate Telegram alert
+    try {
+      if (settings.telegramBotToken && (settings.telegramPersonalChatId || settings.telegramChatId)) {
+        var domain = '';
+        try { domain = new URL(tracker.pageUrl).hostname; } catch(_) {}
+        var cleanName = (tracker.productName || '').replace(/\s*[-–—]\s*купит[иь]\s.*$/i, '').substring(0, 50);
+        var alertMsg = '📝 <b>' + telegram.escapeHtml(cleanName) + '</b>\n'
+          + 'Было: ' + telegram.escapeHtml(oldContent.substring(0, 100)) + '\n'
+          + 'Стало: <b>' + telegram.escapeHtml(newContent.substring(0, 100)) + '</b>'
+          + '\n<a href="' + (tracker.pageUrl || '') + '">Открыть</a>';
+        var chatTarget = settings.telegramPersonalChatId || settings.telegramChatId;
+        await telegram.sendMessage(settings.telegramBotToken, chatTarget, alertMsg);
+        console.log('[ServerCheck] #' + tracker.id + ' 📨 Content alert sent');
+      }
+    } catch (alertErr) {
+      console.warn('[ServerCheck] #' + tracker.id + ' ⚠ Failed to send content alert: ' + alertErr.message);
+    }
+    return 'changed';
+  }
+
+  collector.addUnchanged();
+  return 'unchanged';
+}
+
+/**
  * Check a single tracker: extract price, compare, update DB, feed digest.
  */
 async function checkSingleTracker(pool, tracker, settings, collector) {
+  // ─── Content trackers: read text content of element ─────────────────
+  if (tracker.trackingType === 'content') {
+    return await checkContentTracker(pool, tracker, settings, collector);
+  }
+
+  // ─── Price trackers ─────────────────────────────────────────────────
   var extractOptions = {};
   if (settings && settings.siteCookies) {
     extractOptions.siteCookies = settings.siteCookies;
@@ -392,7 +482,7 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
           ? Number(groupMinResult.rows[0].groupMin) : null;
         if (groupMin != null && newPrice < groupMin) {
           isCrossStoreMin = true;
-          isHistMin = true; // Promote to historical minimum if it beats the entire group
+          isHistMin = true;
         }
       } catch (err) {
         console.warn('[ServerCheck] #' + tracker.id + ' ⚠ Failed to check group minimum: ' + err.message);
@@ -400,81 +490,40 @@ async function checkSingleTracker(pool, tracker, settings, collector) {
     }
   }
 
-  // For grouped trackers: suppress price-drop alerts unless the new price
-  // beats the current best price across all other stores in the group.
-  var suppressedByGroup = false;
-  if (priceChanged && !isFirstVariantCheck && newPrice < oldPrice && tracker.productGroup) {
-    try {
-      var groupCurrentResult = await pool.query(
-        'SELECT MIN("currentPrice") AS "groupCurrentMin" FROM trackers WHERE "productGroup" = $1 AND id != $2 AND "currentPrice" > 0',
-        [tracker.productGroup, tracker.id]
-      );
-      var groupCurrentMin = groupCurrentResult.rows[0] && groupCurrentResult.rows[0].groupCurrentMin != null
-        ? Number(groupCurrentResult.rows[0].groupCurrentMin) : null;
-      if (groupCurrentMin != null && newPrice >= groupCurrentMin) {
-        suppressedByGroup = true;
-        console.log('[ServerCheck] #' + tracker.id + ' 📉 ' + oldPrice + ' → ' + newPrice
-          + ' — suppressed (group current min is ' + groupCurrentMin + ')');
-      }
-    } catch (err) {
-      console.warn('[ServerCheck] #' + tracker.id + ' ⚠ Failed to check group current min: ' + err.message);
-    }
-  }
-
-  // Feed digest collector — only notify on price DECREASES
+  // ─── Send alert for ANY price change ──────────────────────────────
   if (priceChanged && !isFirstVariantCheck) {
     var direction = newPrice > oldPrice ? '📈' : '📉';
     var diff = newPrice - oldPrice;
     var pctChange = oldPrice !== 0 ? ((diff / oldPrice) * 100).toFixed(1) : 'N/A';
+    var minTag = isCrossStoreMin ? ' 🏆🏆 CROSS-STORE MIN' : isHistMin ? ' 🏆 HIST MIN' : '';
 
-    // Price increased — log but never notify
-    if (newPrice > oldPrice) {
-      console.log('[ServerCheck] #' + tracker.id + ' ' + direction + ' ' + oldPrice + ' → ' + newPrice
-        + ' (+' + pctChange + '%) — increase, no notification');
-      collector.addUnchanged();
-      return 'changed';
-    }
+    console.log('[ServerCheck] #' + tracker.id + ' ' + direction + ' ' + oldPrice + ' → ' + newPrice
+      + ' (' + (diff > 0 ? '+' : '') + pctChange + '%)' + minTag);
 
-    // Price decreased — check thresholds and group suppression
-    var thresholdConfig = thresholdEngine.resolveThresholdConfig(tracker, settings);
-    var significant = thresholdEngine.isSignificant(oldPrice, newPrice, thresholdConfig);
+    collector.addChange(tracker, oldPrice, newPrice, isHistMin, isCrossStoreMin);
 
-    var logMsg = '[ServerCheck] #' + tracker.id + ' ' + direction + ' ' + oldPrice + ' → ' + newPrice
-      + ' (' + pctChange + '%)'
-      + (isCrossStoreMin ? ' 🏆🏆 CROSS-STORE MIN' : isHistMin ? ' 🏆 HIST MIN' : '')
-      + (significant ? '' : ' (below threshold)')
-      + (suppressedByGroup ? ' [SUPPRESSED by group]' : '');
-    console.log(logMsg);
-
-    if (suppressedByGroup) {
-      collector.addUnchanged();
-    } else if (significant || isHistMin) {
-      collector.addChange(tracker, oldPrice, newPrice, isHistMin, isCrossStoreMin);
-
-      // Send immediate Telegram alert for this price drop
-      // (don't wait for end of cycle — process may be killed by hosting timeout)
-      try {
-        if (settings.telegramDigestEnabled && settings.telegramBotToken && (settings.telegramPersonalChatId || settings.telegramChatId)) {
-          var domain = '';
-          try { domain = new URL(tracker.pageUrl).hostname; } catch(_) {}
-          var shopLabel = domain.indexOf('makeup') !== -1 ? 'Makeup' : domain.indexOf('eva.ua') !== -1 ? 'EVA' : domain.indexOf('notino') !== -1 ? 'Notino' : domain.indexOf('kasta') !== -1 ? 'Kasta' : domain;
-          var cleanName = (tracker.productName || '').replace(/\s*[-–—]\s*купит[иь]\s.*$/i, '').substring(0, 60);
-          var pctStr = pctChange + '%';
-          var minTag = isCrossStoreMin ? ' 🏆🏆 Лучшая цена!' : isHistMin ? ' 🏆 Ист. минимум!' : '';
-          var alertMsg = '📉 <b>' + telegram.escapeHtml(cleanName) + '</b>\n'
-            + '<s>' + oldPrice + '</s> → <b>' + newPrice + '</b> грн (' + pctStr + ')'
-            + ' · ' + telegram.escapeHtml(shopLabel) + minTag
-            + '\n<a href="' + (tracker.pageUrl || '') + '">Открыть</a>';
-          var chatTarget = settings.telegramPersonalChatId || settings.telegramChatId;
-          await telegram.sendMessage(settings.telegramBotToken, chatTarget, alertMsg);
-          console.log('[ServerCheck] #' + tracker.id + ' 📨 Immediate alert sent');
-        }
-      } catch (alertErr) {
-        console.warn('[ServerCheck] #' + tracker.id + ' ⚠ Failed to send immediate alert: ' + alertErr.message);
+    // Send immediate Telegram alert
+    try {
+      if (settings.telegramBotToken && (settings.telegramPersonalChatId || settings.telegramChatId)) {
+        var domain = '';
+        try { domain = new URL(tracker.pageUrl).hostname; } catch(_) {}
+        var shopLabel = domain.indexOf('makeup') !== -1 ? 'Makeup' : domain.indexOf('eva.ua') !== -1 ? 'EVA' : domain.indexOf('notino') !== -1 ? 'Notino' : domain.indexOf('kasta') !== -1 ? 'Kasta' : domain;
+        var cleanName = (tracker.productName || '').replace(/\s*[-–—]\s*купит[иь]\s.*$/i, '').substring(0, 60);
+        var pctStr = (diff > 0 ? '+' : '') + pctChange + '%';
+        var emoji = newPrice < oldPrice ? '📉' : '📈';
+        var minLabel = isCrossStoreMin ? '\n🏆🏆 Лучшая цена среди всех магазинов!' : isHistMin ? '\n🏆 Исторический минимум!' : '';
+        var alertMsg = emoji + ' <b>' + telegram.escapeHtml(cleanName) + '</b>\n'
+          + '<s>' + oldPrice + '</s> → <b>' + newPrice + '</b> грн (' + pctStr + ')'
+          + ' · ' + telegram.escapeHtml(shopLabel) + minLabel
+          + '\n<a href="' + (tracker.pageUrl || '') + '">Открыть</a>';
+        var chatTarget = settings.telegramPersonalChatId || settings.telegramChatId;
+        await telegram.sendMessage(settings.telegramBotToken, chatTarget, alertMsg);
+        console.log('[ServerCheck] #' + tracker.id + ' 📨 Alert sent');
       }
-    } else {
-      collector.addUnchanged();
+    } catch (alertErr) {
+      console.warn('[ServerCheck] #' + tracker.id + ' ⚠ Failed to send alert: ' + alertErr.message);
     }
+
     return 'changed';
   } else {
     collector.addUnchanged();
