@@ -541,6 +541,41 @@ async function extractPrice(tracker, options) {
 
           await new Promise(function(r) { setTimeout(r, settleDelay); });
 
+          // Verify the variant button is actually selected after click
+          // If not, the click didn't work — retry once
+          var variantConfirmed = await page.evaluate(function(sel) {
+            var btn = document.querySelector(sel);
+            if (!btn) return false;
+            return (btn.className || '').indexOf('border-apple') !== -1;
+          }, titleSelector);
+
+          if (!variantConfirmed && !isOutOfStock) {
+            console.log('[Scraper] #' + trackerId + ' EVA: variant not selected after click, retrying...');
+            try {
+              await page.evaluate(function(sel) {
+                var btn = document.querySelector(sel);
+                if (btn) {
+                  btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+                  btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+                  btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                }
+              }, titleSelector);
+              await new Promise(function(r) { setTimeout(r, 3000); });
+              variantConfirmed = await page.evaluate(function(sel) {
+                var btn = document.querySelector(sel);
+                if (!btn) return false;
+                return (btn.className || '').indexOf('border-apple') !== -1;
+              }, titleSelector);
+              if (variantConfirmed) {
+                console.log('[Scraper] #' + trackerId + ' EVA: variant confirmed on retry');
+              } else {
+                console.log('[Scraper] #' + trackerId + ' EVA: variant still not selected after retry');
+              }
+            } catch (_retryErr) {
+              console.log('[Scraper] #' + trackerId + ' EVA: retry click failed: ' + _retryErr.message);
+            }
+          }
+
           // Wait for price to actually change after variant click
           if (priceBefore && !isOutOfStock) {
             try {
@@ -578,6 +613,14 @@ async function extractPrice(tracker, options) {
           if (evaPrice) {
             var price = parsePrice(evaPrice);
             if (price !== null && price > 0) {
+              // Sanity check: if variant was NOT confirmed as selected and price
+              // equals the price-before-click, the click likely failed — report error
+              // so we don't record a wrong price
+              if (!variantConfirmed && priceBefore && evaPrice === priceBefore) {
+                var elapsed = Date.now() - pageStart;
+                console.log('[Scraper] #' + trackerId + ' ⚠ EVA: price unchanged and variant not confirmed — likely default variant price (' + elapsed + 'ms)');
+                return { success: false, error: 'EVA variant click failed — price is default variant' };
+              }
               var elapsed = Date.now() - pageStart;
               console.log('[Scraper] #' + trackerId + ' ✅ Price: ' + price + ' (EVA variant click, ' + elapsed + 'ms) — ' + shortName);
               return { success: true, price: price };
