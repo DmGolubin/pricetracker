@@ -118,10 +118,10 @@
 
 ### kasta.ua
 - Динамические ID (`#kcPriceXXX`) — не работают на сервере.
-- Fallback приоритет: `#productPrice` (обычная цена, стабильный ID) → `.kcPrice span.t-bold` (Kasta Card цена) → `#productOldPrice` → JSON-LD `priceSpecification`.
+- Fallback приоритет: `.kcPrice span.t-bold` (Kasta Card цена, ниже — предпочтительна) → `#productPrice` (обычная цена) → `#productOldPrice` → JSON-LD `priceSpecification`.
 - **BNPL/рассрочка**: элементы `.BnplPayment`, `#bnplPayment*`, `.p__bnpl`, `[class*="bnpl"]` содержат цену за платёж (например `46 ₴ / 2 недели`), а НЕ цену товара. Исключаются из DOM-сканирования во всех детекторах (scraper, autoDetector, priceExtractor).
 - Kasta fallback срабатывает и когда селектор не найден, и когда найден но цена не распарсилась.
-- `autoDetector.js` → `checkSiteSpecific()` приоритизирует `#productPrice` для kasta.ua.
+- `autoDetector.js` → `checkSiteSpecific()` приоритизирует `.kcPrice span.t-bold` для kasta.ua.
 
 ## API Base URL
 
