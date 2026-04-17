@@ -18,6 +18,7 @@ var MessageToSW = {
   GET_SETTINGS: 'getSettings',
   SAVE_SETTINGS: 'saveSettings',
   GET_PRICE_HISTORY: 'getPriceHistory',
+  DELETE_PRICE_RECORD: 'deletePriceRecord',
   MARK_AS_READ: 'markAsRead',
   RESET_BADGE: 'resetBadge',
   EXPORT_COOKIES: 'exportCookies',

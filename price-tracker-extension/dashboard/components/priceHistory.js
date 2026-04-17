@@ -111,7 +111,7 @@ const PriceHistory = (function () {
     container.appendChild(el);
   }
 
-  function renderRecord(record, isDecrease, isContentTracker) {
+  function renderRecord(record, isDecrease, isContentTracker, onDelete) {
     var item = document.createElement('div');
     item.className = 'price-history-record';
     item.setAttribute('data-testid', 'price-history-record');
@@ -156,6 +156,21 @@ const PriceHistory = (function () {
       ContentDiff.render(diffRecord, diffContainer);
       item.appendChild(diffContainer);
     }
+
+
+    // Delete button
+    var deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn-icon price-history-delete-btn';
+    deleteBtn.type = 'button';
+    deleteBtn.innerHTML = '×';
+    deleteBtn.title = 'Удалить запись';
+    deleteBtn.setAttribute('aria-label', 'Удалить запись из истории');
+    deleteBtn.setAttribute('data-record-id', record.id);
+    deleteBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (typeof onDelete === 'function') onDelete(record.id, item);
+    });
+    item.appendChild(deleteBtn);
 
     return item;
   }
@@ -516,7 +531,7 @@ const PriceHistory = (function () {
 
   // ─── List rendering ───────────────────────────────────────────────
 
-  function renderList(container, records, isContentTracker) {
+  function renderList(container, records, isContentTracker, tracker) {
     var title = document.createElement('h3');
     title.className = 'price-history-title';
     title.textContent = 'История цен';
@@ -535,7 +550,23 @@ const PriceHistory = (function () {
     list.setAttribute('data-testid', 'price-history-list');
 
     for (var i = 0; i < sorted.length; i++) {
-      list.appendChild(renderRecord(sorted[i], decreaseFlags[i], isContentTracker));
+      list.appendChild(renderRecord(sorted[i], decreaseFlags[i], isContentTracker, function (recordId, itemEl) {
+        // Animate removal
+        itemEl.style.transition = 'opacity 0.3s, transform 0.3s';
+        itemEl.style.opacity = '0';
+        itemEl.style.transform = 'translateX(20px)';
+        // Send delete request
+        sendMessage({ action: 'deletePriceRecord', recordId: recordId })
+          .then(function () {
+            // Re-render the whole history section after deletion
+            render(tracker, container);
+          })
+          .catch(function () {
+            // Revert animation on error
+            itemEl.style.opacity = '1';
+            itemEl.style.transform = '';
+          });
+      }));
     }
 
     container.appendChild(list);
@@ -561,7 +592,7 @@ const PriceHistory = (function () {
           return;
         }
 
-        renderList(container, records, isContentTracker);
+        renderList(container, records, isContentTracker, tracker);
       })
       .catch(function (err) {
         container.innerHTML = '';

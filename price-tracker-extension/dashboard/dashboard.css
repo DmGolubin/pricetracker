@@ -874,6 +874,31 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
+.price-history-delete-btn {
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  margin-left: 8px;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.price-history-record:hover .price-history-delete-btn {
+  opacity: 1;
+}
+
+.price-history-delete-btn:hover {
+  color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+
 .price-history-date {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;

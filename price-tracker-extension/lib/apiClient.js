@@ -301,6 +301,19 @@ async function addPriceRecord(trackerId, record) {
   return res.json();
 }
 
+/**
+ * Delete a single price history record.
+ * @param {string|number} recordId
+ * @returns {Promise<Object>}
+ */
+async function deletePriceRecord(recordId) {
+  const res = await request(
+    `/priceHistory/${encodeURIComponent(recordId)}`,
+    { method: 'DELETE' }
+  );
+  return res.json();
+}
+
 // ─── Settings Methods ───────────────────────────────────────────────
 
 /**
@@ -359,6 +372,7 @@ const _apiClient = {
   deleteTracker,
   getPriceHistory,
   addPriceRecord,
+  deletePriceRecord,
   getSettings,
   saveSettings,
   serverCheckSingle,

@@ -687,6 +687,41 @@ app.post('/priceHistory', async (req, res) => {
   } catch (err) {
     console.error('POST /priceHistory error:', err);
     res.status(500).json({ error: err.message });
+
+app.delete('/priceHistory/:id', async (req, res) => {
+  try {
+    // Get the record before deleting to know which tracker it belongs to
+    const { rows: recordRows } = await pool.query('SELECT * FROM price_history WHERE id = $1', [req.params.id]);
+    if (recordRows.length === 0) return res.status(404).json({ error: 'Record not found' });
+    const record = recordRows[0];
+    const trackerId = record.trackerId;
+
+    // Delete the record
+    await pool.query('DELETE FROM price_history WHERE id = $1', [req.params.id]);
+
+    // Recalculate tracker min/max/current from remaining history
+    const { rows: remaining } = await pool.query(
+      'SELECT price FROM price_history WHERE "trackerId" = $1 AND price > 0 ORDER BY "checkedAt" DESC',
+      [trackerId]
+    );
+
+    if (remaining.length > 0) {
+      const prices = remaining.map(r => Number(r.price)).filter(p => p > 0);
+      const newCurrent = prices[0]; // most recent
+      const newMin = Math.min(...prices);
+      const newMax = Math.max(...prices);
+      await pool.query(
+        'UPDATE trackers SET "currentPrice" = $1, "minPrice" = $2, "maxPrice" = $3, "updatedAt" = NOW() WHERE id = $4',
+        [newCurrent, newMin, newMax, trackerId]
+      );
+    }
+
+    res.json({ deleted: true, trackerId: trackerId });
+  } catch (err) {
+    console.error('DELETE /priceHistory/' + req.params.id + ' error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
   }
 });
 

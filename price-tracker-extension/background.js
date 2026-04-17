@@ -126,6 +126,9 @@ function getMessageHandler(message, sender) {
     case MessageToSW.GET_PRICE_HISTORY:
       return apiClient.getPriceHistory(message.trackerId);
 
+    case MessageToSW.DELETE_PRICE_RECORD:
+      return apiClient.deletePriceRecord(message.recordId);
+
     case MessageToSW.MARK_AS_READ:
       return handleMarkAsRead(message.trackerId);
 
