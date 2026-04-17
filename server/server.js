@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 const autoGrouper = require('./autoGrouper.js');
 const scheduler = require('./scheduler.js');
 const TelegramBot = require('./telegramBot.js');
+const telegramSender = require('./telegramSender.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -313,6 +314,74 @@ async function initDB() {
   console.log('Database tables initialized');
 }
 
+// ─── Telegram alert helper for PUT /trackers/:id ────────────────────
+/**
+ * Send Telegram alert when price or content changes via PUT /trackers/:id.
+ * Runs async after response is sent — does not block the API response.
+ */
+async function sendTrackerChangeAlert(trackerBefore, updateData, trackerAfter) {
+  // Only alert on actual price or content changes
+  var oldPrice = Number(trackerBefore.currentPrice) || 0;
+  var newPrice = (updateData.currentPrice !== undefined) ? Number(updateData.currentPrice) : null;
+  var oldContent = trackerBefore.currentContent || '';
+  var newContent = (updateData.currentContent !== undefined) ? String(updateData.currentContent) : null;
+
+  var priceChanged = newPrice !== null && newPrice !== oldPrice && oldPrice > 0 && newPrice > 0;
+  var contentChanged = newContent !== null && newContent !== oldContent && newContent !== '';
+
+  if (!priceChanged && !contentChanged) return;
+
+  // Load settings for Telegram credentials
+  var settings;
+  try {
+    var settingsResult = await pool.query("SELECT * FROM settings WHERE id = 'global'");
+    settings = settingsResult.rows[0] || {};
+  } catch (err) {
+    console.warn('[PUT /trackers] Failed to load settings for alert:', err.message);
+    return;
+  }
+
+  var botToken = settings.telegramBotToken;
+  var chatTarget = settings.telegramPersonalChatId || settings.telegramChatId;
+  if (!botToken || !chatTarget) return;
+
+  var cleanName = (trackerAfter.productName || '').replace(/\s*[-–—]\s*купит[иь]\s.*$/i, '').substring(0, 60);
+  var domain = '';
+  try { domain = new URL(trackerAfter.pageUrl).hostname; } catch(_) {}
+  var shopLabel = domain.indexOf('makeup') !== -1 ? 'Makeup' : domain.indexOf('eva.ua') !== -1 ? 'EVA' : domain.indexOf('notino') !== -1 ? 'Notino' : domain.indexOf('kasta') !== -1 ? 'Kasta' : domain;
+
+  var alertMsg = '';
+
+  if (priceChanged) {
+    var diff = newPrice - oldPrice;
+    var pctChange = oldPrice !== 0 ? ((diff / oldPrice) * 100).toFixed(1) : 'N/A';
+    var pctStr = (diff > 0 ? '+' : '') + pctChange + '%';
+    var emoji = newPrice < oldPrice ? '📉' : '📈';
+
+    // Check historical minimum
+    var minPrice = Number(trackerAfter.minPrice) || 0;
+    var isHistMin = newPrice < oldPrice && minPrice > 0 && newPrice <= minPrice;
+    var minLabel = isHistMin ? '\n🏆 Исторический минимум!' : '';
+
+    alertMsg = emoji + ' <b>' + telegramSender.escapeHtml(cleanName) + '</b>\n'
+      + '<s>' + oldPrice + '</s> → <b>' + newPrice + '</b> грн (' + pctStr + ')'
+      + ' · ' + telegramSender.escapeHtml(shopLabel) + minLabel
+      + '\n<a href="' + (trackerAfter.pageUrl || '') + '">Открыть</a>';
+  } else if (contentChanged) {
+    alertMsg = '📝 <b>' + telegramSender.escapeHtml(cleanName) + '</b>\n'
+      + 'Было: ' + telegramSender.escapeHtml(oldContent.substring(0, 100)) + '\n'
+      + 'Стало: <b>' + telegramSender.escapeHtml(newContent.substring(0, 100)) + '</b>'
+      + '\n<a href="' + (trackerAfter.pageUrl || '') + '">Открыть</a>';
+  }
+
+  if (alertMsg) {
+    var ok = await telegramSender.sendMessage(botToken, chatTarget, alertMsg);
+    if (ok) {
+      console.log('[PUT /trackers] 📨 Alert sent for #' + trackerAfter.id + (priceChanged ? ' price' : ' content'));
+    }
+  }
+}
+
 // ─── Trackers ───────────────────────────────────────────────────────
 
 app.get('/trackers', async (req, res) => {
@@ -450,6 +519,11 @@ app.put('/trackers/batch', async (req, res) => {
 app.put('/trackers/:id', async (req, res) => {
   try {
     const d = req.body;
+
+    // Load current tracker state BEFORE update (for alert comparison)
+    const { rows: beforeRows } = await pool.query('SELECT * FROM trackers WHERE id = $1', [req.params.id]);
+    const trackerBefore = beforeRows[0];
+
     // Build dynamic SET clause from provided fields
     const fields = [];
     const values = [];
@@ -497,6 +571,13 @@ app.put('/trackers/:id', async (req, res) => {
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Tracker not found' });
     res.json(rows[0]);
+
+    // ─── Send Telegram alert on price/content change (async, non-blocking) ───
+    if (trackerBefore) {
+      sendTrackerChangeAlert(trackerBefore, d, rows[0]).catch(function(err) {
+        console.warn('[PUT /trackers] Alert error:', err.message);
+      });
+    }
   } catch (err) {
     console.error(`PUT /trackers/${req.params.id} error:`, err);
     res.status(500).json({ error: err.message });
