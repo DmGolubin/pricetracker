@@ -11,7 +11,7 @@ var _constants = (typeof self !== 'undefined' && self.PriceTracker && self.Price
 var API_RETRY_DELAY_MS = _constants.API_RETRY_DELAY_MS;
 
 /** Module-level base URL, configurable via setBaseUrl */
-let baseUrl = 'http://85.115.209.141:3000';
+let baseUrl = 'http://85.115.209.141';
 
 /** Module-level API token for optional authorization */
 let apiToken = '';

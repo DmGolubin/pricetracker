@@ -680,7 +680,7 @@ const GlobalSettings = (function () {
     };
   }
 
-  var API_BASE = 'http://85.115.209.141:3000';
+  var API_BASE = 'http://85.115.209.141';
 
   function handleSave(overlay) {
     var settings = collectFormData(overlay);
