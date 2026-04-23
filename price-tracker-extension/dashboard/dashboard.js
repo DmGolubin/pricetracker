@@ -1297,7 +1297,7 @@ const Dashboard = (function () {
   /**
    * Default API base URL (same as in apiClient.js).
    */
-  const API_BASE = 'https://pricetracker-production-ac69.up.railway.app';
+  const API_BASE = 'http://85.115.209.141:3000';
 
   // ─── API Token for direct fetch calls ─────────────────────────────
   var _apiToken = '';

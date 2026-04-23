@@ -14,9 +14,9 @@ Price Tracker — система отслеживания цен на товар
 
 ### Стек
 - Node.js 20, Express, PostgreSQL (pg), Puppeteer-core + Chromium
-- Деплой: Railway (автодеплой из main ветки)
+- Деплой: VPS (85.115.209.141), Docker + systemd, nginx reverse proxy
 - Dockerfile в корне проекта
-- API Base URL: `https://pricetracker-production-ac69.up.railway.app`
+- API Base URL: `http://85.115.209.141:3000` (временно по IP, позже — домен + HTTPS)
 
 ### Ключевые модули
 - `server.js` — Express-сервер, REST API, инициализация БД (миграции через ALTER TABLE IF NOT EXISTS), статика для Mini App

@@ -7,7 +7,7 @@
 - Коммит-сообщения ТОЛЬКО на английском языке.
 - Перед коммитом запускать тесты: `npx jest --no-coverage --forceExit` в `price-tracker-extension/`.
 - Пуш ВСЕГДА выполнять сразу после успешного коммита: `git push origin main`. Не спрашивать разрешения.
-- Railway автоматически деплоит из main — после пуша серверная часть обновляется сама.
+- Деплой на VPS — ручной: после пуша зайти на сервер и выполнить `cd /opt/price-tracker && git pull && docker compose up -d --build`.
 
 ## Язык
 
@@ -126,8 +126,8 @@
 ## API Base URL
 
 - Захардкожен в нескольких местах: `apiClient.js`, `dashboard.js`, `globalSettings.js`.
-- Значение: `https://pricetracker-production-ac69.up.railway.app`
-- При изменении — обновлять во всех местах.
+- Значение: `http://85.115.209.141:3000`
+- При изменении (например, добавление домена + HTTPS) — обновлять во всех местах.
 
 ## Версионирование (Semantic Versioning)
 

@@ -389,7 +389,7 @@ async function handleCheckAllPrices(method) {
     }
   }
 
-  // Default: server-side check via API (Puppeteer on Railway)
+  // Default: server-side check via API (Puppeteer on VPS)
   await apiClient._request('/server-check', { method: 'POST' });
   return { method: 'server' };
 }

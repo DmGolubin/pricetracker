@@ -134,7 +134,7 @@ const GlobalSettings = (function () {
 
     var hint = document.createElement('p');
     hint.className = 'settings-info-note';
-    hint.textContent = 'Сервер — через Puppeteer на Railway. Браузер — открытие вкладок в Chrome. Гибрид — сервер с fallback на браузер.';
+    hint.textContent = 'Сервер — через Puppeteer на VPS. Браузер — открытие вкладок в Chrome. Гибрид — сервер с fallback на браузер.';
     section.appendChild(hint);
 
     var dropdown = createGlobalSettingsDropdown({
@@ -680,7 +680,7 @@ const GlobalSettings = (function () {
     };
   }
 
-  var API_BASE = 'https://pricetracker-production-ac69.up.railway.app';
+  var API_BASE = 'http://85.115.209.141:3000';
 
   function handleSave(overlay) {
     var settings = collectFormData(overlay);

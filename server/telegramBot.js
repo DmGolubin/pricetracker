@@ -31,14 +31,13 @@ class TelegramBot {
     }
 
     // Web App URL = server's public URL + /webapp
-    const baseUrl = process.env.WEBAPP_URL || process.env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null;
+    const webappUrl = process.env.WEBAPP_URL || null;
 
-    if (baseUrl) {
-      this.webAppUrl = baseUrl + '/webapp';
+    if (webappUrl) {
+      this.webAppUrl = webappUrl.replace(/\/+$/, '') + '/webapp';
       console.log('[TelegramBot] Mini App URL:', this.webAppUrl);
     } else {
-      console.log('[TelegramBot] ⚠ No WEBAPP_URL or RAILWAY_PUBLIC_DOMAIN — Mini App button disabled.');
+      console.log('[TelegramBot] ⚠ No WEBAPP_URL set — Mini App button disabled.');
     }
 
     // Set bot commands
