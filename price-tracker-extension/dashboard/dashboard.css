@@ -199,6 +199,26 @@
   background: rgba(99, 102, 241, 0.08);
 }
 
+.folder-sidebar-item-hidden {
+  opacity: 0.5;
+}
+
+.folder-sidebar-item-hidden:hover {
+  opacity: 0.8;
+}
+
+.folder-sidebar-hidden-toggle {
+  border-top: 1px solid var(--border-color);
+  margin-top: 4px;
+  padding-top: 8px;
+  opacity: 0.6;
+  font-size: 0.85em;
+}
+
+.folder-sidebar-hidden-toggle:hover {
+  opacity: 1;
+}
+
 /* Folder context menu */
 .folder-context-menu {
   background: var(--bg-card);

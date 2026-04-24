@@ -22,6 +22,20 @@ const Dashboard = (function () {
   // Empty groups stored locally (not in DB — just group names with no trackers)
   let emptyGroups = new Set();
 
+  // Hidden groups — persisted in localStorage, excluded from sidebar and grid
+  var HIDDEN_GROUPS_KEY = 'priceTracker_hiddenGroups';
+  let hiddenGroups = (function () {
+    try {
+      var stored = localStorage.getItem(HIDDEN_GROUPS_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch (e) { return new Set(); }
+  })();
+  var showHiddenGroups = false; // toggle to temporarily show hidden groups in sidebar
+
+  function saveHiddenGroups() {
+    try { localStorage.setItem(HIDDEN_GROUPS_KEY, JSON.stringify(Array.from(hiddenGroups))); } catch (e) { /* noop */ }
+  }
+
   // Sort state — persisted in localStorage
   var SORT_STORAGE_KEY = 'priceTracker_sortBy';
   let sortBy = (function () {
@@ -177,6 +191,11 @@ const Dashboard = (function () {
    */
   function applyFilters() {
     filteredTrackers = allTrackers.filter((tracker) => {
+      // Hide trackers from hidden groups (unless viewing that specific group)
+      if (!showHiddenGroups && hiddenGroups.has(tracker.productGroup) && sidebarFilterGroup !== tracker.productGroup) {
+        return false;
+      }
+
       // Sidebar folder filter (applies on top of other filters)
       if (sidebarFilterGroup !== null) {
         if (sidebarFilterGroup === '__ungrouped__') {
@@ -1505,10 +1524,17 @@ const Dashboard = (function () {
 
     var groupNames = Object.keys(groupMap).sort();
 
+    // Separate hidden and visible groups
+    var visibleGroupNames = groupNames.filter(function (name) { return !hiddenGroups.has(name); });
+    var hiddenGroupNames = groupNames.filter(function (name) { return hiddenGroups.has(name); });
+
     // Filter by search query
     var query = sidebarSearchQuery.toLowerCase().trim();
     if (query) {
-      groupNames = groupNames.filter(function (name) {
+      visibleGroupNames = visibleGroupNames.filter(function (name) {
+        return name.toLowerCase().includes(query);
+      });
+      hiddenGroupNames = hiddenGroupNames.filter(function (name) {
         return name.toLowerCase().includes(query);
       });
     }
@@ -1519,7 +1545,7 @@ const Dashboard = (function () {
       allItem.className = 'folder-sidebar-item' + (sidebarFilterGroup === null ? ' active' : '');
       allItem.dataset.groupName = '__all__';
       allItem.innerHTML = '<span class="folder-sidebar-item-name">📋 Все трекеры</span>'
-        + '<span class="folder-sidebar-item-count">' + allTrackers.length + '</span>';
+        + '<span class="folder-sidebar-item-count">' + allTrackers.filter(function (t) { return !hiddenGroups.has(t.productGroup); }).length + '</span>';
       allItem.addEventListener('click', function () {
         sidebarFilterGroup = null;
         sidebarSearchQuery = '';
@@ -1531,7 +1557,7 @@ const Dashboard = (function () {
     }
 
     // Group items
-    groupNames.forEach(function (name) {
+    visibleGroupNames.forEach(function (name) {
       var info = groupMap[name];
       var item = document.createElement('button');
       item.className = 'folder-sidebar-item' + (sidebarFilterGroup === name ? ' active' : '');
@@ -1571,6 +1597,43 @@ const Dashboard = (function () {
       list.appendChild(ugItem);
     }
 
+    // Hidden groups toggle
+    if (hiddenGroupNames.length > 0 && !query) {
+      var toggleBtn = document.createElement('button');
+      toggleBtn.className = 'folder-sidebar-item folder-sidebar-hidden-toggle';
+      toggleBtn.innerHTML = '<span class="folder-sidebar-item-name">' + (showHiddenGroups ? '🙈 Скрыть скрытые' : '👁️ Скрытые папки') + '</span>'
+        + '<span class="folder-sidebar-item-count">' + hiddenGroupNames.length + '</span>';
+      toggleBtn.addEventListener('click', function () {
+        showHiddenGroups = !showHiddenGroups;
+        renderFolderSidebar();
+      });
+      list.appendChild(toggleBtn);
+
+      if (showHiddenGroups) {
+        hiddenGroupNames.forEach(function (name) {
+          var info = groupMap[name];
+          var item = document.createElement('button');
+          item.className = 'folder-sidebar-item folder-sidebar-item-hidden' + (sidebarFilterGroup === name ? ' active' : '');
+          item.dataset.groupName = name;
+          var shortName = name.length > 28 ? name.slice(0, 28) + '…' : name;
+          item.innerHTML = '<span class="folder-sidebar-item-name">🙈 ' + escapeHtml(shortName) + '</span>'
+            + '<span class="folder-sidebar-item-count">' + info.count + '</span>';
+          item.title = name;
+          item.addEventListener('click', function () {
+            sidebarFilterGroup = name;
+            renderFolderSidebar();
+            applyFilters();
+            renderGrid();
+          });
+          item.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+            showFolderContextMenu(e, name);
+          });
+          list.appendChild(item);
+        });
+      }
+    }
+
     // Create folder button
     var createBtn = document.createElement('button');
     createBtn.className = 'folder-sidebar-create';
@@ -1602,10 +1665,14 @@ const Dashboard = (function () {
 
     var trackersInGroup = allTrackers.filter(function (t) { return t.productGroup === groupName; });
 
+    var isHidden = hiddenGroups.has(groupName);
     var actions = [
       { icon: '✏️', label: 'Переименовать', action: function () { renameFolderAction(groupName); } },
       { icon: '🔗', label: 'Открыть все (' + trackersInGroup.length + ')', action: function () { openFolderTabs(groupName); } },
       { icon: '☑️', label: 'Выделить все', action: function () { selectFolderTrackers(groupName); } },
+      isHidden
+        ? { icon: '👁️', label: 'Показать папку', action: function () { unhideFolderAction(groupName); } }
+        : { icon: '🙈', label: 'Скрыть папку', action: function () { hideFolderAction(groupName); } },
       { icon: '🗑️', label: 'Удалить папку', danger: true, action: function () { deleteFolderAction(groupName); } },
     ];
 
@@ -1714,6 +1781,53 @@ const Dashboard = (function () {
     applyFilters();
     renderGrid();
     showToast('🗑️ Папка «' + groupName + '» удалена (' + ids.length + ' трекеров без группы)', 'success');
+  }
+
+  /**
+   * Hide a folder — pauses all trackers in it and hides from sidebar.
+   */
+  async function hideFolderAction(groupName) {
+    var trackersInGroup = allTrackers.filter(function (t) { return t.productGroup === groupName; });
+    var activeIds = trackersInGroup.filter(function (t) { return t.status === 'active' || t.status === 'updated'; }).map(function (t) { return t.id; });
+
+    hiddenGroups.add(groupName);
+    saveHiddenGroups();
+
+    // Pause active trackers in this group
+    if (activeIds.length > 0) {
+      try {
+        var updates = activeIds.map(function (id) { return { id: id, data: { status: 'paused' } }; });
+        await apiFetch(API_BASE + '/trackers/batch', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates: updates })
+        });
+        activeIds.forEach(function (id) {
+          var t = allTrackers.find(function (tr) { return tr.id === id; });
+          if (t) t.status = 'paused';
+        });
+      } catch (e) {
+        showToast('Ошибка при паузе трекеров: ' + e.message, 'error');
+      }
+    }
+
+    if (sidebarFilterGroup === groupName) sidebarFilterGroup = null;
+    renderFolderSidebar();
+    applyFilters();
+    renderGrid();
+    showToast('🙈 Папка «' + groupName + '» скрыта' + (activeIds.length ? ' (' + activeIds.length + ' трекеров на паузе)' : ''), 'success');
+  }
+
+  /**
+   * Unhide a folder — makes it visible again (trackers stay paused, user can resume manually).
+   */
+  function unhideFolderAction(groupName) {
+    hiddenGroups.delete(groupName);
+    saveHiddenGroups();
+    renderFolderSidebar();
+    applyFilters();
+    renderGrid();
+    showToast('👁️ Папка «' + groupName + '» снова видна', 'success');
   }
 
   /**
