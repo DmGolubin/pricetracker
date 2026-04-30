@@ -120,13 +120,36 @@ function waitForExtractionMessage(trackerId, timeoutMs) {
  * @returns {Promise<Object>} — extraction message
  */
 async function performExtraction(tracker, pinned) {
-  const tab = await chrome.tabs.create({
-    url: tracker.pageUrl,
-    active: false,
-    pinned: true,
-  });
+  // Try to reuse an existing tab with the same domain to avoid Cloudflare challenges.
+  // Existing tabs already have cookies/session, so CF won't block them.
+  var tabId = null;
+  var reusingTab = false;
 
-  const tabId = tab.id;
+  try {
+    var urlObj = new URL(tracker.pageUrl);
+    var domain = urlObj.hostname;
+    // Search for existing tabs matching this domain
+    var existingTabs = await chrome.tabs.query({ url: '*://' + domain + '/*' });
+    if (existingTabs.length > 0) {
+      // Prefer non-active tabs to avoid disrupting user's work
+      var candidate = existingTabs.find(function(t) { return !t.active; }) || existingTabs[0];
+      tabId = candidate.id;
+      reusingTab = true;
+      // Navigate the existing tab to the tracker URL
+      await chrome.tabs.update(tabId, { url: tracker.pageUrl });
+    }
+  } catch (_) {
+    // URL parsing or tab query failed — fall through to create new tab
+  }
+
+  if (!tabId) {
+    var tab = await chrome.tabs.create({
+      url: tracker.pageUrl,
+      active: false,
+      pinned: true,
+    });
+    tabId = tab.id;
+  }
 
   try {
     // Wait for page to load
@@ -163,11 +186,13 @@ async function performExtraction(tracker, pinned) {
 
     return message;
   } finally {
-    // Always close the tab
-    try {
-      await chrome.tabs.remove(tabId);
-    } catch (_) {
-      // Tab may already be closed
+    // Close the tab only if we created it (don't close user's existing tabs)
+    if (!reusingTab) {
+      try {
+        await chrome.tabs.remove(tabId);
+      } catch (_) {
+        // Tab may already be closed
+      }
     }
   }
 }
