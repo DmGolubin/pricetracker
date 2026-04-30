@@ -21,14 +21,14 @@ const PAGE_TIMEOUT_MS = 30000;
  * Mix of Chrome versions on Windows/Mac to look like real traffic.
  */
 const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
 ];
 
 /** Pick a random User-Agent from the pool */
@@ -202,6 +202,9 @@ async function getBrowser() {
       '--safebrowsing-disable-auto-update',
       '--disable-web-security',
       '--disable-blink-features=AutomationControlled',
+      // TLS fingerprint masking — reduce Cloudflare detection surface
+      '--disable-features=TLSVersionExtension,EnableTLS13EarlyData',
+      '--enable-features=NetworkService,NetworkServiceInProcess',
     ],
   });
 
@@ -296,9 +299,14 @@ async function extractPrice(tracker, options) {
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'uk-UA,uk;q=0.9,ru;q=0.8,en-US;q=0.7,en;q=0.6',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+      'sec-ch-ua': '"Google Chrome";v="135", "Chromium";v="135", "Not_A Brand";v="24"',
       'sec-ch-ua-mobile': '?0',
       'sec-ch-ua-platform': '"Windows"',
+      'sec-fetch-dest': 'document',
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-site': 'none',
+      'sec-fetch-user': '?1',
+      'upgrade-insecure-requests': '1',
     });
 
     // Navigate to the page
@@ -348,30 +356,34 @@ async function extractPrice(tracker, options) {
 
     const navStart = Date.now();
     try {
+      // Use domcontentloaded instead of networkidle2 for speed —
+      // SPA sites (EVA, Notino, Makeup) keep analytics/websocket connections
+      // open indefinitely, making networkidle2 waste 10-15s per page.
+      // We wait for DOM + then explicitly wait for the price selector.
       await page.goto(navigateUrl, {
-        waitUntil: 'networkidle2',
+        waitUntil: 'domcontentloaded',
         timeout: PAGE_TIMEOUT_MS,
       });
-    } catch (navErr) {
-      // If networkidle2 times out, the page content is likely already loaded —
-      // sites like Kasta keep persistent connections open (analytics, websockets)
-      // that prevent networkidle2 from ever firing. Don't reload, just continue
-      // with the already-loaded page and wait for the tracker's CSS selector.
-      if (navErr.message && navErr.message.indexOf('timeout') !== -1) {
-        console.log(`[Scraper] #${trackerId} networkidle2 timed out — page likely loaded, waiting for selector...`);
-        // Wait for the tracker's CSS selector to appear (JS rendering)
-        var selectorToWait = tracker.cssSelector;
-        if (selectorToWait) {
-          try {
-            await page.waitForSelector(selectorToWait, { timeout: 10000 });
-            console.log(`[Scraper] #${trackerId} Selector found after networkidle2 timeout`);
-          } catch (_) {
-            console.log(`[Scraper] #${trackerId} Selector not found after 10s wait, continuing anyway...`);
-          }
-        } else {
-          // No specific selector — just wait a bit for JS rendering
-          await new Promise(function(r) { setTimeout(r, 5000); });
+
+      // Wait for the tracker's CSS selector to appear (JS rendering)
+      // This is the key element we need — no point waiting for everything else
+      var selectorToWait = tracker.cssSelector;
+      if (selectorToWait) {
+        try {
+          await page.waitForSelector(selectorToWait, { timeout: 15000 });
+        } catch (_) {
+          // Selector not found yet — give SPA extra time to hydrate
+          await new Promise(function(r) { setTimeout(r, 3000); });
         }
+      } else {
+        // No specific selector — wait for body to be populated
+        await new Promise(function(r) { setTimeout(r, 5000); });
+      }
+    } catch (navErr) {
+      if (navErr.message && navErr.message.indexOf('timeout') !== -1) {
+        console.log(`[Scraper] #${trackerId} Navigation timed out — page may still be usable, continuing...`);
+        // Wait briefly for any JS rendering that happened during timeout
+        await new Promise(function(r) { setTimeout(r, 3000); });
       } else {
         throw navErr;
       }

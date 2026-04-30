@@ -379,11 +379,36 @@ async function handleCheckAllPrices(method) {
   }
 
   if (checkMethod === CheckMethod.HYBRID) {
-    // Hybrid: try server first, fallback to extension on error
+    // Hybrid: try server first, then fallback failed trackers to extension
     try {
-      await apiClient._request('/server-check', { method: 'POST' });
+      var serverResult = await apiClient._request('/server-check', { method: 'POST' });
+      // Per-tracker fallback: if server succeeded but some trackers failed,
+      // re-check those specific trackers via browser extension (2 at a time)
+      var failedIds = (serverResult && serverResult.failedTrackerIds) || [];
+      if (failedIds.length > 0) {
+        console.log('[Hybrid] Server done, ' + failedIds.length + ' tracker(s) failed — falling back to extension');
+        var fbIdx = 0;
+        var FALLBACK_CONCURRENCY = 2;
+        async function fbNext() {
+          while (fbIdx < failedIds.length) {
+            var tid = failedIds[fbIdx++];
+            try {
+              await priceChecker.checkPrice(tid, extensionCheckDeps);
+            } catch (e) {
+              console.warn('[Hybrid] Extension fallback failed for #' + tid + ': ' + e.message);
+            }
+          }
+        }
+        var fbWorkers = [];
+        for (var fw = 0; fw < Math.min(FALLBACK_CONCURRENCY, failedIds.length); fw++) {
+          fbWorkers.push(fbNext());
+        }
+        await Promise.all(fbWorkers);
+        return { method: 'hybrid-partial', serverChecked: serverResult.checked, extensionFallback: failedIds.length };
+      }
       return { method: 'hybrid-server' };
     } catch (_) {
+      // Server completely unreachable — fallback ALL to extension
       await priceChecker.checkAllPrices(extensionCheckDeps);
       return { method: 'hybrid-extension' };
     }

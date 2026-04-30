@@ -102,6 +102,7 @@ async function runCheckCycle(pool, isCancelled) {
   var checked = 0;
   var changed = 0;
   var errors = 0;
+  var failedTrackerIds = []; // Track failed tracker IDs for hybrid fallback
 
   // Include ALL trackers (price + content) in the check cycle
   var allTrackers = priceTrackers.concat(contentTrackers);
@@ -118,6 +119,15 @@ async function runCheckCycle(pool, isCancelled) {
   var WAF_COOLDOWN_NOTINO_MS = 180000; // 3 min cooldown for Notino
   var WAF_SKIP_THRESHOLD = 3; // Skip remaining domain trackers after N consecutive blocks
   var skippedByWaf = 0;
+
+  // Exponential backoff: cooldown doubles with each consecutive block
+  function getWafCooldown(domain, blockCount) {
+    var baseCooldown = domain.indexOf('notino') !== -1 ? WAF_COOLDOWN_NOTINO_MS : WAF_COOLDOWN_MS;
+    // Exponential: 60s → 120s → 240s (cap at 5 min for regular, 10 min for Notino)
+    var multiplier = Math.pow(2, Math.min(blockCount - 1, 3));
+    var maxCooldown = domain.indexOf('notino') !== -1 ? 600000 : 300000;
+    return Math.min(baseCooldown * multiplier, maxCooldown);
+  }
 
   // 4. Process price trackers with concurrency limit
   var index = 0;
@@ -137,16 +147,18 @@ async function runCheckCycle(pool, isCancelled) {
         collector.addUnchanged();
         checked++;
         skippedByWaf++;
+        failedTrackerIds.push(tracker.id);
         continue;
       }
 
-      // Check WAF cooldown for this domain
-      var domainCooldownMs = domain.indexOf('notino') !== -1 ? WAF_COOLDOWN_NOTINO_MS : WAF_COOLDOWN_MS;
-      if (wafCooldowns[domain]) {
+      // Check WAF cooldown for this domain (exponential backoff)
+      var domainBlockCount = wafBlockCounts[domain] || 0;
+      var domainCooldownMs = domainBlockCount > 0 ? getWafCooldown(domain, domainBlockCount) : 0;
+      if (wafCooldowns[domain] && domainCooldownMs > 0) {
         var elapsed = Date.now() - wafCooldowns[domain];
         if (elapsed < domainCooldownMs) {
           var waitMs = domainCooldownMs - elapsed;
-          console.log('[ServerCheck] ⏳ WAF cooldown for ' + domain + ' — waiting ' + Math.round(waitMs / 1000) + 's');
+          console.log('[ServerCheck] ⏳ WAF cooldown for ' + domain + ' — waiting ' + Math.round(waitMs / 1000) + 's (backoff x' + Math.pow(2, Math.min(domainBlockCount - 1, 3)) + ')');
           await new Promise(function(r) { setTimeout(r, waitMs); });
         }
       }
@@ -166,9 +178,12 @@ async function runCheckCycle(pool, isCancelled) {
         var result = await checkSingleTracker(pool, tracker, settings, collector);
         checked++;
         if (result === 'changed') changed++;
-        else if (result === 'error') errors++;
-        else if (result === 'waf_blocked') {
+        else if (result === 'error') {
           errors++;
+          failedTrackerIds.push(tracker.id);
+        } else if (result === 'waf_blocked') {
+          errors++;
+          failedTrackerIds.push(tracker.id);
           wafCooldowns[domain] = Date.now();
           wafBlockCounts[domain] = (wafBlockCounts[domain] || 0) + 1;
           console.log('[ServerCheck] ⛔ WAF block detected for ' + domain + ' (' + wafBlockCounts[domain] + '/' + WAF_SKIP_THRESHOLD + ')');
@@ -180,6 +195,7 @@ async function runCheckCycle(pool, isCancelled) {
         console.error('[ServerCheck] ❌ Unexpected error for #' + tracker.id + ': ' + err.message);
         errors++;
         checked++;
+        failedTrackerIds.push(tracker.id);
       }
     }
   }
@@ -215,7 +231,7 @@ async function runCheckCycle(pool, isCancelled) {
   console.log('[ServerCheck]    Checked: ' + checked + ' | Changed: ' + changed + ' | Errors: ' + errors + (skippedByWaf > 0 ? ' | WAF-skipped: ' + skippedByWaf : ''));
   console.log('[ServerCheck] ═══════════════════════════════════════════════');
 
-  return { checked: checked, changed: changed, errors: errors };
+  return { checked: checked, changed: changed, errors: errors, failedTrackerIds: failedTrackerIds };
 }
 
 /**
