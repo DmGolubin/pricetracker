@@ -991,14 +991,8 @@ const Dashboard = (function () {
     if (sidebarFilterGroup !== null) {
       return handleRefreshFiltered();
     }
-    var method = await getGlobalCheckMethod();
-    if (method === 'extension') {
-      return handleExtensionRefresh();
-    }
-    if (method === 'hybrid') {
-      return handleHybridRefresh();
-    }
-    return handleServerRefresh();
+    // Dashboard manual refresh always uses browser (extension) tabs
+    return handleExtensionRefresh();
   }
 
   /**
@@ -1057,7 +1051,7 @@ const Dashboard = (function () {
     showRefreshStatus('🔄 Обновление "' + folderName + '": 0/' + ids.length, false);
 
     var result = await runConcurrent(ids, 3, function (id) {
-      return sendMessage({ action: 'checkPrice', trackerId: id });
+      return sendMessage({ action: 'checkPriceExtension', trackerId: id });
     }, function (done, total) {
       showRefreshStatus('🔄 Обновление "' + folderName + '": ' + done + '/' + total, false);
     });
@@ -2575,7 +2569,7 @@ const Dashboard = (function () {
       showBulkProgress(0, ids.length, 'Обновление цен...');
 
       var result = await runConcurrent(ids, 3, function (id) {
-        return sendMessage({ action: 'checkPrice', trackerId: id });
+        return sendMessage({ action: 'checkPriceExtension', trackerId: id });
       }, function (done, total) {
         showBulkProgress(done, total, 'Обновление цен...');
       });
