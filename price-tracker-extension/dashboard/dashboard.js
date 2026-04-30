@@ -750,7 +750,7 @@ const Dashboard = (function () {
         refreshBtn.addEventListener('click', function (e) {
           e.stopPropagation();
           refreshBtn.classList.add('toolbar-refresh-spin');
-          sendMessage({ action: 'checkPriceExtension', trackerId: tracker.id })
+          sendMessage({ action: 'checkPrice', trackerId: tracker.id })
             .then(function () {
               // Reload this tracker's data after check
               return apiFetch(API_BASE + '/trackers/' + encodeURIComponent(tracker.id));
