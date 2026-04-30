@@ -7,6 +7,7 @@
 - Коммит-сообщения ТОЛЬКО на английском языке.
 - Перед коммитом запускать тесты: `npx jest --no-coverage --forceExit` в `price-tracker-extension/`.
 - Пуш ВСЕГДА выполнять сразу после успешного коммита: `git push origin main`. Не спрашивать разрешения.
+- После каждого пуша — выдавать пользователю команду для обновления на VPS: `cd /opt/price-tracker && git pull && docker compose up -d --build`
 - Деплой на VPS — ручной: после пуша зайти на сервер и выполнить `cd /opt/price-tracker && git pull && docker compose up -d --build`.
 
 ## Язык
