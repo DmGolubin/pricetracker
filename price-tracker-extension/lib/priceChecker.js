@@ -119,22 +119,31 @@ function waitForExtractionMessage(trackerId, timeoutMs) {
  * @param {boolean} pinned — whether to open as pinned tab
  * @returns {Promise<Object>} — extraction message
  */
+
+// Tab lock: track which tab IDs are currently being used for extraction
+// to prevent concurrent extractions from navigating the same tab.
+var _lockedTabIds = new Set();
+
 async function performExtraction(tracker, pinned) {
   // Try to reuse an existing tab with the same domain to avoid Cloudflare challenges.
   // Existing tabs already have cookies/session, so CF won't block them.
   var tabId = null;
   var reusingTab = false;
+  var originalUrl = null;
 
   try {
     var urlObj = new URL(tracker.pageUrl);
     var domain = urlObj.hostname;
-    // Search for existing tabs matching this domain
+    // Search for existing tabs matching this domain (exclude locked ones)
     var existingTabs = await chrome.tabs.query({ url: '*://' + domain + '/*' });
-    if (existingTabs.length > 0) {
+    var availableTabs = existingTabs.filter(function(t) { return !_lockedTabIds.has(t.id); });
+    if (availableTabs.length > 0) {
       // Prefer non-active tabs to avoid disrupting user's work
-      var candidate = existingTabs.find(function(t) { return !t.active; }) || existingTabs[0];
+      var candidate = availableTabs.find(function(t) { return !t.active; }) || availableTabs[0];
       tabId = candidate.id;
+      originalUrl = candidate.url;
       reusingTab = true;
+      _lockedTabIds.add(tabId);
       // Navigate the existing tab to the tracker URL
       await chrome.tabs.update(tabId, { url: tracker.pageUrl });
     }
@@ -149,6 +158,7 @@ async function performExtraction(tracker, pinned) {
       pinned: true,
     });
     tabId = tab.id;
+    _lockedTabIds.add(tabId);
   }
 
   try {
@@ -186,13 +196,19 @@ async function performExtraction(tracker, pinned) {
 
     return message;
   } finally {
-    // Close the tab only if we created it (don't close user's existing tabs)
-    if (!reusingTab) {
+    _lockedTabIds.delete(tabId);
+    if (reusingTab) {
+      // Restore the original URL so user's tab isn't left on a random product page
+      try {
+        if (originalUrl) {
+          await chrome.tabs.update(tabId, { url: originalUrl });
+        }
+      } catch (_) {}
+    } else {
+      // Close the tab we created
       try {
         await chrome.tabs.remove(tabId);
-      } catch (_) {
-        // Tab may already be closed
-      }
+      } catch (_) {}
     }
   }
 }

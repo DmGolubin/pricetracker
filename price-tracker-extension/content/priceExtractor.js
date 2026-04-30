@@ -547,7 +547,58 @@
     return null;
   }
 
-  clickVariantAndWait(function () {
-    tryExtract(0);
-  });
+  // ─── Cloudflare challenge detection ─────────────────────────────────
+  // If the page is showing a CF challenge (JS challenge or Turnstile),
+  // wait for it to resolve before attempting extraction.
+  var CF_TITLES = ['just a moment', 'attention required', 'please wait',
+    'checking your browser', 'трохи зачекайте', 'зачекайте'];
+  var CF_MAX_WAIT = 12000; // 12s max wait for CF to resolve
+  var CF_CHECK_INTERVAL = 1500;
+
+  function isCloudflareChallenge() {
+    var title = (document.title || '').toLowerCase();
+    for (var i = 0; i < CF_TITLES.length; i++) {
+      if (title.indexOf(CF_TITLES[i]) !== -1) return true;
+    }
+    // Also check for CF turnstile iframe
+    if (document.querySelector('iframe[src*="challenges.cloudflare.com"]')) return true;
+    if (document.querySelector('#challenge-running, #challenge-stage')) return true;
+    return false;
+  }
+
+  function waitForCfThenExtract() {
+    if (!isCloudflareChallenge()) {
+      // No CF challenge — proceed immediately
+      clickVariantAndWait(function () {
+        tryExtract(0);
+      });
+      return;
+    }
+
+    // CF challenge detected — poll until it resolves
+    var waited = 0;
+    var cfInterval = setInterval(function () {
+      waited += CF_CHECK_INTERVAL;
+      if (!isCloudflareChallenge()) {
+        clearInterval(cfInterval);
+        // Give page a moment to render after CF passes
+        setTimeout(function () {
+          clickVariantAndWait(function () {
+            tryExtract(0);
+          });
+        }, 2000);
+        return;
+      }
+      if (waited >= CF_MAX_WAIT) {
+        clearInterval(cfInterval);
+        chrome.runtime.sendMessage({
+          action: 'extractionFailed',
+          trackerId: trackerId,
+          error: 'Cloudflare challenge did not resolve within ' + (CF_MAX_WAIT / 1000) + 's'
+        });
+      }
+    }, CF_CHECK_INTERVAL);
+  }
+
+  waitForCfThenExtract();
 })();
